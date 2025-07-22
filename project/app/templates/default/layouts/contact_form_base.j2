@@ -1,0 +1,59 @@
+{# layouts/contact_form_base.j2 #}
+{# base for contact form #}
+{% extends "base.j2" %}
+{% set basic_form_view = true %}
+{% from "macros/_forms.j2" import render_form %}
+
+{% block content %}
+    <div class="mx-auto max-w-lg mt-8 w-5/6 bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+       {{ render_form(form_fields, form_id, form_title, submit_button_text, extra_links) }}
+    </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.getElementById('contactForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    const data = Object.fromEntries(formData.entries());
+
+    try {
+        const response = await fetch('{{ form_submit_url }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data),
+        });
+
+        if (response.ok) {
+            alert('Formulario enviado con éxito');
+            this.reset();
+        } else {
+            alert('Error al enviar el formulario');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Error al enviar el formulario');
+    }
+});
+</script>
+{% endblock %}
+{# usage example: 
+
+{% extends "layouts/contact_form_base.j2" %}
+{% set form_id = "contactForm" %}
+{% set extra_links = [
+    {"url": "/contact", "text": "Volver a Contacto"}
+] %}
+{% set form_title = "Formulario de Contacto" %}
+{% set form_fields = [
+    {"id": "name", "label": "Nombre", "type": "text"},
+    {"id": "email", "label": "Correo Electrónico", "type": "email"},
+    {"id": "subject", "label": "Asunto", "type": "text"},
+    {"id": "message", "label": "Mensaje", "type": "textarea"},
+] %}
+{% set submit_button_text = "Enviar Mensaje" %}
+{% set form_submit_url = "/api/contact" %}
+
+#}

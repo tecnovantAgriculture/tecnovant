@@ -1,0 +1,39 @@
+{# layouts/access_form.j2 #}
+{# usaje example: login.j2 #}
+{% extends "base.j2" %}
+{% set basic_form_view = true %}
+{% block content %}
+<div class="home flex flex-col lg:flex-row">
+    <div class="hidden lg:flex lg:w-1/2 bg-blue-800 justify-center items-center dark:bg-zinc-950 ">
+        <h1 class="text-white text-5xl font-bold dark:text-white">{{ title }}</h1>
+    </div>
+    <div class="w-full lg:w-1/2 flex flex-col justify-center items-center p-6">
+        <form id="{{ form_id }}" class="w-full max-w-sm mx-auto mt-10 p-6 bg-white rounded-lg shadow-md">
+            {% for field in fields %}
+            <div class="mb-4">
+                <label for="{{ field.name }}" class="block text-gray-700 text-sm font-bold mb-2">{{ field.label }}</label>
+                <input type="{{ field.type }}" id="{{ field.name }}" name="{{ field.name }}" required
+                    class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline">
+            </div>
+            {% endfor %}
+            <div class="flex items-center justify-between mt-4">
+                <button type="submit"
+                    class="bg-gray-800 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">
+                    {{ button_text }}
+                </button>
+            </div>
+        </form>
+        <div id="message" class="max-w-sm mx-auto mt-10 text-red-500"></div>
+        {% if extra_links %}
+        <div class="mt-4">
+            {% for link in extra_links %}
+            <a href="{{ link.url }}" class="text-blue-500 hover:underline">{{ link.text }}</a>{% if not loop.last %} | {% endif %}
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{% endblock %}

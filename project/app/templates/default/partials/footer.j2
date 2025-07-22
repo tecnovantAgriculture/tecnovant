@@ -1,0 +1,32 @@
+{# partials/footer.j2 #}
+<footer class="bg-white dark:bg-gray-700 shadow-md mt-auto">
+    <div class="container mx-auto px-6 py-4 flex flex-col md:flex-row justify-between items-center">
+        <!-- Copyright Section -->
+        <div class="text-center md:text-left mb-4 md:mb-0">
+            <p class="text-gray-600 dark:text-gray-300 text-xs">&copy; Copyright 2025 <a href="https://www.tecnovant.com/" class="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-600 transition-colors duration-200">TecnoVant</a> - All rights reserved.</p>
+        </div>
+
+        <!-- Credits Section -->
+        <div class="credits text-center md:text-right" itemscope itemtype="http://schema.org/CreativeWork">
+            <h6 class="text-gray-600 text-xs dark:text-gray-300" itemprop="creator" itemscope itemtype="http://schema.org/Organization">
+                Design & development by
+                <a class="text-blue-600 text-xs dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-600 transition-colors duration-200"
+                   itemprop="url" 
+                   href="https://www.unweb.co/" 
+                   title="Diseño Web Profesional">
+                    UnWeb.CO
+                </a>
+            </h6>
+        </div>
+    </div>
+</footer>
+
+<button id="darkModeToggle" class="fixed bottom-4 right-4 bg-gray-200 dark:bg-gray-950 p-2 rounded-full shadow-lg">
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+    </svg>
+</button>
+
+<script src="/js/popper.min.js"></script>
+<script src="/js/main.js"></script>

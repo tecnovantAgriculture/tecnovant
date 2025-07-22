@@ -1,0 +1,28 @@
+{# partials/navigation.j2 #}
+{# top navigation menu #}
+{% from "settings/_ui_class.j2" import close_menu_button, menu_link_style, bg_color, menu_bg_color, shadow, rounded %}
+
+<button id="mobile-menu-button" class="md:hidden {{ close_menu_button }}" aria-controls="menu" aria-expanded="false">
+    <span class="sr-only">Toggle menu</span>
+    <svg class="h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+    </svg>
+</button>
+
+<nav id="menu" class="hidden md:block {{ menu_bg_color }} {{ shadow }} {{ rounded }}">
+    <button id="close-menu-button" class="hidden absolute top-4 right-4 {{ close_menu_button }}">
+        <span class="sr-only">Close menu</span>
+        <svg class="h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+    </button>
+
+
+    {% if data_menu %}
+    <ul class="md:flex md:space-x-4">
+        {% for item in data_menu.menu %}
+        <li><a href="{{ item.url }}" class="{{ menu_link_style }}">{{ item.name }}</a></li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+</nav>

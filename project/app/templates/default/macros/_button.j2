@@ -1,0 +1,33 @@
+{# macros/_button.j2 #}
+{% macro button(text, type="button", color="blue", size="md", href=None, onclick=None, extra_classes="") %}
+    {% set color_classes = {
+        "blue": "bg-blue-500 hover:bg-blue-600 text-white",
+        "green": "bg-green-500 hover:bg-green-600 text-white",
+        "red": "bg-red-500 hover:bg-red-600 text-white",
+        "gray": "bg-gray-500 hover:bg-gray-600 text-white"
+    } %}
+    {% set size_classes = {
+        "sm": "px-3 py-1.5 text-sm",
+        "md": "px-4 py-2 text-base",
+        "lg": "px-6 py-3 text-lg"
+    } %}
+
+    {% if href %}
+        <a href="{{ href }}" class="inline-block rounded-lg transition-colors duration-200 {{ color_classes[color] }} {{ size_classes[size] }} {{ extra_classes }}">
+            {{ text }}
+        </a>
+    {% else %}
+        <button type="{{ type }}" class="rounded-lg transition-colors duration-200 {{ color_classes[color] }} {{ size_classes[size] }} {{ extra_classes }}"
+            {% if onclick %} onclick="{{ onclick }}" {% endif %}>
+            {{ text }}
+        </button>
+    {% endif %}
+{% endmacro %}
+
+{# ejemplos de uso: 
+    <!-- Botón como enlace -->
+    {{ button("Ir a Google", href="https://www.google.com", color="blue", size="lg") }}
+
+    <!-- Botón con acción onclick -->
+    {{ button("Mostrar Alerta", onclick="showMessage()", color="green", size="lg") }}
+#}

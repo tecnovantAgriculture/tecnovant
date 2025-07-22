@@ -1,0 +1,177 @@
+{# partials/sidebar.j2 #}
+{# Dynamic sidebar, show menus based on user role #}
+{% from "settings/_ui_class.j2" import class_sidebar_menu %}
+{% from "settings/_flowbite_solid_icons.j2" import icon_caret_down, icon_home, icon_window, icon_inbox, icon_users, icon_microscope, icon_file_chart_bar %}
+
+{# "name": "Administración", "url": "#", "icon": icon_window, "pro": true #}
+{% set sidebar_menu = {
+    "menu": [
+        {"name": "Home", "url": url_for('core.dashboard'), "icon": icon_home},
+    ]
+} %}
+
+{% if rol == "administrator" or rol == "reseller" %}
+    {% set usuarios_menu = {
+        "name": "Adm Usuarios",
+        "url": "#",
+        "icon": icon_users,
+        "submenu": [
+            {"name": "Clientes", "url": url_for('core.amd_clients')},
+            {"name": "Usuarios", "url": url_for('core.amd_users')},
+        ]
+    } %}
+    {% set sidebar_menu = {
+        "menu": sidebar_menu.menu + [usuarios_menu]
+    } %}
+{% endif %}
+
+{% if rol == "administrator" or rol == "reseller" %}
+    {% set adm_foliar_menu = {
+        "name": "Adm Foliar",
+        "url": "#",
+        "icon": icon_window,
+        "submenu": [
+            {"name": "Nutrientes", "url": url_for('foliage.nutrientes') },
+            {"name": "Tipos de Cultivos", "url": url_for('foliage.amd_crops') },
+            {"name": "Objetivos de Cultivo", "url": url_for('foliage.amd_objectives') }, 
+
+            {"name": "Fincas", "url": url_for('foliage.amd_farms') },
+            {"name": "Lotes", "url": url_for('foliage.amd_lots') },
+            {"name": "Lote/Cultivo", "url": url_for('foliage.amd_lot_crops') }, 
+            
+            {"name": "Productos", "url": url_for('foliage.amd_products') },
+            {"name": "Aportes de Productos", "url": url_for('foliage.amd_product_contributions') },
+            {"name": "Precios de Prod", "url": url_for('foliage.amd_product_prices') },
+        ]
+    } %}
+    {% set sidebar_menu = {
+        "menu": sidebar_menu.menu + [adm_foliar_menu]
+    } %}
+{% endif %}
+
+{% if rol == "administrator" or rol == "reseller" %}
+    {% set foliar_menu = {
+        "name": "Análisis Foliar",
+        "url": "#",
+        "icon": icon_microscope,
+        "submenu": [
+            {"name": "Análisis Común", "url": url_for('foliage.amd_common_analyses') },
+            {"name": "Análisis Foliar", "url": url_for('foliage.amd_leaf_analyses') },
+            {"name": "Análisis de Suelo", "url": url_for('foliage.amd_soil_analyses') },
+            {"name": "Consumo - Apl. Nutrientes", "url": url_for('foliage.amd_nutrient_applications') }, 
+            {"name": "Producción", "url": url_for('foliage.amd_productions') }, 
+        ]
+    } %}
+    {% set sidebar_menu = {
+        "menu": sidebar_menu.menu + [foliar_menu]
+    } %}
+{% endif %}
+{# "name": "Ver reporte", "url": url_for('foliage_report.vista_reporte') #},
+{% set reportes = {
+    "name": "Análisis de datos",
+    "url": "#",
+    "icon": icon_file_chart_bar,
+    "notifications": 3,
+    "submenu": [
+        {"name": "Recomendaciones", "url": url_for('foliage_report.listar_reportes') },
+        {"name": "Generar reporte", "url": url_for('foliage_report.generar_informe') },
+    ]
+} %}
+{# "name": "Panel de Informes", "url": url_for('foliage_report.reports_dashboard') #}
+{# "name": "examples", "url": url_for('foliage_report.cv_nutrientes') #}
+{% set sidebar_menu = {
+    "menu": sidebar_menu.menu + [reportes]
+} %}
+
+<aside id="sidebar" class="z-10 w-64 flex-shrink-0 h-full overflow-y-auto sidebar-hidden md:block bg-gray-800 text-white"
+    aria-label="Sidebar">
+    <div class="h-full px-3 py-4 overflow-y-auto bg-gray-50 dark:bg-gray-800">
+    {% if sidebar_menu %}
+        <ul class="space-y-2 font-medium">
+            {% for item in sidebar_menu.menu %}
+                <li data-visible="{% if item.submenu %}{{ item.visible|default('onClick') }}{% endif %}">
+                    {% if item.submenu %}
+                        <button type="button" class="z-40 flex items-center w-full p-2 text-gray-900 rounded-lg dark:text-white hover:bg-gray-100
+                            dark:hover:bg-gray-700 group text-left" onclick="toggleSubMenu(this)">
+                            {{ item.icon }}
+                            <span class="flex-1 ms-3 whitespace-nowrap">{{ item.name }}</span>
+                                {{ icon_caret_down }}
+                        </button>
+                        <ul class="hidden pl-1 mt-2 space-y-2 rounded-lg bg-gray-200 dark:bg-gray-900">
+                            {% for submenu_item in item.submenu %}
+                                <li>
+                                    <a href="{{ submenu_item.url }}" class="flex p-2 text-gray-900 rounded-lg dark:text-white hover:bg-gray-300
+                                        dark:hover:bg-gray-700 group">
+                                        <span class="flex-1 ms-3 whitespace-nowrap">{{ submenu_item.name }}</span>
+                                    </a>
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <a href="{{ item.url }}" class="flex items-center p-2 text-gray-900 rounded-lg dark:text-white hover:bg-gray-100
+                            dark:hover:bg-gray-700 group">
+                            {{ item.icon }}
+                            <span class="flex-1 ms-3 whitespace-nowrap">{{ item.name }}</span>
+{% if item.pro %}
+      <span class="inline-flex items-center justify-center px-2 ms-3 text-sm font-medium text-gray-800 bg-gray-300 rounded-full dark:bg-gray-700 dark:text-gray-300">Pro</span>
+                              {% endif %}
+                            {% if item.notifications %}
+                                <span class="inline-flex items-center justify-center w-3 h-3 p-3 ms-3 text-sm font-medium text-blue-800 
+                                    bg-blue-100 rounded-full dark:bg-blue-900 dark:text-blue-300">
+                                    {{ item.notifications }}
+                                </span>
+                            {% endif %}
+                        </a>
+                    {% endif %}
+                </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+            <p class="text-center text-gray-500">No menu items</p>
+        {% endif %}
+    </div>
+</aside>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Restaurar estado del menú
+    document.querySelectorAll('[data-visible="onClick"]').forEach(li => {
+        const submenu = li.querySelector('ul');
+        const currentPath = window.location.pathname;
+        
+        // Verificar si la ruta actual está en este submenú
+        const hasActiveLink = Array.from(submenu.querySelectorAll('a'))
+            .some(a => a.getAttribute('href') === currentPath);
+        
+        if (hasActiveLink) {
+            submenu.classList.remove('hidden');
+        } else {
+            const buttonText = li.querySelector('button').textContent.trim().toLowerCase();
+            const storedState = localStorage.getItem(`submenu-${buttonText}`);
+            
+            // Si no hay nada guardado en localStorage, se establece el estado inicial como cerrado
+            if (storedState === null) {
+                submenu.classList.add('hidden');
+                localStorage.setItem(`submenu-${buttonText}`, 'closed');
+            } else {
+                submenu.classList.toggle('hidden', storedState === 'closed');
+            }
+        }
+    });
+});
+
+function toggleSubMenu(button) {
+    const li = button.closest('li');
+    const submenu = li.querySelector('ul');
+    
+    // Verificar si el submenú está abierto o cerrado
+    const isOpen = submenu.classList.contains('hidden');
+    
+    // Toggle el estado del submenú
+    submenu.classList.toggle('hidden');
+    
+    // Guardar estado
+    const buttonText = button.textContent.trim().toLowerCase();
+    localStorage.setItem(`submenu-${buttonText}`, isOpen ? 'open' : 'closed');
+}
+</script>

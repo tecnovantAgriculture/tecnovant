@@ -1,0 +1,949 @@
+<div class="exported-note">
+    <div class="exported-note-title">Tecnoagro</div>
+    <div id="rendered-md">
+        <h1 id="tecnoagro">TecnoAgro</h1>
+        <p>Sistema de Gestión de Nutrición Foliar en Cultivos</p>
+        <h2 id="1-introducción">1. Introducción</h2>
+        <pre class="jop-noMdConv">En este documento se describe la estructura y las relaciones de la base de datos 
+dise&ntilde;ada para FlaskSK, un proyecto base de Flask con modularidad y control de 
+acceso. La base de datos est&aacute; dise&ntilde;ada para soportar la gesti&oacute;n de usuarios, 
+roles, permisos y m&oacute;dulos, proporcionando una base s&oacute;lida para el desarrollo 
+de funcionales adicionales escalables y seguras.</pre>
+        <h3 id="descripción-del-software-tecnoagro"><strong>Descripción del Software: TecnoAgro</strong></h3>
+        <p><strong>TecnoAgro</strong> es un sistema especializado en la gestión de la nutrición foliar para cultivos,
+            diseñado para ayudar a los agricultores a optimizar el uso de nutrientes y mejorar la producción. Cómo
+            insumo se ingresan los datos obtenidos a partir de imágenes de drones procesadas externamente y
+            complementadas con información ingresada manualmente.</p>
+        <p>El sistema recibe estos datos a través de una API y un formulario de ingreso, los analiza y los almacena para
+            generar recomendaciones personalizadas basadas en parámetros locales de nutrientes. Su enfoque permite una
+            toma de decisiones precisa, mejorando la eficiencia en el uso de recursos y la productividad agrícola.</p>
+        <h2 id="2-arquitectura-del-software">2. Arquitectura del Software</h2>
+        <p>La arquitectura del sistema se basa en un diseño modular y escalable, utilizando el patrón MVC
+            (Modelo-Vista-Controlador) con una arquitectura RESTful para separar la lógica de negocio, la presentación y
+            el acceso a datos.</p>
+        <h3 id="modelo-model">Modelo (Model)</h3>
+        <p>Base de datos : Se utiliza <strong>Flask-SQLAlchemy</strong> para interactuar con la base de datos MySQL. Las
+            tablas y relaciones se definen como clases Python, siguiendo el patrón de Active Record.</p>
+        <p><strong>Migraciones</strong> : Flask-Migrate se usa para gestionar cambios en el esquema de la base de datos
+            (creación, actualización, etc.).</p>
+        <h3 id="vista-view">Vista (View)</h3>
+        <p><strong>Templating</strong></p>
+        <ul>
+            <li><strong>Jinja2</strong> se utiliza para generar HTML dinámico. Las plantillas están organizadas de forma
+                modular, reutilizando componentes comunes como headers y footers para mantener la consistencia y
+                facilitar el mantenimiento.</li>
+        </ul>
+        <p><strong>Frontend</strong></p>
+        <ul>
+            <li><strong>Tailwind CSS</strong> se integra para estilizar la interfaz, proporcionando un diseño responsivo
+                y moderno.</li>
+            <li><strong>JavaScript</strong> interactúa con los endpoints de la API, permitiendo una experiencia de
+                usuario dinámica y fluida.</li>
+        </ul>
+        <h3 id="controlador-controller">Controlador (Controller)</h3>
+        <ul>
+            <li><strong>Rutas:</strong> Se definen en archivos separados utilizando <strong>Blueprints</strong> de
+                Flask. Esto modulariza la aplicación, promoviendo un código limpio y organizado.</li>
+            <li><strong>Lógica de negocio:</strong> Se maneja en funciones independientes, asegurando la separación de
+                responsabilidades siguiendo los principios SOLID.</li>
+        </ul>
+        <p><strong>Seguridad</strong> y <strong>Validaciones</strong></p>
+        <ul>
+            <li><strong>Werkzeug</strong>: Implementación segura de hash de contraseñas.</li>
+            <li><strong>Marshmallow</strong>: Librería para serialización y validación de datos, garantizando la
+                integridad de los datos antes de su almacenamiento.</li>
+        </ul>
+        <h3 id="manejo-de-apis">Manejo de APIs</h3>
+        <ul>
+            <li><strong>Endpoints:</strong> Se implementan como rutas específicas en Flask, devolviendo respuestas en
+                formato JSON para ser consumidas por clientes como el frontend web o aplicaciones móviles.</li>
+            <li><strong>Autenticación:</strong> Se utiliza <strong>flask-jwt-extended</strong> para gestionar la
+                autenticación basada en tokens, garantizando un acceso seguro a los recursos protegidos. Se Implementa
+                JWT (JSON Web Tokens) para autenticación de usuarios. Gestiona tokens de acceso y actualización, con
+                funcionalidades como:
+                <ul>
+                    <li>Login</li>
+                    <li>Logout</li>
+                    <li>Refresh token</li>
+                    <li>Protección de rutas con <code class="inline-code">@jwt_required()</code></li>
+                </ul>
+            </li>
+        </ul>
+        <p>La estructura del proyecto sigue patrones de diseño modernos, con módulos separados para:</p>
+        <ul>
+            <li>Modelos de datos (<code class="inline-code">model.py</code>)</li>
+            <li>Rutas y vistas (<code class="inline-code">routes.py</code>)</li>
+            <li>Endpoints (<code class="inline-code">api_routes.py</code>)</li>
+            <li>Funcionalidades auxiliares (<code class="inline-code">helper.py</code>)</li>
+        </ul>
+        <p>El código incluye manejadores de errores, logging y excepciones, asegurando una buena practica para la
+            depuración y monitoreo.<br>
+            Se utiliza el Micro framework <strong>Flask</strong> para desarrollar aplicación web en Python y Blueprints
+            para modularizar la aplicación.</p>
+
+        <div class="joplin-editable">
+            <pre class="joplin-source" data-joplin-language="mermaid" data-joplin-source-open="```mermaid&#10;"
+                data-joplin-source-close="&#10;```&#10;">graph TD
+    A[Usuario] --&gt;|Interacción Web| B[Frontend]
+    A --&gt; C[Clientes Externos]
+    C--&gt; |Consumo API| K[Endpoints REST]
+    B --&gt; D[JavaScript]
+    B --&gt; E[Tailwind CSS]
+    B --&gt; F[Jinja2 Templates]
+    F --&gt; G[Blueprints]
+    G --&gt; H[Controladores]
+    H --&gt; I[Lógica de Negocio]
+    I --&gt; J[Modelo]
+    D --&gt; K
+    K --&gt; H
+    K --&gt; L[Autenticación]
+</pre>
+
+            <pre class="mermaid">graph TD
+    A[Usuario] --&gt;|Interacción Web| B[Frontend]
+    A --&gt; C[Clientes Externos]
+    C--&gt; |Consumo API| K[Endpoints REST]
+    B --&gt; D[JavaScript]
+    B --&gt; E[Tailwind CSS]
+    B --&gt; F[Jinja2 Templates]
+    F --&gt; G[Blueprints]
+    G --&gt; H[Controladores]
+    H --&gt; I[Lógica de Negocio]
+    I --&gt; J[Modelo]
+    D --&gt; K
+    K --&gt; H
+    K --&gt; L[Autenticación]
+</pre>
+        </div>
+
+        <div class="joplin-editable">
+            <pre class="joplin-source" data-joplin-language="mermaid" data-joplin-source-open="```mermaid&#10;"
+                data-joplin-source-close="&#10;```&#10;">sequenceDiagram
+    participant Usuario
+    participant Frontend
+    participant JS
+    participant Controller
+    participant LogicaNegocio
+    participant Modelo
+    participant BaseDatos
+    participant API
+    participant Autenticacion
+
+    Usuario-&gt;&gt;Frontend: Carga página web
+    Frontend-&gt;&gt;Controller: Solicita recurso para renderizar
+    Controller-&gt;&gt;LogicaNegocio: Procesa lógica
+    LogicaNegocio-&gt;&gt;Modelo: Accede a datos
+    Modelo-&gt;&gt;BaseDatos: Consulta/Actualiza datos
+    BaseDatos--&gt;&gt;Modelo: Retorna datos
+    Modelo--&gt;&gt;LogicaNegocio: Datos procesados
+    LogicaNegocio--&gt;&gt;Controller: Resultado
+    Controller--&gt;&gt;Frontend: Renderiza plantilla con Jinja2
+    Frontend--&gt;&gt;Usuario: Muestra página
+
+    Usuario-&gt;&gt;Frontend: Interactúa con la página (acciones)
+    Frontend-&gt;&gt;JS: Ejecuta scripts
+    JS-&gt;&gt;API: Solicita datos (usando endpoints REST)
+    API-&gt;&gt;Autenticacion: Verifica token
+    Autenticacion--&gt;&gt;API: Acceso autorizado
+    API-&gt;&gt;LogicaNegocio: Procesa solicitud API
+    LogicaNegocio-&gt;&gt;Modelo: Accede a datos
+    Modelo-&gt;&gt;BaseDatos: Consulta/Actualiza datos
+    BaseDatos--&gt;&gt;Modelo: Retorna datos
+    Modelo--&gt;&gt;LogicaNegocio: Datos procesados
+    LogicaNegocio--&gt;&gt;API: Resultado en JSON
+    API--&gt;&gt;JS: Responde con JSON
+    JS--&gt;&gt;Frontend: Actualiza UI con datos
+    Frontend--&gt;&gt;Usuario: Muestra datos actualizados
+</pre>
+
+            <pre class="mermaid">sequenceDiagram
+    participant Usuario
+    participant Frontend
+    participant JS
+    participant Controller
+    participant LogicaNegocio
+    participant Modelo
+    participant BaseDatos
+    participant API
+    participant Autenticacion
+
+    Usuario-&gt;&gt;Frontend: Carga página web
+    Frontend-&gt;&gt;Controller: Solicita recurso para renderizar
+    Controller-&gt;&gt;LogicaNegocio: Procesa lógica
+    LogicaNegocio-&gt;&gt;Modelo: Accede a datos
+    Modelo-&gt;&gt;BaseDatos: Consulta/Actualiza datos
+    BaseDatos--&gt;&gt;Modelo: Retorna datos
+    Modelo--&gt;&gt;LogicaNegocio: Datos procesados
+    LogicaNegocio--&gt;&gt;Controller: Resultado
+    Controller--&gt;&gt;Frontend: Renderiza plantilla con Jinja2
+    Frontend--&gt;&gt;Usuario: Muestra página
+
+    Usuario-&gt;&gt;Frontend: Interactúa con la página (acciones)
+    Frontend-&gt;&gt;JS: Ejecuta scripts
+    JS-&gt;&gt;API: Solicita datos (usando endpoints REST)
+    API-&gt;&gt;Autenticacion: Verifica token
+    Autenticacion--&gt;&gt;API: Acceso autorizado
+    API-&gt;&gt;LogicaNegocio: Procesa solicitud API
+    LogicaNegocio-&gt;&gt;Modelo: Accede a datos
+    Modelo-&gt;&gt;BaseDatos: Consulta/Actualiza datos
+    BaseDatos--&gt;&gt;Modelo: Retorna datos
+    Modelo--&gt;&gt;LogicaNegocio: Datos procesados
+    LogicaNegocio--&gt;&gt;API: Resultado en JSON
+    API--&gt;&gt;JS: Responde con JSON
+    JS--&gt;&gt;Frontend: Actualiza UI con datos
+    Frontend--&gt;&gt;Usuario: Muestra datos actualizados
+</pre>
+        </div>
+        <p>Descripción del Diagrama:</p>
+        <p><strong>Carga Inicial de la Página Web:</strong></p>
+        <ol>
+            <li>El usuario carga la página web.</li>
+            <li>El frontend solicita recursos al controlador para renderizar la página.</li>
+            <li>El controlador procesa la solicitud a través de la lógica de negocio.</li>
+            <li>La lógica de negocio interactúa con el modelo para acceder a la base de datos.</li>
+            <li>Los datos se procesan y se renderizan en una plantilla Jinja2.</li>
+            <li>El frontend muestra la página generada al usuario.<br>
+                <strong>Interacciones Posteriores mediante JavaScript y API:</strong>
+            </li>
+            <li>El usuario interactúa con la página (por ejemplo, haciendo clic en un botón).</li>
+            <li>El frontend ejecuta scripts JavaScript que realizan solicitudes a los endpoints de la API.</li>
+            <li>Las solicitudes a la API incluyen tokens de autenticación que son verificados por flask-jwt-extended.
+            </li>
+            <li>Tras la verificación, la API procesa la solicitud a través de la lógica de negocio.</li>
+            <li>La lógica de negocio accede a los datos mediante el modelo y la base de datos.</li>
+            <li>Los datos procesados se retornan en formato JSON desde la API al JavaScript.</li>
+            <li>JavaScript actualiza la interfaz de usuario con los nuevos datos recibidos.</li>
+        </ol>
+        <h3 id="resumen-de-componentes-clave">Resumen de Componentes Clave</h3>
+        <p><strong>Templating</strong>: Jinja2 organiza plantillas de forma modular.<br>
+            <strong>Frontend</strong>: Utiliza Tailwind CSS para estilos y JavaScript para interacciones dinámicas con
+            la API.<br>
+            <strong>Controladores</strong>: Gestionados mediante Blueprints para modularizar rutas.<br>
+            <strong>Lógica de Negocio</strong>: Separada en funciones independientes siguiendo principios SOLID.<br>
+            <strong>Manejo de APIs</strong>: Endpoints REST seguros con autenticación basada en tokens mediante
+            flask-jwt-extended.
+        </p>
+        <h2 id="3-requisitos-de-la-herramienta">3. Requisitos de la herramienta</h2>
+        <h4 id="requisitos-funcionales">Requisitos Funcionales</h4>
+        <ol>
+            <li>Gestión de usuarios y autenticación
+                <ul>
+                    <li>Creación de usuario admin.</li>
+                    <li>Inicio de sesión</li>
+                    <li>Registro de usuarios y asociación a fincas</li>
+                    <li>Gestión de permisos por usuario y finca</li>
+                </ul>
+            </li>
+            <li>Ingreso de datos
+                <ul>
+                    <li>Formulario para ingreso manual de datos
+                        <ul>
+                            <li><em><strong>A futuro</strong></em>: Integración con API externa para recepción de datos
+                                procesados de imágenes de drones</li>
+                            <li>Importación y exportación de datos a CSV</li>
+                        </ul>
+                    </li>
+                </ul>
+            </li>
+            <li>Análisis y almacenamiento de datos
+                <ul>
+                    <li>Procesamiento de datos recibidos</li>
+                    <li>Almacenamiento en la base de datos</li>
+                </ul>
+            </li>
+            <li>Generación de recomendaciones
+                <ul>
+                    <li>Análisis de datos almacenados</li>
+                    <li>Generación de recomendaciones personalizadas basadas en parámetros locales de nutrientes</li>
+                </ul>
+            </li>
+            <li>Reportes y visualizaciones
+                <ul>
+                    <li>Generación de reportes de estado</li>
+                    <li>Creación de gráficas de seguimiento</li>
+                    <li>Generación de pronósticos</li>
+                    <li>Análisis de antagonismo entre nutrientes</li>
+                </ul>
+            </li>
+            <li>Gestión de fincas y lotes
+                <ul>
+                    <li>Creación y edición de fincas</li>
+                    <li>Gestión de lotes por finca</li>
+                </ul>
+            </li>
+            <li>Gestión de productos y precios
+                <ul>
+                    <li>Mantenimiento de catálogo de productos</li>
+                    <li>Actualización de precios</li>
+                </ul>
+            </li>
+        </ol>
+        <h4 id="requisitos-no-funcionales">Requisitos No Funcionales</h4>
+        <ol>
+            <li>Seguridad
+                <ol>
+                    <li>Implementación de autenticación JWT</li>
+                    <li>Encriptación de datos sensibles</li>
+                    <li>Protección contra ataques comunes (SQL injection, XSS, CSRF)</li>
+                </ol>
+            </li>
+            <li>Rendimiento
+                <ol>
+                    <li>Tiempo de respuesta menor a 2 segundos para operaciones comunes</li>
+                    <li>Capacidad para manejar al menos 1000 usuarios concurrentes</li>
+                </ol>
+            </li>
+            <li>Escalabilidad
+                <ol>
+                    <li>Diseño modular que permita la fácil adición de nuevas funcionalidades</li>
+                    <li>Capacidad de escalar horizontalmente</li>
+                </ol>
+            </li>
+            <li>Usabilidad
+                <ol>
+                    <li>Interfaz de usuario intuitiva y responsiva</li>
+                    <li>Compatibilidad con navegadores modernos</li>
+                </ol>
+            </li>
+            <li>Mantenibilidad
+                <ol>
+                    <li>Código bien documentado y siguiendo estándares de codificación</li>
+                    <li>Uso de patrones de diseño para facilitar futuras modificaciones</li>
+                </ol>
+            </li>
+            <li>Disponibilidad
+                <ol>
+                    <li>Tiempo de actividad del sistema de al menos 99.9%</li>
+                </ol>
+            </li>
+            <li>Interoperabilidad
+                <ol>
+                    <li><em><strong>A futuro:</strong></em> Integración fluida con la API externa de procesamiento de
+                        imágenes</li>
+                    <li>Capacidad para exportar datos en formatos estándar (CSV, JSON)</li>
+                </ol>
+            </li>
+        </ol>
+        <h2 id="4-diseño-de-la-base-de-datos">4. Diseño de la Base de Datos</h2>
+        <p>El diseño de la base de datos se ha normalizado y optimizado para asegurar la eficiencia en la gestión de
+            datos y evitar redundancias. Se han agregado tablas adicionales para manejar las relaciones entre usuarios,
+            fincas y lotes.</p>
+        <h3 id="1-modelo-de-permisos">1. <strong>Modelo de permisos</strong></h3>
+        <p>Se utiliza un diseño de &quot;Permissions Based Access Control&quot; (PBAC), que es muy flexible y escalable.
+        </p>
+        <p><strong>Diagrama de la Base de Datos:</strong></p>
+
+        <div class="joplin-editable">
+            <pre class="joplin-source" data-joplin-language="mermaid" data-joplin-source-open="```mermaid&#10;"
+                data-joplin-source-close="&#10;```&#10;">erDiagram
+    USERS {
+        int id PK
+        string username
+        string email
+        string full_name
+        string password_hash
+        json profile_data
+        datetime created_at
+        datetime updated_at
+        boolean active
+    }
+    ROLES {
+        int id PK
+        string name
+        string description
+        datetime created_at
+        datetime updated_at
+    }
+    PERMISSIONS {
+        int id PK
+        string name
+        string description
+        datetime created_at
+        datetime updated_at
+    }
+    ACTIONS {
+        int id PK
+        string name
+        string description
+        datetime created_at
+        datetime updated_at
+    }
+    CLIENTS {
+        int id PK
+        string name
+        string description
+        datetime created_at
+        datetime updated_at
+    }
+    MODULES {
+        int id PK
+        string name
+        string description
+        datetime created_at
+        datetime updated_at
+    }
+    MODULE_PERMISSION {
+        int module_id FK
+        int permission_id FK
+    }
+    USERS ||--o{ USER_ROLE : has
+    ROLES ||--o{ USER_ROLE : has
+    ROLES ||--o{ ROLE_PERMISSION : has
+    PERMISSIONS ||--o{ ROLE_PERMISSION : has
+    PERMISSIONS ||--o{ PERMISSION_ACTION : has
+    ACTIONS ||--o{ PERMISSION_ACTION : has
+    CLIENTS ||--o{ CLIENT_USER : has
+    USERS ||--o{ CLIENT_USER : has
+    MODULES ||--o{ MODULE_PERMISSION : has
+    PERMISSIONS ||--o{ MODULE_PERMISSION : has
+</pre>
+
+            <pre class="mermaid">erDiagram
+    USERS {
+        int id PK
+        string username
+        string email
+        string full_name
+        string password_hash
+        json profile_data
+        datetime created_at
+        datetime updated_at
+        boolean active
+    }
+    ROLES {
+        int id PK
+        string name
+        string description
+        datetime created_at
+        datetime updated_at
+    }
+    PERMISSIONS {
+        int id PK
+        string name
+        string description
+        datetime created_at
+        datetime updated_at
+    }
+    ACTIONS {
+        int id PK
+        string name
+        string description
+        datetime created_at
+        datetime updated_at
+    }
+    CLIENTS {
+        int id PK
+        string name
+        string description
+        datetime created_at
+        datetime updated_at
+    }
+    MODULES {
+        int id PK
+        string name
+        string description
+        datetime created_at
+        datetime updated_at
+    }
+    MODULE_PERMISSION {
+        int module_id FK
+        int permission_id FK
+    }
+    USERS ||--o{ USER_ROLE : has
+    ROLES ||--o{ USER_ROLE : has
+    ROLES ||--o{ ROLE_PERMISSION : has
+    PERMISSIONS ||--o{ ROLE_PERMISSION : has
+    PERMISSIONS ||--o{ PERMISSION_ACTION : has
+    ACTIONS ||--o{ PERMISSION_ACTION : has
+    CLIENTS ||--o{ CLIENT_USER : has
+    USERS ||--o{ CLIENT_USER : has
+    MODULES ||--o{ MODULE_PERMISSION : has
+    PERMISSIONS ||--o{ MODULE_PERMISSION : has
+</pre>
+        </div>
+        <h3 id="explicación-de-la-base-de-datos-y-sus-relaciones">Explicación de la Base de Datos y sus Relaciones</h3>
+        <h4 id="tabla-users">Tabla <code class="inline-code">USERS</code></h4>
+        <ul>
+            <li><strong>Descripción</strong>: Representa a los usuarios del sistema.</li>
+            <li><strong>Campos</strong>:
+                <ul>
+                    <li><code class="inline-code">id</code>: Identificador único del usuario (PK).</li>
+                    <li><code class="inline-code">username</code>: Nombre de usuario (único y no nulo).</li>
+                    <li><code class="inline-code">email</code>: Correo electrónico del usuario (único y no nulo).</li>
+                    <li><code class="inline-code">full_name</code>: Nombre completo del usuario (no nulo).</li>
+                    <li><code class="inline-code">password_hash</code>: Hash de la contraseña del usuario.</li>
+                    <li><code class="inline-code">profile_data</code>: Datos adicionales del perfil del usuario en
+                        formato JSON.</li>
+                    <li><code class="inline-code">created_at</code>: Fecha y hora de creación del usuario.</li>
+                    <li><code class="inline-code">updated_at</code>: Fecha y hora de la última actualización del
+                        usuario.</li>
+                    <li><code class="inline-code">active</code>: Indica si el usuario está activo.</li>
+                </ul>
+            </li>
+        </ul>
+        <h4 id="tabla-roles">Tabla <code class="inline-code">ROLES</code></h4>
+        <ul>
+            <li><strong>Descripción</strong>: Representa los roles en el sistema.</li>
+            <li><strong>Campos</strong>:
+                <ul>
+                    <li><code class="inline-code">id</code>: Identificador único del rol (PK).</li>
+                    <li><code class="inline-code">name</code>: Nombre del rol (único y no nulo).</li>
+                    <li><code class="inline-code">description</code>: Descripción del rol.</li>
+                    <li><code class="inline-code">created_at</code>: Fecha y hora de creación del rol.</li>
+                    <li><code class="inline-code">updated_at</code>: Fecha y hora de la última actualización del rol.
+                    </li>
+                </ul>
+            </li>
+        </ul>
+        <h4 id="tabla-permissions">Tabla <code class="inline-code">PERMISSIONS</code></h4>
+        <ul>
+            <li><strong>Descripción</strong>: Representa los permisos en el sistema.</li>
+            <li><strong>Campos</strong>:
+                <ul>
+                    <li><code class="inline-code">id</code>: Identificador único del permiso (PK).</li>
+                    <li><code class="inline-code">name</code>: Nombre del permiso (no nulo).</li>
+                    <li><code class="inline-code">description</code>: Descripción del permiso.</li>
+                    <li><code class="inline-code">created_at</code>: Fecha y hora de creación del permiso.</li>
+                    <li><code class="inline-code">updated_at</code>: Fecha y hora de la última actualización del
+                        permiso.</li>
+                </ul>
+            </li>
+        </ul>
+        <h4 id="tabla-actions">Tabla <code class="inline-code">ACTIONS</code></h4>
+        <ul>
+            <li><strong>Descripción</strong>: Representa las acciones que se pueden realizar.</li>
+            <li><strong>Campos</strong>:
+                <ul>
+                    <li><code class="inline-code">id</code>: Identificador único de la acción (PK).</li>
+                    <li><code class="inline-code">name</code>: Nombre de la acción (no nulo).</li>
+                    <li><code class="inline-code">description</code>: Descripción de la acción.</li>
+                    <li><code class="inline-code">created_at</code>: Fecha y hora de creación de la acción.</li>
+                    <li><code class="inline-code">updated_at</code>: Fecha y hora de la última actualización de la
+                        acción.</li>
+                </ul>
+            </li>
+        </ul>
+        <h4 id="tabla-clients">Tabla <code class="inline-code">CLIENTS</code></h4>
+        <ul>
+            <li><strong>Descripción</strong>: Representa a los clientes u organizaciones en el sistema.</li>
+            <li><strong>Campos</strong>:
+                <ul>
+                    <li><code class="inline-code">id</code>: Identificador único del cliente (PK).</li>
+                    <li><code class="inline-code">name</code>: Nombre del cliente (no nulo).</li>
+                    <li><code class="inline-code">description</code>: Descripción del cliente.</li>
+                    <li><code class="inline-code">created_at</code>: Fecha y hora de creación del cliente.</li>
+                    <li><code class="inline-code">updated_at</code>: Fecha y hora de la última actualización del
+                        cliente.</li>
+                </ul>
+            </li>
+        </ul>
+        <h4 id="tabla-modules">Tabla <code class="inline-code">MODULES</code></h4>
+        <ul>
+            <li><strong>Descripción</strong>: Representa los módulos del sistema.</li>
+            <li><strong>Campos</strong>:
+                <ul>
+                    <li><code class="inline-code">id</code>: Identificador único del módulo (PK).</li>
+                    <li><code class="inline-code">name</code>: Nombre del módulo (único y no nulo).</li>
+                    <li><code class="inline-code">description</code>: Descripción del módulo.</li>
+                    <li><code class="inline-code">created_at</code>: Fecha y hora de creación del módulo.</li>
+                    <li><code class="inline-code">updated_at</code>: Fecha y hora de la última actualización del módulo.
+                    </li>
+                </ul>
+            </li>
+        </ul>
+        <h4 id="tabla-module_permission">Tabla <code class="inline-code">MODULE_PERMISSION</code></h4>
+        <ul>
+            <li><strong>Descripción</strong>: Tabla de relación entre módulos y permisos.</li>
+            <li><strong>Campos</strong>:
+                <ul>
+                    <li><code class="inline-code">module_id</code>: Identificador del módulo (FK).</li>
+                    <li><code class="inline-code">permission_id</code>: Identificador del permiso (FK).</li>
+                </ul>
+            </li>
+        </ul>
+        <h4 id="relaciones">Relaciones</h4>
+        <ul>
+            <li><strong>USERS - ROLES</strong>: Relación many-to-many a través de la tabla <code
+                    class="inline-code">user_role</code>.</li>
+            <li><strong>USERS - CLIENTS</strong>: Relación many-to-many a través de la tabla <code
+                    class="inline-code">client_user</code>.</li>
+            <li><strong>ROLES - PERMISSIONS</strong>: Relación many-to-many a través de la tabla <code
+                    class="inline-code">role_permission</code>.</li>
+            <li><strong>PERMISSIONS - ACTIONS</strong>: Relación many-to-many a través de la tabla <code
+                    class="inline-code">permission_action</code>.</li>
+            <li><strong>MODULES - PERMISSIONS</strong>: Relación many-to-many a través de la tabla <code
+                    class="inline-code">module_permission</code>.</li>
+        </ul>
+        <h3 id="notas">Notas</h3>
+        <ul>
+            <li>Las tablas de asociación (<code class="inline-code">user_role</code>, <code
+                    class="inline-code">client_user</code>, <code class="inline-code">role_permission</code>, <code
+                    class="inline-code">permission_action</code>, <code class="inline-code">module_permission</code>) se
+                utilizan para manejar las relaciones many-to-many entre las entidades.</li>
+            <li>Los campos <code class="inline-code">created_at</code> y <code class="inline-code">updated_at</code> en
+                todas las tablas permiten el seguimiento de la creación y actualización de los registros.</li>
+            <li>La tabla <code class="inline-code">USERS</code> incluye un campo <code
+                    class="inline-code">password_hash</code> para almacenar de forma segura las contraseñas.</li>
+            <li>La tabla <code class="inline-code">USERS</code> también incluye un campo <code
+                    class="inline-code">profile_data</code> en formato JSON para almacenar datos adicionales del perfil
+                del usuario.</li>
+        </ul>
+        <h3 id="modelo-de-base-de-datos-para-el-sistema-de-gestión-de-nutrición-foliar">Modelo de Base de Datos para el
+            Sistema de Gestión de Nutrición Foliar</h3>
+        <h4 id="funcionalidad-y-beneficios">Funcionalidad y Beneficios</h4>
+        <p>El modelo de base de datos propuesto para el sistema de gestión de nutrición foliar está diseñado para
+            almacenar y gestionar datos relacionados con el análisis de suelos, análisis foliares, aplicaciones de
+            nutrientes, objetivos nutricionales, producción, productos y recomendaciones. Este modelo asegura la
+            integridad y consistencia de los datos, minimiza la redundancia y facilita la generación de informes y
+            recomendaciones precisas.</p>
+
+        <div class="joplin-editable">
+            <pre class="joplin-source" data-joplin-language="mermaid" data-joplin-source-open="```mermaid&#10;"
+                data-joplin-source-close="&#10;```&#10;">erDiagram
+    USERS ||--o{ FARM : owns
+    FARM ||--o{ LOT : has
+    LOT ||--o{ LOT_CROP : has
+    LOT ||--o{ COMMON_ANALYSIS : has
+    LOT ||--o{ NUTRIENT_APPLICATION : has
+    LOT ||--o{ PRODUCTION : has
+    LOT ||--o{ RECOMMENDATION : has
+    CROP ||--o{ LOT_CROP : has
+    COMMON_ANALYSIS ||--o{ SOIL_ANALYSIS : has
+    COMMON_ANALYSIS ||--o{ LEAF_ANALYSIS : has
+    CROP ||--o{ OBJECTIVE : has
+    PRODUCT ||--o{ PRODUCT_CONTRIBUTION : has
+    PRODUCT ||--o{ PRODUCT_PRICE : has
+
+    USERS {
+        int id PK
+        string username
+        string email
+    }
+    FARM {
+        int id PK
+        string name
+        int user_id FK
+    }
+    LOT {
+        int id PK
+        string name
+        float area
+        int farm_id FK
+    }
+    CROP {
+        int id PK
+        string name
+    }
+    LOT_CROP {
+        int id PK
+        int lot_id FK
+        int crop_id FK
+        date start_date
+        date end_date
+    }
+    COMMON_ANALYSIS {
+        int id PK
+        date date
+        int lot_id FK
+        float protein
+        float rest
+        int rest_days
+        int month
+    }
+    SOIL_ANALYSIS {
+        int id PK
+        int common_analysis_id FK
+        float energy
+        int grazing
+    }
+    LEAF_ANALYSIS {
+        int id PK
+        int common_analysis_id FK
+        float nitrogen
+        float phosphorus
+        float potassium
+        float calcium
+        float magnesium
+        float copper
+        float iron
+        float zinc
+        float manganese
+        float boron
+        float molybdenum
+        float silicon
+        float sulfur
+    }
+    NUTRIENT_APPLICATION {
+        int id PK
+        date date
+        int lot_id FK
+        float nitrogen
+        float phosphorus
+        float potassium
+        float calcium
+        float magnesium
+        float iron
+        float zinc
+        float manganese
+        float boron
+        float molybdenum
+        float copper
+        float silicon
+        float sulfur
+    }
+    OBJECTIVE {
+        int id PK
+        int crop_id FK
+        float nitrogen
+        float phosphorus
+        float potassium
+        float calcium
+        float magnesium
+        float copper
+        float iron
+        float zinc
+        float manganese
+        float boron
+        float molybdenum
+        float silicon
+        float sulfur
+        string objective
+        int rest_days
+        float protein
+    }
+    PRODUCTION {
+        int id PK
+        date date
+        int lot_id FK
+        float area
+        float production_kg
+        int bags
+        string harvest
+        int month
+        string variety
+        float price_per_kg
+        float protein_65dde
+        float discount
+    }
+    PRODUCT {
+        int id PK
+        string name
+        text description
+    }
+    PRODUCT_CONTRIBUTION {
+        int id PK
+        int product_id FK
+        float n
+        float p
+        float k
+        float ca
+        float mg
+        float fe
+        float zn
+        float mn
+        float b
+        float mo
+        float cu
+        float si
+        float s
+    }
+    PRODUCT_PRICE {
+        int id PK
+        int product_id FK
+        float price
+        string supplier
+        date start_date
+        date end_date
+    }
+    RECOMMENDATION {
+        int id PK
+        int lot_id FK
+        date date
+        text recommendation
+        boolean applied
+    }
+</pre>
+
+            <pre class="mermaid">erDiagram
+    USERS ||--o{ FARM : owns
+    FARM ||--o{ LOT : has
+    LOT ||--o{ LOT_CROP : has
+    LOT ||--o{ COMMON_ANALYSIS : has
+    LOT ||--o{ NUTRIENT_APPLICATION : has
+    LOT ||--o{ PRODUCTION : has
+    LOT ||--o{ RECOMMENDATION : has
+    CROP ||--o{ LOT_CROP : has
+    COMMON_ANALYSIS ||--o{ SOIL_ANALYSIS : has
+    COMMON_ANALYSIS ||--o{ LEAF_ANALYSIS : has
+    CROP ||--o{ OBJECTIVE : has
+    PRODUCT ||--o{ PRODUCT_CONTRIBUTION : has
+    PRODUCT ||--o{ PRODUCT_PRICE : has
+
+    USERS {
+        int id PK
+        string username
+        string email
+    }
+    FARM {
+        int id PK
+        string name
+        int user_id FK
+    }
+    LOT {
+        int id PK
+        string name
+        float area
+        int farm_id FK
+    }
+    CROP {
+        int id PK
+        string name
+    }
+    LOT_CROP {
+        int id PK
+        int lot_id FK
+        int crop_id FK
+        date start_date
+        date end_date
+    }
+    COMMON_ANALYSIS {
+        int id PK
+        date date
+        int lot_id FK
+        float protein
+        float rest
+        int rest_days
+        int month
+    }
+    SOIL_ANALYSIS {
+        int id PK
+        int common_analysis_id FK
+        float energy
+        int grazing
+    }
+    LEAF_ANALYSIS {
+        int id PK
+        int common_analysis_id FK
+        float nitrogen
+        float phosphorus
+        float potassium
+        float calcium
+        float magnesium
+        float copper
+        float iron
+        float zinc
+        float manganese
+        float boron
+        float molybdenum
+        float silicon
+        float sulfur
+    }
+    NUTRIENT_APPLICATION {
+        int id PK
+        date date
+        int lot_id FK
+        float nitrogen
+        float phosphorus
+        float potassium
+        float calcium
+        float magnesium
+        float iron
+        float zinc
+        float manganese
+        float boron
+        float molybdenum
+        float copper
+        float silicon
+        float sulfur
+    }
+    OBJECTIVE {
+        int id PK
+        int crop_id FK
+        float nitrogen
+        float phosphorus
+        float potassium
+        float calcium
+        float magnesium
+        float copper
+        float iron
+        float zinc
+        float manganese
+        float boron
+        float molybdenum
+        float silicon
+        float sulfur
+        string objective
+        int rest_days
+        float protein
+    }
+    PRODUCTION {
+        int id PK
+        date date
+        int lot_id FK
+        float area
+        float production_kg
+        int bags
+        string harvest
+        int month
+        string variety
+        float price_per_kg
+        float protein_65dde
+        float discount
+    }
+    PRODUCT {
+        int id PK
+        string name
+        text description
+    }
+    PRODUCT_CONTRIBUTION {
+        int id PK
+        int product_id FK
+        float n
+        float p
+        float k
+        float ca
+        float mg
+        float fe
+        float zn
+        float mn
+        float b
+        float mo
+        float cu
+        float si
+        float s
+    }
+    PRODUCT_PRICE {
+        int id PK
+        int product_id FK
+        float price
+        string supplier
+        date start_date
+        date end_date
+    }
+    RECOMMENDATION {
+        int id PK
+        int lot_id FK
+        date date
+        text recommendation
+        boolean applied
+    }
+</pre>
+        </div>
+        <h3 id="beneficios-del-modelo">Beneficios del Modelo</h3>
+        <ol>
+            <li><strong>Integridad de Datos</strong>: Las relaciones entre las tablas aseguran que los datos estén
+                consistentes y no se produzcan redundancias.</li>
+            <li><strong>Normalización</strong>: El modelo sigue las reglas de normalización (1NF, 2NF, 3NF) para evitar
+                redundancias y mejorar la eficiencia.</li>
+            <li><strong>Facilidad de Consulta</strong>: Las relaciones definidas permiten realizar consultas complejas
+                de manera eficiente, facilitando la generación de informes y recomendaciones.</li>
+            <li><strong>Escalabilidad</strong>: El modelo es modular y fácil de extender para incluir nuevas
+                funcionalidades o tablas en el futuro.</li>
+            <li><strong>Seguridad</strong>: La estructura del modelo, junto con las prácticas de SQLAlchemy y Flask,
+                asegura la prevención de ataques como la inyección SQL y el desbordamiento de memoria.</li>
+        </ol>
+        <p>Este modelo y sus relaciones proporcionan una base sólida para el desarrollo del sistema de gestión de
+            nutrición foliar, asegurando la integridad y consistencia de los datos, y facilitando la implementación de
+            nuevas funcionalidades en el futuro.</p>
+    </div>
+</div>

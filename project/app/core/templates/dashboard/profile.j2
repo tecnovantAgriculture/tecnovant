@@ -1,0 +1,258 @@
+{# profile.j2 #}
+{% extends "base.j2" %}
+{% set dashboard = true %}
+{% from "settings/_ui_class.j2" import base_button_classes, input_bg_color, border_color, hover_bg_color, focus_ring_color, button_bg_color, delete_button_bg_color, input_focus_bg_color, text_color %}
+{% from "macros/_forms.j2" import render_alert %} {# Import alert macro if you have one #}
+
+{% set data_menu = {
+"menu": [
+{"name": "Home", "url": url_for('core.index') },
+{"name": "Logout", "url": url_for('core.logout') },
+{"name": "Profile", "url": url_for('core.profile') }
+]
+} %}
+{% set title = "Mi Perfil" %} {# Updated title #}
+
+{% block content %}
+
+{# Div for displaying alerts #}
+<div id="profile-alerts"></div>
+<div id="password-alerts"></div>
+
+
+<div class="mx-auto max-w-8xl py-6 sm:px-6 lg:px-8">
+    <!-- Encabezado del Perfil -->
+    <div class="relative mb-8">
+        <div class="h-48 bg-gradient-to-r from-blue-600 to-purple-600 rounded-t-lg"></div>
+        <div class="absolute -bottom-10 left-4">
+            <img src="/img/avatar.png" alt="Avatar" class="w-32 h-32 rounded-full border-4 border-white"> 
+        </div>
+        <div class="absolute -bottom-10 left-40">
+             {# Use data passed from the route #}
+            <h1 class="text-2xl font-bold {{ text_color }}">{{ full_name }}</h1>
+            <p class="text-lg {{ text_color }}">{{ username }}</p>
+        </div>
+    </div>
+
+    <!-- Sección Perfil de Usuario -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
+        <h2 class="text-xl font-semibold mb-4 {{ text_color }}">Perfil de Usuario</h2>
+        <form id="profileForm">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label for="username" class="block text-sm font-medium {{ text_color }}">Nombre de Usuario</label>
+                    <input type="text" id="username" name="username"
+                        class="mt-1 block p-2  w-full rounded-md shadow-sm sm:text-sm {{ input_bg_color }} {{ border_color }} {{ input_focus_bg_color }} bg-gray-200 dark:bg-gray-700" disabled {# Added name attribute #}
+                        value="{{ username }}">
+                     <p class="mt-1 text-sm {{ text_color }}">Rol: {{ role }} </p>
+                </div>
+                <div>
+                    <label for="full_name" class="block text-sm font-medium {{ text_color }}">Nombre Completo</label>
+                    <input type="text" id="full_name" name="full_name" {# Added name attribute #}
+                        class="mt-1 p-2  block w-full rounded-md shadow-sm sm:text-sm {{ input_bg_color }} {{ border_color }} {{ input_focus_bg_color }}"
+                        value="{{ full_name }}">
+                    {# Display Organizations #}
+                    <label class="block text-sm font-medium {{ text_color }} mt-2">Organizaciones Asignadas:</label>
+                    {% if organizations %}
+                        <ul class="list-disc list-inside text-sm {{ text_color }}">
+                        {% for org in organizations %}
+                            <li>{{ org.name }} (ID: {{ org.id }})</li>
+                        {% endfor %}
+                        </ul>
+                    {% else %}
+                        <p class="text-sm {{ text_color }}">Ninguna</p>
+                    {% endif %}
+                </div>
+                <div class="md:col-span-2"> {# Make email span full width on medium screens #}
+                    <label for="email" class="block text-sm font-medium {{ text_color }}">Correo Electrónico</label>
+                    <input type="email" id="email" name="email" {# Added name attribute #}
+                        class="mt-1 block p-2 w-full rounded-md shadow-sm sm:text-sm {{ input_bg_color }} {{ border_color }} {{ input_focus_bg_color }}" value="{{ email }}">
+                </div>
+            </div>
+            <button type="submit" id="updateProfileBtn" class="{{ base_button_classes }} {{ button_bg_color }} text-white mt-4">Actualizar Perfil</button>
+        </form>
+    </div>
+
+    <!-- Sección Cambio de Contraseña -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
+        <h2 class="text-xl font-semibold mb-4 {{ text_color }}">Cambiar Contraseña</h2>
+        <form id="passwordForm">
+            <div class="space-y-4">
+                <div>
+                    <label for="current_password" class="block p-2 text-sm font-medium {{ text_color }}">Contraseña Actual</label>
+                    <input type="password" id="current_password" name="current_password" required class="mt-1 block w-full rounded-md shadow-sm p-2 sm:text-sm {{ input_bg_color }} {{ border_color }} {{ input_focus_bg_color }}">
+                </div>
+                <div>
+                    <label for="new_password" class="block text-sm p-2 font-medium {{ text_color }}">Nueva Contraseña</label>
+                    <input type="password" id="new_password" name="new_password" required class="mt-1 block w-full rounded-md shadow-sm sm:text-sm p-2 {{ input_bg_color }} {{ border_color }} {{ input_focus_bg_color }}">
+                </div>
+                <div>
+                    <label for="confirm_password" class="block p-2 text-sm font-medium {{ text_color }}">Confirmar Nueva Contraseña</label>
+                    <input type="password" id="confirm_password" name="confirm_password" required class="mt-1 block w-full rounded-md shadow-sm p-2 sm:text-sm {{ input_bg_color }} {{ border_color }} {{ input_focus_bg_color }}">
+                </div>
+                <button type="submit" id="updatePasswordBtn" class="{{ base_button_classes }} {{ button_bg_color }} text-white">Actualizar Contraseña</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Sección Notificaciones (Placeholder) -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <h2 class="text-xl font-semibold mb-4 {{ text_color }}">Notificaciones</h2>
+        <p class="{{ text_color }}">Funcionalidad de notificaciones no implementada aún.</p>
+        {# <div class="space-y-4">
+            <div class="space-y-2">
+                <h3 class="text-sm font-medium {{ text_color }}">Preferencias de Correo</h3>
+                <div class="space-y-1">
+                    <label class="flex items-center">
+                        <input type="checkbox" class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
+                        <span class="ml-2 text-sm {{ text_color }}">Relativas a la cuenta</span>
+                    </label>
+                     </div>
+            </div>
+            <div>
+                <button class="{{ base_button_classes }} {{ button_bg_color }} text-white">Actualizar Preferencias</button>
+            </div>
+        </div> #}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Add this function inside your <script> block
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            // Does this cookie string begin with the name we want?
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+    // Helper function to display alerts
+    function showAlert(containerId, message, type = 'success') {
+        const alertContainer = document.getElementById(containerId);
+        if (!alertContainer) return;
+
+        const alertTypeClass = type === 'success' ? 'bg-green-100 border-green-400 text-green-700' : 'bg-red-100 border-red-400 text-red-700';
+        const alertHTML = `
+            <div class="${alertTypeClass} border px-4 py-3 rounded relative mb-4" role="alert">
+                <span class="block sm:inline">${message}</span>
+                <button type="button" class="absolute top-0 bottom-0 right-0 px-4 py-3" onclick="this.parentElement.remove();">
+                    <svg class="fill-current h-6 w-6 ${type === 'success' ? 'text-green-500' : 'text-red-500'}" role="button" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><title>Close</title><path d="M14.348 14.849a1.2 1.2 0 0 1-1.697 0L10 11.819l-2.651 3.029a1.2 1.2 0 1 1-1.697-1.697l2.758-3.15-2.759-3.152a1.2 1.2 0 1 1 1.697-1.697L10 8.183l2.651-3.031a1.2 1.2 0 1 1 1.697 1.697l-2.758 3.152 2.758 3.15a1.2 1.2 0 0 1 0 1.698z"/></svg>
+                </button>
+            </div>
+        `;
+        alertContainer.innerHTML = alertHTML; // Replace previous alert
+    }
+
+    // Profile Update Form Handler
+    document.getElementById('profileForm')?.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        const button = document.getElementById('updateProfileBtn');
+        button.disabled = true;
+        button.textContent = 'Actualizando...';
+
+        const formData = {
+            full_name: document.getElementById('full_name').value,
+            email: document.getElementById('email').value
+        };
+
+        try {
+            const response = await fetch('/api/core/profile', { // Correct endpoint
+                method: 'PUT', // Correct method
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    // Include CSRF token if needed (especially if JWT_COOKIE_CSRF_PROTECT is True)
+                    'X-CSRF-TOKEN': getCookie('csrf_access_token') // You'll need a getCookie function
+                },
+                body: JSON.stringify(formData)
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                showAlert('profile-alerts', result.msg || 'Perfil actualizado con éxito.', 'success');
+                 // Optionally update displayed name if it changed, though a page reload might be simpler
+                 document.querySelector('h1').textContent = formData.full_name;
+            } else {
+                showAlert('profile-alerts', result.msg || result.error || 'Error al actualizar el perfil.', 'error');
+            }
+        } catch (error) {
+            console.error("Profile update error:", error);
+            showAlert('profile-alerts', 'Error de red o del servidor.', 'error');
+        } finally {
+            button.disabled = false;
+            button.textContent = 'Actualizar Perfil';
+        }
+    });
+
+    // Password Change Form Handler
+    document.getElementById('passwordForm')?.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        const button = document.getElementById('updatePasswordBtn');
+        button.disabled = true;
+        button.textContent = 'Actualizando...';
+
+        const formData = {
+            current_password: document.getElementById('current_password').value,
+            new_password: document.getElementById('new_password').value,
+            confirm_password: document.getElementById('confirm_password').value
+        };
+
+        try {
+            const response = await fetch('{{ url_for('core_api.change_password_view')  }}', { // Correct endpoint
+                method: 'POST', // Correct method
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    // Include CSRF token if needed
+                    'X-CSRF-TOKEN': getCookie('csrf_access_token')
+                },
+                body: JSON.stringify(formData)
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                showAlert('password-alerts', result.msg || 'Contraseña actualizada con éxito.', 'success');
+                document.getElementById('passwordForm').reset(); // Clear form on success
+            } else {
+                showAlert('password-alerts', result.msg || result.error || 'Error al cambiar la contraseña.', 'error');
+            }
+        } catch (error) {
+            console.error("Password change error:", error);
+            showAlert('password-alerts', 'Error de red o del servidor.', 'error');
+        } finally {
+            button.disabled = false;
+            button.textContent = 'Actualizar Contraseña';
+        }
+    });
+
+    // Optional: Add getCookie function if using CSRF protection with cookies
+    /*
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+    */
+
+</script>
+{% endblock %}

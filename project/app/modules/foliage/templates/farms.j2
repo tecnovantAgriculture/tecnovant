@@ -1,0 +1,20 @@
+{% extends "layouts/crud_base.j2" %}
+{# identificadores de entidad #}
+{% set entity_name = "Fincas" %}
+{% set entity_name_lower = "finca" %}
+{% set show_select_box = True %}
+{# Mostrar la grid de ítems #}
+{% set table_headers = ["ID", "Nombre de la finca", "Cliente", "Lotes", "Fecha de creación", "Fecha de actualización"] %}
+{% set item_fields = ["id", "name", "org_name", "lots", "created_at", "updated_at"] %}
+
+{# formulario de editar y add #}
+{% set form_fields = {
+    'name': {'type': 'text', 'label': 'Nombre de la finca', 'required': True},
+    'org_id': {'type': 'select', 'label': 'Cliente', 'options': org_dict, 'required': True, 'new_value': False},
+} %}
+{# entregado desde el endpoint #}
+{# api de consumo #}
+{% set api_url = url_for('foliage_api.farms_view') %}
+{% set csv_upload_url = url_for('foliage_api.upload_csv') %}
+{% set csv_download_url = url_for('foliage_api.download_csv', resource='farms') %}
+{% set search_url = url_for('foliage.amd_farms') %}

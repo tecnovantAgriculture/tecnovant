@@ -1,0 +1,31 @@
+{# partials/header.j2 #}
+{# header layout, topbar -> logo, menu #}
+<header class="z-30 bg-white dark:bg-gray-700 shadow-md border-b border-gray-200 dark:border-b-gray-800">
+    <div class="container mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex items-center justify-between h-16">
+            <!-- Logo -->
+            
+            <div class="flex-shrink-0 lg:pl-12 sm:pl-12 xs:pl-12">
+                <a href="/" class="flex items-center">
+                    <img class="h-12 w-auto" src="/img/logo.png" alt="Logo">
+                </a>
+            </div>
+
+            <!-- Title (hidden on mobile) -->
+            <h1 class="hidden md:block text-2xl font-bold text-primary">{{ page_title }}</h1>
+
+{% if data_menu %}
+            {% block navigation %}
+            <nav class="flex items-center">
+                {% include 'partials/navigation.j2' %}
+            </nav>
+
+            {% endblock %}
+{% endif %}
+        </div>
+
+
+        <!-- Title (visible only on mobile) -->
+        <h1 class="md:hidden text-2xl font-bold text-primary text-center py-2">{{ page_title }}</h1>
+    </div>
+</header>

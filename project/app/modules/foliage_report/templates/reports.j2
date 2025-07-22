@@ -1,0 +1,93 @@
+{# profile.j2 #}
+{% extends "base.j2" %}
+{% set dashboard = true %}
+{% from "settings/_ui_class.j2" import base_button_classes, input_bg_color, border_color, hover_bg_color, focus_ring_color, button_bg_color, delete_button_bg_color, input_focus_bg_color, text_color %}
+{% from "macros/_forms.j2" import render_alert %} {# Import alert macro if you have one #}
+
+{% set data_menu = {
+"menu": [
+{"name": "Home", "url": url_for('core.index') },
+{"name": "Logout", "url": url_for('core.logout') },
+{"name": "Profile", "url": url_for('core.profile') }
+]
+} %}
+{% set title = "Reportes" %} {# Updated title #}
+{% block content %}
+<div class="p-6">
+  <h1 class="text-2xl font-bold mb-4">Panel de Informes - TecnoAgro</h1>
+
+  <!-- Filtros -->
+  <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <select class="border p-2 rounded" name="farm">
+      <option>Finca</option>
+      {% for farm in farms %}
+        <option value="{{ farm.id }}">{{ farm.name }}</option>
+      {% endfor %}
+    </select>
+    <select class="border p-2 rounded" name="lot">
+      <option>Lote</option>
+      {% for lot in lots %}
+        <option value="{{ lot.id }}">{{ lot.name }}</option>
+      {% endfor %}
+    </select>
+    <select class="border p-2 rounded" name="analysis_type">
+      <option>Tipo de análisis</option>
+      <option value="soil">Suelo</option>
+      <option value="foliar">Foliar</option>
+      <option value="application">Aplicaciones</option>
+      <option value="production">Producción</option>
+    </select>
+    <input type="date" class="border p-2 rounded" name="date" />
+  </div>
+
+  <!-- Tabla de resultados -->
+  <div class="overflow-auto bg-white rounded shadow">
+    <table class="w-full text-sm text-left">
+      <thead class="bg-gray-100 text-xs uppercase">
+        <tr>
+          <th class="p-3">Fecha</th>
+          <th class="p-3">Finca</th>
+          <th class="p-3">Lote</th>
+          <th class="p-3">Tipo</th>
+          <th class="p-3">Cultivo</th>
+          <th class="p-3">Estado</th>
+          {% if role in ['ORG_ADMIN', 'ORG_EDITOR'] %}
+            <th class="p-3 text-center">Acciones</th>
+          {% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for report in reports %}
+        <tr class="border-b hover:bg-gray-50">
+          <td class="p-3">{{ report.date }}</td>
+          <td class="p-3">{{ report.farm }}</td>
+          <td class="p-3">{{ report.lot }}</td>
+          <td class="p-3">{{ report.type }}</td>
+          <td class="p-3">{{ report.crop }}</td>
+          <td class="p-3">{{ report.status }}</td>
+          {% if role in ['ORG_ADMIN', 'ORG_EDITOR'] %}
+          <td class="p-3 text-center">
+            <a href="/report/{{ report.id }}" class="text-blue-600 hover:underline">Ver</a>
+            {% if role == 'ORG_ADMIN' %}
+              | <a href="/report/{{ report.id }}/edit" class="text-yellow-600 hover:underline">Editar</a>
+              | <a href="/report/{{ report.id }}/delete" class="text-red-600 hover:underline">Eliminar</a>
+            {% elif role == 'ORG_EDITOR' %}
+              | <a href="/report/{{ report.id }}/edit" class="text-yellow-600 hover:underline">Editar</a>
+            {% endif %}
+          </td>
+          {% endif %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Exportar -->
+  {% if role in ['ORG_ADMIN', 'ORG_EDITOR'] %}
+  <div class="mt-6 flex gap-4">
+    <button class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Exportar PDF</button>
+    <button class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Exportar CSV</button>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

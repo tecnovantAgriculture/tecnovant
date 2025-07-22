@@ -1,0 +1,36 @@
+@charset "utf-8";
+
+@media (max-width: 768px) {
+    .sidebar-hidden {
+      display: none;
+    }
+  }
+  .login-button {
+    transition: transform 0.3s ease-in-out;
+  }
+  
+  .login-button:hover {
+    transform: translateX(-20px);
+  }
+  
+  /* Estilos para móvil */
+  @media (max-width: 640px) {
+    .login-button {
+      transform: translateX(50px);
+    }
+  
+    .login-button:active {
+      transform: translateX(0);
+    }
+  }
+  
+p {
+    padding-bottom: 1em;
+}
+h1, h2, h3, h4, h5, h6 {
+    padding-top: 1em;
+    padding-bottom: 1em;
+}
+.home {
+  min-height: calc(100vh - 136px) !important;
+}

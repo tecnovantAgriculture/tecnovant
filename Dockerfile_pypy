@@ -1,0 +1,38 @@
+# Primera etapa para compilar
+FROM pypy:latest AS builder
+WORKDIR /app
+
+# Instalación de dependencias de compilación
+RUN apt-get update && apt-get install -y \
+    gfortran \
+    build-essential \
+    libopenblas-dev \
+    pkg-config \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY project/requirements.txt .
+# Usa --no-cache-dir para evitar almacenar archivos de caché de pip
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Segunda etapa para la imagen final
+FROM pypy:latest
+# o minimal pypy:slim
+WORKDIR /app
+
+# Copia de los paquetes instalados desde la etapa de compilación
+COPY --from=builder /opt/pypy/lib/pypy3.10/site-packages/ /opt/pypy/lib/pypy3.10/site-packages/
+
+# Copia los binarios de Pypy (incluyendo los instalados con pip)
+COPY --from=builder /opt/pypy/bin/ /opt/pypy/bin/
+
+# Copia los archivos de aplicación
+COPY project/start.sh .
+COPY project/ /app/
+RUN chmod +x start.sh
+
+# Configuracion de variables de entorno
+ENV PYTHONPATH=/app
+
+# Comando para iniciar la aplicación
+CMD ["./start.sh"]

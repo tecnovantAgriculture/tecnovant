@@ -1,0 +1,131 @@
+### Entornos virtuales ###
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+venv*/
+env*/
+[Vv]env*/
+[Ee][Nn][Vv]/*
+
+### Dependencias y paquetes ###
+# Python
+**/__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+*.so
+*.pyd
+wheels/
+share/python-wheels/
+develop-eggs/
+eggs/
+lib/
+lib64/
+parts/
+sdist/
+dist/
+build/
+var/
+.pdm.toml
+pdm.lock
+__pypackages__/
+
+# Node.js
+node_modules/
+
+### Herramientas de desarrollo ###
+# Testing
+.tox/
+.nox/
+.pytest_cache/
+.hypothesis/
+htmlcov/
+cover/
+.coverage
+coverage.*
+*.cover
+*.py.cover
+nosetests.xml
+
+# Type checking
+.mypy_cache/
+.pyre/
+.pytype/
+
+# Documentación
+docs/_build/
+site/
+
+# IDEs y editores
+.vscode/
+.idea/
+.spyderproject
+.spyproject
+.ropeproject
+.ipynb_checkpoints
+*.ipynb_checkpoints
+
+### Configuración y entorno ###
+.env
+.local_settings.py
+local_settings.py
+instance/
+.python-version
+
+### Bases de datos y backups ###
+db.sqlite3
+db.sqlite3-journal
+db/
+backup/
+backups/
+*.sage.py
+
+### Logs ###
+*.log
+error.log
+error.txt
+logs.txt
+log.txt
+app_errors.log
+
+### Sistemas operativos ###
+# Windows
+Thumbs.db
+
+# macOS
+.DS_Store
+
+### Otras herramientas ###
+# Build systems
+.pybuilder/
+target/
+*.manifest
+*.spec
+MANIFEST
+
+# Pip
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Cython
+cython_debug/
+
+# IPython
+profile_default/
+
+# SonarQube
+.scannerwork
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# Traducciones
+*.mo
+*.pot
+
+# Descargas
+downloads/

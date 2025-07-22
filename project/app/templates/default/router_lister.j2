@@ -1,0 +1,200 @@
+{# router_lister.j2 #}
+<!DOCTYPE html>
+<html lang="es" class="h-full">
+<head>
+    {% include 'partials/head.j2' %}
+    {% from "settings/_ui_class.j2" import body_classes %}
+</head>
+<body class="{{ body_classes }} home">
+    <div class="flex h-screen">
+        <!-- Sidebar -->
+        <nav class="w-64 h-screen bg-gray-200 p-4 overflow-y-auto fixed top-0 left-0">
+            <h2 class="text-xl font-semibold mb-4">Endpoints</h2>
+            <div class="space-y-4">
+                <button id="toggleViewBtn" class="w-full bg-blue-500 text-white py-2 rounded hover:bg-blue-600 transition">
+                    Cambiar vista
+                </button>
+                <div id="navEndpoints" class="space-y-2">
+                    <!-- Endpoints -->
+                </div>
+            </div>
+        </nav>
+
+        <!-- Main content -->
+        <main class="flex-1 p-4 ml-64">
+            <h1 class="text-3xl font-bold mb-6">API Documentation</h1>
+            <pre id="jsonView" class="hidden bg-gray-900 text-green-400 p-4 rounded overflow-auto text-sm"></pre>
+            <div id="endpoints" class="space-y-8"></div>
+        </main>
+    </div>
+
+    <script>
+        function getQueryParam(param) {
+            const urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get(param);
+        }
+
+        function setQueryParam(param, value) {
+            const url = new URL(window.location);
+            if (value === null) {
+                url.searchParams.delete(param);
+            } else {
+                url.searchParams.set(param, value);
+            }
+            window.location.href = url.toString();
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            const viewMode = getQueryParam('view') || 'pretty';
+            const jsonView = document.getElementById('jsonView');
+            const endpointsContainer = document.getElementById('endpoints');
+            const navEndpoints = document.getElementById('navEndpoints');
+            const toggleBtn = document.getElementById('toggleViewBtn');
+
+            toggleBtn.addEventListener('click', () => {
+                const nextView = viewMode === 'json' ? 'pretty' : 'json';
+                setQueryParam('view', nextView);
+            });
+
+            fetch('/list_endpoints')
+                .then(response => response.json())
+                .then(data => {
+                    if (viewMode === 'json') {
+                        jsonView.classList.remove('hidden');
+                        endpointsContainer.classList.add('hidden');
+                        navEndpoints.classList.add('hidden');
+                        jsonView.textContent = JSON.stringify(data, null, 4);
+                        return;
+                    }
+
+                    jsonView.classList.add('hidden');
+                    endpointsContainer.classList.remove('hidden');
+                    navEndpoints.classList.remove('hidden');
+
+                    const createEndpointCard = (route, isActive) => {
+                        const endpointDiv = document.createElement('div');
+                        endpointDiv.className = `bg-white rounded-lg shadow-md p-6 ${isActive ? 'ring-2 ring-blue-500' : ''}`;
+                        endpointDiv.id = route.endpoint;
+
+                        const endpointHeader = document.createElement('div');
+                        endpointHeader.className = 'flex justify-between items-center mb-4';
+
+                        const endpointUrl = document.createElement('h2');
+                        endpointUrl.className = 'text-2xl font-bold text-gray-800';
+                        endpointUrl.textContent = route.url;
+
+                        const endpointROUTE = document.createElement('h3');
+                        endpointROUTE.className = 'text-1xl font-bold text-gray-700';
+                        endpointROUTE.textContent = route.endpoint;
+
+                        const endpointMethods = document.createElement('div');
+                        endpointMethods.className = 'flex space-x-2';
+                        route.methods.split(',').forEach(method => {
+                            const methodSpan = document.createElement('span');
+                            methodSpan.className = `px-2 py-1 rounded text-sm font-medium 
+                                ${method === 'GET' ? 'bg-green-100 text-green-800' : 
+                                 method === 'POST' ? 'bg-blue-100 text-blue-800' : 
+                                 method === 'PUT' ? 'bg-yellow-100 text-yellow-800' : 
+                                 method === 'DELETE' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'}`;
+                            methodSpan.textContent = method;
+                            endpointMethods.appendChild(methodSpan);
+                        });
+
+                        endpointHeader.appendChild(endpointUrl);
+                        endpointHeader.appendChild(endpointROUTE);
+                        endpointHeader.appendChild(endpointMethods);
+                        endpointDiv.appendChild(endpointHeader);
+
+                        if (route.documentation) {
+                            const doc = document.createElement('p');
+                            doc.className = 'text-gray-600 mb-4';
+                            doc.textContent = route.documentation;
+                            endpointDiv.appendChild(doc);
+                        }
+
+                        if (route.parameters?.length) {
+                            const section = document.createElement('div');
+                            const title = document.createElement('h3');
+                            title.className = 'text-lg font-semibold mb-2 text-gray-800';
+                            title.textContent = 'Parameters';
+                            section.appendChild(title);
+                            const list = document.createElement('ul');
+                            list.className = 'grid grid-cols-1 md:grid-cols-2 gap-2 text-gray-600';
+                            route.parameters.forEach(p => {
+                                const item = document.createElement('li');
+                                item.textContent = p;
+                                list.appendChild(item);
+                            });
+                            section.appendChild(list);
+                            endpointDiv.appendChild(section);
+                        }
+
+                        if (route.response_codes?.length) {
+                            const section = document.createElement('div');
+                            const title = document.createElement('h3');
+                            title.className = 'text-lg font-semibold mb-2 text-gray-800';
+                            title.textContent = 'Response Codes';
+                            section.appendChild(title);
+                            const list = document.createElement('ul');
+                            list.className = 'grid grid-cols-1 md:grid-cols-2 gap-2 text-gray-600';
+                            route.response_codes.forEach(p => {
+                                const item = document.createElement('li');
+                                item.textContent = p;
+                                list.appendChild(item);
+                            });
+                            section.appendChild(list);
+                            endpointDiv.appendChild(section);
+                        }
+
+                        endpointsContainer.appendChild(endpointDiv);
+
+                        const navItem = document.createElement('div');
+                        navItem.className = 'block mb-1';
+                        const navLink = document.createElement('a');
+                        navLink.className = `text-gray-600 hover:text-blue-500 transition-colors cursor-pointer ${
+                            isActive ? 'font-medium' : ''
+                        }`;
+                        navLink.textContent = route.endpoint;
+                        navLink.href = `#${route.endpoint}`;
+                        navLink.dataset.target = route.endpoint;
+                        navItem.appendChild(navLink);
+                        navEndpoints.appendChild(navItem);
+                    };
+
+                    data.forEach((route, index) => {
+                        createEndpointCard(route, index === 0);
+                    });
+
+                    navEndpoints.addEventListener('click', (e) => {
+                        if (e.target.tagName === 'A') {
+                            const targetId = e.target.dataset.target;
+                            document.querySelectorAll('#endpoints > div').forEach(card => {
+                                card.classList.remove('ring-2', 'ring-blue-500');
+                            });
+                            document.querySelectorAll('#navEndpoints a').forEach(link => {
+                                link.classList.remove('font-medium');
+                            });
+                            const targetElement = document.getElementById(targetId);
+                            if (targetElement) {
+                                targetElement.classList.add('ring-2', 'ring-blue-500');
+                                e.target.classList.add('font-medium');
+                                const yOffset = targetElement.offsetTop - 80;
+                                window.scrollTo({
+                                    top: yOffset,
+                                    behavior: 'smooth'
+                                });
+                            }
+                        }
+                    });
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    const errorDiv = document.createElement('div');
+                    errorDiv.className = 'text-red-500 text-center py-4';
+                    errorDiv.textContent = 'Error al cargar la documentación';
+                    endpointsContainer.appendChild(errorDiv);
+                });
+        });
+    </script>
+</body>
+</html>

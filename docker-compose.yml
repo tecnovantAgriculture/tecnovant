@@ -1,0 +1,59 @@
+version: '3.8'
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./project:/app
+    depends_on:
+      - db
+      - cache
+
+  db:
+    image: mariadb:10.5
+    volumes:
+      - ./db:/var/lib/mysql
+    environment:
+      MARIADB_DATABASE: dev_db
+      MARIADB_USER: dev_user
+      MARIADB_PASSWORD: dev_password
+      MARIADB_ROOT_PASSWORD: root_password
+
+  cache:
+    image: redis:alpine
+    volumes:
+      - redis_data:/data
+    environment:
+      REDIS_PASSWORD: redis_password
+      REDIS_DISABLE_COMMANDS: FLUSHDB,FLUSHALL
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "6084:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./project/app/static/assets/css:/usr/share/nginx/html/css
+      - ./project/app/static/assets/js:/usr/share/nginx/html/js
+      - ./project/app/static/assets/img:/usr/share/nginx/html/img
+    environment:
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+    depends_on:
+      - web
+
+  adminer:
+    image: adminer
+    restart: always
+    ports:
+      - "6085:8080"
+    depends_on:
+      - db
+
+volumes:
+  redis_data:
+
+networks:
+  default:
+    name: tecnoagro

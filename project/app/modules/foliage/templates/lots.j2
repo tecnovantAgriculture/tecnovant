@@ -1,0 +1,20 @@
+{% extends "layouts/crud_base.j2" %}
+{# identificadores de entidad #}
+{% set entity_name = "Lotes" %}
+{% set entity_name_lower = "lote" %}
+{% set show_select_box = True %}
+{# Mostrar la grid de ítems #}
+{% set table_headers = ["ID", "Finca", "Nombre del lote", "Área del lote",  "Fecha de creación", "Fecha de actualización"] %}
+{% set item_fields = ["id", "farm_name", "name", "area",  "created_at", "updated_at"] %}
+
+{# formulario de editar y add #}
+{% set form_fields = {
+    'farm_id': {'type': 'select', 'label': 'Finca', 'options': farms_dic, 'required': True, 'new_value': False},
+    'name': {'type': 'text', 'label': 'Nombre del lote', 'required': True},
+    'area': {'type': 'number', 'label': 'Área del lote', 'required': True},
+} %}
+{# entregado desde el endpoint #}
+{# api de consumo #}
+{% set api_url = url_for('foliage_api.lots_view') %}
+{% set search_url = url_for('foliage.amd_lots') %}
+

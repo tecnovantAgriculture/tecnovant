@@ -1,0 +1,165 @@
+{% extends "base.j2" %}
+{% block content %}
+
+<div class="flex justify-between items-center mb-4">
+    <h1 class="text-2xl font-bold">Configuración del Informe - solicitar_informe.j2</h1>
+    <div>
+        <button class="bg-gray-200 px-4 py-2 rounded mr-2">Restablecer</button>
+        <button class="bg-blue-600 text-white px-4 py-2 rounded">Guardar configuración</button>
+    </div>
+</div>
+
+<form id="generateReportForm">
+        <div class="grid grid-cols-3 gap-4">
+            <div class="col-span-2 space-y-4">
+
+            {# filtro #}
+<div class="bg-gray-50 p-4 rounded-lg shadow">
+    <h2 class="text-lg font-semibold mb-2">Filtros de Selección</h2>
+    <div class="grid grid-cols-3 gap-4">
+        <div>
+            <label class="block font-medium mb-2">Finca</label>
+            <select class="w-full border p-2 rounded" id="farm-select">
+                <option value="">Todas las fincas</option>
+            </select>
+        </div>
+        <div>
+            <label class="block font-medium mb-2">Lote</label>
+            <select class="w-full border p-2 rounded" id="lot-select">
+                <option value="">Todos los lotes</option>
+            </select>
+        </div>
+        <div class="flex  items-center gap-2">
+            <div>
+                <label class="block font-medium mb-2">Fechas inicio</label>
+                <input type="date" class="border p-1 rounded" id="date-filter">
+            </div>
+            <div>
+                <label class="block font-medium mb-2">Final</label>
+                <input type="date" class="border p-1 rounded" id="enddate-filter">
+            </div>
+        </div>
+    </div>
+</div>
+{# end filtro #}
+            </form>    
+                <div class="bg-gray-50 p-4 rounded-lg shadow">
+                    <h2 class="text-lg font-semibold mb-2">Análisis Disponibles</h2>
+                    <table class="w-full border rounded">
+                        <thead>
+                            <tr class="bg-gray-200">
+                                <th class="p-2">ID</th>
+                                <th class="p-2">Fecha</th>
+                                <th class="p-2">Finca</th>
+                                <th class="p-2">Lote</th>
+                                <th class="p-2">Tipo</th>
+                                <th class="p-2">Proteínas</th>
+                                <th class="p-2">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr class="border">
+                                <td class="p-2">4</td>
+                                <td class="p-2">2025-03-19</td>
+                                <td class="p-2">El nuevo rocío</td>
+                                <td class="p-2">Lote 1</td>
+                                <td class="p-2">🌱</td>
+                                <td class="p-2">543</td>
+                                <td class="p-2 text-blue-500 cursor-pointer">👁️</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <div class="bg-gray-50 p-4 rounded-lg shadow">
+                <h2 class="text-lg font-semibold mb-2">Opciones del Informe</h2>
+                <label class="block font-medium">Título del Informe</label>
+                <input type="text" class="w-full border p-2 rounded mb-2" value="Informe de Análisis">
+                
+                <h3 class="font-semibold mt-4">Secciones a incluir</h3>
+                <div class="space-y-2">
+                    <label class="flex items-center">
+                        <input type="checkbox" class="mr-2"> Análisis Foliar
+                    </label>
+                    <label class="flex items-center">
+                        <input type="checkbox" class="mr-2"> Análisis de Suelo
+                    </label>
+                </div>
+                
+                <h3 class="font-semibold mt-4">Visualizaciones</h3>
+                <label class="flex items-center">
+                    <input type="checkbox" class="mr-2"> Gráficos comparativos
+                </label>
+                
+                <button class="mt-4 bg-blue-600 text-white px-4 py-2 rounded w-full">Generar Informe</button>
+            </div>
+        </div>
+    
+
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Cargar fincas
+    fetch('{{ url_for('foliage_report_api.get_farms') }}')
+        .then(response => response.json())
+        .then(farms => {
+            const select = document.getElementById('farm-select');
+            farms.forEach(farm => {
+                const option = document.createElement('option');
+                option.value = farm.id;
+                option.textContent = farm.name;
+                select.appendChild(option);
+            });
+        });
+    
+    // Actualizar lotes cuando cambia la finca
+    document.getElementById('farm-select').addEventListener('change', function() {
+        const farmId = this.value;
+        fetch(`{{ url_for('foliage_report_api.get_lots') }}?farm_id=${farmId}`)
+        
+            .then(response => response.json())
+            .then(lots => {
+                const lotSelect = document.getElementById('lot-select');
+                lotSelect.innerHTML = '<option value="">Todos los lotes</option>';
+                lots.forEach(lot => {
+                    const option = document.createElement('option');
+                    option.value = lot.id;
+                    option.textContent = lot.name;
+                    lotSelect.appendChild(option);
+                });
+            });
+    });
+    
+    // Filtrar análisis cuando cambian los valores
+    const dateInput = document.getElementById('date-filter');
+    const endDateInput = document.getElementById('enddate-filter');
+    const lotSelect = document.getElementById('lot-select');
+
+    dateInput.addEventListener('change', updateAnalyses);
+    endDateInput.addEventListener('change', updateAnalyses);
+    lotSelect.addEventListener('change', updateAnalyses);
+    
+    function updateAnalyses() {
+        const params = {
+            farm_id: document.getElementById('farm-select').value,
+            lot_id: lotSelect.value,
+            start_date: dateInput.value,
+            end_date: dateInput.value
+        };
+        
+        fetch('{{ url_for('foliage_report_api.get_analyses') }}', {
+            params: new URLSearchParams(params)
+        })
+        .then(response => response.json())
+        .then(analyses => {
+            // Actualizar la interfaz con los nuevos resultados
+            console.log(analyses);
+        });
+    }
+});
+</script>
+{% endblock%}

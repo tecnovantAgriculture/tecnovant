@@ -1,0 +1,45 @@
+{% extends "layouts/crud_base.j2" %}
+{# identificadores de entidad #}
+{% set entity_name = "Precios_productos" %}
+{% set entity_name_lower = "precio_de_producto" %}
+{% set show_select_box = False %}
+{# Mostrar la grid de ítems #}
+{% set table_headers = ["ID", "Producto", "Precio", "Proveedor", "Fecha de inicio", "Fecha de fin", "Fecha de creación", "Fecha de actualización"] %}
+{% set item_fields = ["id", "product_name", "price", "supplier", "start_date", "end_date", "created_at", "updated_at"] %}
+
+{# formulario de editar y add #}
+{% set form_fields = {
+    'product_id': {'type': 'select', 'label': 'ID del producto', 'options': product_options, 'required': True},
+    'price': {'type': 'number', 'label': 'Precio', 'required': True},
+    'supplier': {'type': 'text', 'label': 'Proveedor', 'required': False},
+    'start_date': {'type': 'date', 'label': 'Fecha de inicio', 'required': True},
+    'end_date': {'type': 'date', 'label': 'Fecha Final', 'required': True},
+} %}
+{# entregado desde el endpoint #}
+{# api de consumo #}
+{% set api_url = url_for('foliage_api.product_price_view') %}
+
+{% block extra_js %}
+{{ super() }}
+<script>
+    const originalShowModal = showModal;
+    showModal = function(action, id = null) {
+        originalShowModal(action, id);
+        if (action === 'create') {
+            const startInput = document.getElementById('start_date');
+            const endInput = document.getElementById('end_date');
+            if (startInput && endInput) {
+                const today = new Date();
+                const todayStr = today.toISOString().split('T')[0];
+                startInput.value = todayStr;
+                startInput.setAttribute('value', todayStr);
+                const nextYear = new Date(today);
+                nextYear.setFullYear(nextYear.getFullYear() + 1);
+                const nextYearStr = nextYear.toISOString().split('T')[0];
+                endInput.value = nextYearStr;
+                endInput.setAttribute('value', nextYearStr);
+            }
+        }
+    };
+</script>
+{% endblock %}

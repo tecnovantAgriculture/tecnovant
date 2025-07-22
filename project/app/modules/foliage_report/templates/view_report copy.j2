@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+</head>
+<body class="bg-gray-100 font-sans">
+    <div class="max-w-7xl mx-auto p-6">
+        <div class="bg-white rounded-lg shadow-lg p-8">
+            <div class="text-center mb-8 pb-6 border-b-2 border-green-600">
+                <h1 class="text-4xl font-bold text-green-800 mb-2">{{ title }}</h1>
+                <p class="text-gray-600">{{ description }}</p>
+            </div>
+
+            <!-- Información del Informe -->
+            <div class="bg-gradient-to-br from-green-50 to-green-100 p-6 rounded-lg mb-8 border-l-4 border-green-600">
+                <h2 class="text-2xl font-bold text-green-800 mb-4">Información del Informe</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div class="bg-white p-4 rounded-lg shadow-md">
+                        <label class="block text-sm font-bold text-green-800 uppercase tracking-wide mb-2">Fecha de Análisis:</label>
+                        <span class="text-lg text-gray-800">{{ analysisData.common.fechaAnalisis }}</span>
+                    </div>
+                    <div class="bg-white p-4 rounded-lg shadow-md">
+                        <label class="block text-sm font-bold text-green-800 uppercase tracking-wide mb-2">Finca:</label>
+                        <span class="text-lg text-gray-800">{{ analysisData.common.finca }}</span>
+                    </div>
+                    <div class="bg-white p-4 rounded-lg shadow-md">
+                        <label class="block text-sm font-bold text-green-800 uppercase tracking-wide mb-2">Lote:</label>
+                        <span class="text-lg text-gray-800">{{ analysisData.common.lote }}</span>
+                    </div>
+                    <div class="bg-white p-4 rounded-lg shadow-md">
+                        <label class="block text-sm font-bold text-green-800 uppercase tracking-wide mb-2">ID del Informe:</label>
+                        <span class="text-lg text-gray-800">{{ analysisData.common.id }}</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Gráfico de Análisis Foliar -->
+            <div class="mt-8">
+                <div class="bg-white p-6 rounded-lg shadow-lg">
+                    <h2 class="text-2xl font-bold text-green-800 text-center mb-6">Análisis Foliar - Concentración de Nutrientes</h2>
+                    <div class="relative h-96 mb-6">
+                        <canvas id="foliarChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tabla de Datos Nutricionales -->
+            <div class="mt-8">
+                <h2 class="text-2xl font-bold text-green-800 mb-4">Valores Detallados</h2>
+                <div class="overflow-x-auto">
+                    <table class="w-full bg-white rounded-lg shadow-lg overflow-hidden">
+                        <thead class="bg-green-600 text-white">
+                            <tr>
+                                <th class="px-6 py-4 text-left font-bold">Nutriente</th>
+                                <th class="px-6 py-4 text-left font-bold">Símbolo</th>
+                                <th class="px-6 py-4 text-left font-bold">Valor</th>
+                                <th class="px-6 py-4 text-left font-bold">Unidad</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-200">
+                            {% for nutrient, value in analysisData.foliar.items() %}
+                                {% if nutrient != 'id' %}
+                                <tr class="hover:bg-gray-50 transition-colors">
+                                    <td class="px-6 py-4">{{ nutrient|title }}</td>
+                                    <td class="px-6 py-4 font-bold">{{ nutrient_names.get(nutrient, nutrient|upper) }}</td>
+                                    <td class="px-6 py-4 font-bold text-green-800">{{ value }}</td>
+                                    <td class="px-6 py-4">
+                                        {% if nutrient in ['nitrógeno', 'fósforo', 'potasio', 'calcio', 'magnesio', 'azufre'] %}
+                                            %
+                                        {% else %}
+                                            ppm
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endif %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Datos del análisis foliar
+        const foliarData = {{ analysisData.foliar | tojson }};
+        const nutrientNames = {{ nutrient_names | tojson }};
+        
+        // Filtrar datos (excluir 'id')
+        const nutrients = Object.keys(foliarData).filter(key => key !== 'id');
+        const values = nutrients.map(nutrient => foliarData[nutrient]);
+        const labels = nutrients.map(nutrient => nutrientNames[nutrient] || nutrient.toUpperCase());
+        
+        // Colores para las barras
+        const colors = [
+            '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF',
+            '#FF9F40', '#FF6384', '#C9CBCF', '#4BC0C0', '#FF6384',
+            '#36A2EB', '#FFCE56', '#9966FF', '#FF9F40'
+        ];
+        
+        // Configuración del gráfico
+        const ctx = document.getElementById('foliarChart').getContext('2d');
+        const foliarChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Concentración',
+                    data: values,
+                    backgroundColor: colors.slice(0, nutrients.length),
+                    borderColor: colors.slice(0, nutrients.length).map(color => color.replace('0.8', '1')),
+                    borderWidth: 2,
+                    borderRadius: 4,
+                    borderSkipped: false,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'Concentración de Nutrientes en Análisis Foliar',
+                        font: {
+                            size: 16,
+                            weight: 'bold'
+                        },
+                        color: '#2E7D32'
+                    },
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const nutrientKey = nutrients[context.dataIndex];
+                                let unit = '';
+                                if (['nitrógeno', 'fósforo', 'potasio', 'calcio', 'magnesio', 'azufre'].includes(nutrientKey)) {
+                                    unit = '%';
+                                } else {
+                                    unit = 'ppm';
+                                }
+                                return `${context.parsed.y} ${unit}`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Concentración (% / ppm)',
+                            font: {
+                                size: 14,
+                                weight: 'bold'
+                            },
+                            color: '#2E7D32'
+                        },
+                        grid: {
+                            color: 'rgba(0, 0, 0, 0.1)'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Nutrientes',
+                            font: {
+                                size: 14,
+                                weight: 'bold'
+                            },
+                            color: '#2E7D32'
+                        },
+                        grid: {
+                            display: false
+                        },
+                        ticks: {
+                            maxRotation: 45,
+                            minRotation: 45
+                        }
+                    }
+                },
+                animation: {
+                    duration: 1000,
+                    easing: 'easeInOutQuart'
+                }
+            }
+        });
+    </script>
+</body>
+</html>

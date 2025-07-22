@@ -1,0 +1,113 @@
+{% extends "layouts/crud_base.j2" %}
+{# identificadores de entidad #}
+{% set entity_name = "Analisis_comunes" %}
+{% set entity_name_lower = "analisis_comun" %}
+{% set show_select_box = True %}
+{# Mostrar la grid de ítems #}
+{% set table_headers = [
+    "ID",
+    "Fecha de análisis",
+    "Finca",
+    "Lote",
+    "Área del lote",
+    "Energía",
+    "Proteínas",
+    "Aforo",
+    "Descanso",
+    "Días de descanso",
+    "Ciclo de Pastoreo",
+    "Fecha de creación",
+    "Fecha de actualización"
+] %}
+{% set item_fields = [
+    "id",
+    "date",
+    "farm_name",
+    "lot_name",
+    "lot_area",
+    "energy",
+    "protein",
+    "yield_estimate",
+    "rest",
+    "rest_days",
+    "month",
+    "created_at",
+    "updated_at"
+] %}
+{# formulario de editar y add #}
+{% set form_fields = {
+    'date': {'type': 'date', 'label': 'Fecha de análisis', 'required': True},
+    'lot_id': {'type': 'select', 'label': 'Lote', 'options': lots_dic, 'required': True, 'new_value': False},
+    'energy': {'type': 'number', 'label': 'Energía', 'required': True},
+    'protein': {'type': 'number', 'label': 'Proteínas', 'required': True},
+    'rest': {'type': 'number', 'label': 'Descanso', 'required': True},
+    'rest_days': {'type': 'number', 'label': 'Días de descanso', 'required': True},
+    'yield_estimate': {'type': 'number', 'label': 'Aforo', 'required': True},
+    'month': {'type': 'number', 'label': 'Ciclo de Pastoreo', "min": 1, "max": 12, 'required': True},
+} %}
+{# entregado desde el endpoint #}
+{# api de consumo #}
+{% set api_url = url_for('foliage_api.common_analyses') %}
+
+{% block extra_js %}
+    {{ super() }}
+
+    <script>
+        // URLs para las nuevas acciones (ajusta estas rutas según tu aplicación)
+        const foliarAnalysisUrl = "{{ url_for('foliage.amd_leaf_analyses') }}";
+        const soilAnalysisUrl = "{{ url_for('foliage.amd_soil_analyses') }}";
+
+        // Función para inyectar las nuevas opciones en el dropdown de acciones
+        function injectCustomActions() {
+            const dropdowns = document.querySelectorAll('[id^="dropdown-"]');
+            dropdowns.forEach(dropdown => {
+                const itemId = dropdown.id.replace('dropdown-', '');
+
+                // Crear el enlace para "Añadir Análisis Foliar"
+                const foliarLink = document.createElement('a');
+                foliarLink.href = `${foliarAnalysisUrl}?analisis_comun_id=${itemId}`;
+                foliarLink.className = "{{ text_color }} block px-4 py-2 text-sm {{ hover_bg_color }}";
+                foliarLink.role = "menuitem";
+                foliarLink.textContent = "Añadir Análisis Foliar";
+                foliarLink.onclick = function(e) {
+                    e.preventDefault();
+                    window.location.href = this.href; // Redirige a la URL
+                };
+
+                // Crear el enlace para "Añadir Análisis de Suelo"
+                const soilLink = document.createElement('a');
+                soilLink.href = `${soilAnalysisUrl}?analisis_comun_id=${itemId}`;
+                soilLink.className = "{{ text_color }} block px-4 py-2 text-sm {{ hover_bg_color }}";
+                soilLink.role = "menuitem";
+                soilLink.textContent = "Añadir Análisis de Suelo";
+                soilLink.onclick = function(e) {
+                    e.preventDefault();
+                    window.location.href = this.href; // Redirige a la URL
+                };
+
+                // Insertar los nuevos enlaces en el dropdown (después de "Borrar")
+                const dropdownMenu = dropdown.querySelector('.py-1');
+                if (dropdownMenu) {
+                    dropdownMenu.appendChild(foliarLink);
+                    dropdownMenu.appendChild(soilLink);
+                }
+            });
+        }
+
+        // Ejecutar la inyección cuando el DOM esté completamente cargado
+        document.addEventListener('DOMContentLoaded', injectCustomActions);
+
+        const originalShowModal = showModal;
+        showModal = function(action, id = null) {
+            originalShowModal(action, id);
+            if (action === 'create') {
+                const dateInput = document.getElementById('date');
+                if (dateInput) {
+                    const today = new Date().toISOString().split('T')[0];
+                    dateInput.value = today;
+                    dateInput.setAttribute('value', today);
+                }
+            }
+        };
+    </script>
+{% endblock %}

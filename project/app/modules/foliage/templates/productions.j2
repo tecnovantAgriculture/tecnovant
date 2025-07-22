@@ -1,0 +1,28 @@
+{% extends "layouts/crud_base.j2" %}
+{# identificadores de entidad #}
+{% set entity_name = "Producciones" %}
+{% set entity_name_lower = "produccion" %}
+{% set show_select_box = True %}
+{# Mostrar la grid de ítems #}
+{% set table_headers = ["ID", "Finca", "Lote", "Fecha", "Área", "Producción (kg)", "Bultos", "Cosecha", "Mes", "Variedad", "Precio/Kg", "Proteína 65dde", "Descuento"] %}
+{% set item_fields = ["id", "farm_name", "lot_name", "date", "area", "production_kg", "bags", "harvest", "month", "variety", "price_per_kg", "protein_65dde", "discount" ] %}
+
+{# formulario de editar y add #}
+{% set form_fields = {
+    'lot_id': {'type': 'text', 'label': 'ID del lote', 'required': True},
+    'date': {'type': 'date', 'label': 'Fecha', 'required': True},
+    'area': {'type': 'number', 'label': 'Área', 'required': True},
+    'production_kg': {'type': 'number', 'label': 'Producción (kg)', 'required': True},
+    'bags': {'type': 'number', 'label': 'Bultos', 'required': True},
+    'harvest':{'type': 'text', 'label': 'Cosecha', 'required': True},
+    'month':{'type': 'number', 'label': 'Mes', 'required': True},
+    'variety':{'type': 'text', 'label': 'Variedad', 'required': True},
+    'price_per_kg':{'type': 'number', 'label': 'Precio/Kg', 'required': True},
+    'protein_65dde':{'type': 'number', 'label': 'Proteína 65dde', 'required': True},
+    'discount':{'type': 'number', 'label': 'Descuento', 'required': True},
+
+} %}
+{# entregado desde el endpoint #}
+{# api de consumo #}
+
+{% set api_url = url_for('foliage_api.production_view') %}

@@ -1,0 +1,47 @@
+{% extends "layouts/crud_base.j2" %}
+
+{# identificadores de entidad #}
+{% set entity_name = "Clientes" %}
+{% set entity_name_lower = "cliente" %}
+{% set show_select_box = True %}
+
+{# Mostrar la grid de ítems #}
+{% set table_headers = [
+    "ID",
+    "Nombre del Cliente",
+    "Descripción",
+    "NIT",
+    "Contacto",
+    "Dirección",
+    "Teléfono",
+    "Reseller"
+] %}
+{% set item_fields = [
+    "id",
+    "name",
+    "description",
+    "nit",
+    "contact",
+    "address",
+    "phone",
+    "reseller"
+] %}
+
+
+{# formulario de editar y add #}
+{% set form_fields = {
+    'name': {'type': 'text', 'label': 'Nombre del Cliente', 'required': True, 'disabled_in_edit': True},
+    'description': {'type': 'text', 'label': 'Descripción', 'required': False},
+    'nit': {'type': 'text', 'label': 'NIT', 'required': False},
+    'contact': {'type': 'text', 'label': 'Contacto', 'required': False},
+    'address': {'type': 'text', 'label': 'Dirección', 'required': False},
+    'phone': {'type': 'text', 'label': 'Teléfono', 'required': False},
+    'reseller_id': {'type': 'select', 'label': 'Reseller', 'options': reseller_dict, 'required': True, 'new_value': False},
+} %}
+
+{# entregado desde el endpoint #}
+
+{# api de consumo #}
+{% set api_url = url_for('core_api.org_view') %}
+
+

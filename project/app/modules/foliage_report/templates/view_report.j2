@@ -1,0 +1,785 @@
+<!-- Definición de macros para obtener el estado de los nutrientes -->
+{% macro get_nutrient_status(actual, min, max) %}
+  {% if actual < min %}
+    deficiente
+  {% elif actual > max %}
+    excesivo
+  {% else %}
+    óptimo
+  {% endif %}
+{% endmacro %}
+
+<!-- Macro para obtener el color correspondiente al estado del nutriente -->
+
+{% macro get_status_color(status) %}
+  {% if status == "deficiente" %}
+    text-red-500
+  {% elif status == "excesivo" %}
+    text-yellow-500
+  {% elif status == "óptimo" %}
+    text-green-500
+  {% else %}
+    ""
+  {% endif %}
+{% endmacro %}
+
+<!-- Clase CSS para los botones de los tabs -->
+
+{% set button_class_report = "inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm dark:text-black" %}
+
+<!-- Macro para obtener el icono correspondiente al estado del nutriente -->
+
+{% macro get_status_icon(status) %}
+  {% if status == "deficiente" %}
+    <svg class="h-4 w-4 text-red-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M10.29 3.86a2.82 2.82 0 013.42 0l7.46 5.7a2.82 2.82 0 011 2.24v6.27a2.82 2.82 0 01-1 2.24l-7.46 5.7a2.82 2.82 0 01-3.42 0l-7.46-5.7a2.82 2.82 0 01-1-2.24v-6.27a2.82 2.82 0 011-2.24z"></path>
+    </svg>
+  {% elif status == "excesivo" %}
+    <svg class="h-4 w-4 text-yellow-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M10.29 3.86a2.82 2.82 0 013.42 0l7.46 5.7a2.82 2.82 0 011 2.24v6.27a2.82 2.82 0 01-1 2.24l-7.46 5.7a2.82 2.82 0 01-3.42 0l-7.46-5.7a2.82 2.82 0 01-1-2.24v-6.27a2.82 2.82 0 011-2.24z"></path>
+    </svg>
+  {% elif status == "óptimo" %}
+    <svg class="h-4 w-4 text-green-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path>
+    </svg>
+  {% else %}
+    ""
+  {% endif %}
+{% endmacro %}
+
+
+{% extends "base.j2" %}
+ {% block extra_css %}
+
+    {{ css_code|safe }}
+    {{ super() }}
+<style>
+    .tabs-trigger {
+        padding: 0.5rem 1rem;
+        border: 1px solid #e2e8f0;
+        border-radius: 0.25rem;
+        background-color: #f8fafc;
+        cursor: pointer;
+        transition: background-color 0.3s, border-color 0.3s;
+    }
+
+    .tabs-trigger.active {
+        border-bottom: 2px solid #68d391;
+        background-color: #f0fff4;
+    }
+
+    .tabs-content {
+        display: none;
+    }
+
+    .tabs-content:not(.hidden) {
+        display: block;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row">
+        <div class="col-md-12">
+{# Titulo #}
+    <div id="report-content" class="container mx-auto p-6">
+        <div class="flex justify-between items-center mb-6">
+            <div>
+                <h1 class="text-3xl font-bold">{{ title }}</h1>
+                <p class="text-gray-600">{{ description }}</p>
+                <p class="text-sm text-indigo-600">
+                    Finca: {{ analysisData.common.finca }} | Lote: {{ analysisData.common.lote }} | Fecha: {{ analysisData.common.fechaAnalisis }} | ID: {{ analysisData.common.id }}
+                </p>
+            </div>
+{# export boton #}
+            <div class="flex gap-2">
+                <button id="btnExportPDF" class="inline-flex items-center gap-2 rounded-md border border-transparent px-3 py-2 text-sm font-medium leading-4 text-white shadow-sm bg-blue-500 hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="12 2 2 7.86 12 12"></polyline><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                    Exportar
+                </button>
+
+            </div>
+        </div>
+        {# tabs #}
+        <div class="inline-flex h-10 items-center justify-center rounded-md bg-zinc-100 p-1 text-muted-foreground mb-4">
+            <button class="{{ button_class_report }} tabs-trigger active" data-target="#dashboard">Resumen</button>
+            <button class="{{ button_class_report }} tabs-trigger" data-target="#foliar">Análisis Foliar</button>
+            <button class="{{ button_class_report }} tabs-trigger" data-target="#soil">Análisis de Suelo</button>
+            <button class="{{ button_class_report }} tabs-trigger" data-target="#recommendations">Recomendaciones</button>
+            <button class="{{ button_class_report }} tabs-trigger" data-target="#history">Histórico</button>
+        </div>
+
+
+{# tab resumen #}
+    <div id="dashboard" class="tabs-content">
+        <div class="mb-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+{# contenido resumen #}
+
+<div class="border p-4 rounded-lg">
+  <!-- Título y descripción -->
+  <div class="pb-2">
+    <h2 class="text-lg font-bold">Estado General</h2>
+    <p class="text-muted-foreground">
+      Basado en análisis foliar y de suelo
+    </p>
+  </div>
+  <!-- Información de estado -->
+  <div>
+    <div class="flex items-center justify-between">
+      <!-- Estado de requerimiento de atención -->
+      
+      <div class="text-2xl font-bold">
+        {% if minimum_law_analyses and not minimum_law_analyses.error %}Requiere atención{% else %}Óptimo{% endif %}
+      </div>
+      <!-- Etiqueta de estado -->
+      <div>
+{% if minimum_law_analyses and not minimum_law_analyses.error %}
+  <span class="inline-block rounded-full px-2.5 py-0.5 text-sm font-semibold text-red-800 bg-red-100">Nutriente limitante detectado</span>
+{% else %}
+  <span class="inline-block rounded-full px-2.5 py-0.5 text-sm font-semibold text-green-800 bg-green-100">Equilibrado</span>
+{% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="border p-4 rounded-lg">
+  <!-- Título y descripción -->
+  <div class="pb-2">
+    <h2 class="text-lg font-bold">Ley del Mínimo de Liebig</h2>
+    <p class="text-muted-foreground">
+      El factor más limitante determina el crecimiento
+    </p>
+  </div>
+  <!-- Información de nutriente limitante -->
+  <div>
+   {% if minimum_law_analyses and not minimum_law_analyses.error %}
+  <div class="space-y-2">
+    <!-- Nombre del nutriente limitante -->
+    <div class="text-sm text-muted-foreground">Nutriente limitante:</div>
+    <div class="text-xl font-semibold">
+      {{ minimum_law_analyses.nutriente_limitante }}
+    </div>
+  </div>
+{% else %}
+  <!-- No se detectaron limitantes críticos -->
+  <div class="flex items-center justify-center h-20 text-green-500">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5 mr-2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="12 2 2 7.86 12 12"></polyline><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+    <span>No se detectaron limitantes críticos</span>
+  </div>
+{% endif %}
+  </div>
+</div>
+
+<div class="border p-4 rounded-lg">
+  <!-- Título y descripción -->
+  <div class="pb-2">
+    <h2 class="text-lg font-bold">Recomendaciones Principales</h2>
+    <p class="text-muted-foreground">
+      Acciones prioritarias
+    </p>
+  </div>
+  
+  <div>
+    <!-- Botón para ver recomendaciones -->
+    <button class="text-blue-500 hover:underline" onclick="document.querySelector('[data-target=\'#recommendations\']').click()">Ver recomendaciones</button>
+  </div>
+</div>
+
+            {# fin contenido resumen #}
+        </div> 
+    </div>
+
+{# fin tab resumen #}
+            
+
+{# tab foliar #}
+    <div id="foliar" class="tabs-content hidden">
+        <div class="mb-4 border p-4 rounded-lg">
+        {# contenido foliar #}
+            <div class="flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5 text-green-500"><path d="M16 17l5-5l-5-5M2 12h6"></path><path d="M18 17v-1a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v1"></path></svg>
+                <h2 class="text-lg font-bold">Análisis Foliar Detallado</h2>
+            </div>
+            <p class="text-muted-foreground">
+                Resultados del análisis foliar realizado el {{ analysisData.common.fechaAnalisis }}
+            </p>
+                
+            <!-- Gráficos de Análisis Foliar -->
+            <div class="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Macronutrientes -->
+                <div class="bg-white p-6 rounded-lg shadow-lg">
+                    <h2 class="text-xl font-bold text-green-800 text-center mb-6">Macronutrientes</h2>
+                    <div class="relative h-96 mb-6">
+                        <canvas id="macroChart"></canvas>
+                    </div>
+                </div>
+                
+                <!-- Micronutrientes -->
+                <div class="bg-white p-6 rounded-lg shadow-lg">
+                    <h2 class="text-xl font-bold text-green-800 text-center mb-6">Micronutrientes</h2>
+                    <div class="relative h-96 mb-6">
+                        <canvas id="microChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            
+<!-- Tabla de Datos Nutricionales -->
+            <div class="mt-8">
+                <h2 class="text-2xl font-bold text-green-800 mb-4">Valores Detallados</h2>
+                <div class="overflow-x-auto">
+                    <table class="w-full bg-white rounded-lg shadow-lg overflow-hidden">
+                        <thead class="bg-green-600 text-white">
+                            <tr>
+                                <th class="px-6 py-4 text-left font-bold">Nutriente</th>
+                                <th class="px-6 py-4 text-left font-bold">Símbolo</th>
+                                <th class="px-6 py-4 text-left font-bold">Valor Actual</th>
+                                <th class="px-6 py-4 text-left font-bold">Unidad</th>
+                                <th class="px-6 py-4 text-left font-bold">Valor Ideal</th>
+                                <th class="px-6 py-4 text-left font-bold">Tipo</th>
+                                <th class="px-6 py-4 text-left font-bold">% del Ideal</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-200">
+                            {% for nutrient, data in analysisData.foliar.items() %}
+                                {% if nutrient != 'id' and data is mapping %}
+                                <tr class="hover:bg-gray-50 transition-colors">
+                                    <td class="px-6 py-4">{{ nutrient|title }}</td>
+                                    <td class="px-6 py-4 font-bold">{{ nutrient_names.get(nutrient, nutrient|upper) }}</td>
+                                    <td class="px-6 py-4 font-bold text-green-800">{{ data.valor }}</td>
+                                    <td class="px-6 py-4">{{ data.unidad }}</td>
+                                    <td class="px-6 py-4 text-blue-600">{{ data.ideal }}</td>
+                                    <td class="px-6 py-4">
+                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                                            {% if data.tipo == 'Macronutrient' %}bg-green-100 text-green-800{% else %}bg-blue-100 text-blue-800{% endif %}">
+                                            {{ data.tipo }}
+                                        </span>
+                                    </td>
+                                    <td class="px-6 py-4">
+                                        {% set percentage = (data.valor / data.ideal * 100) | round(1) if data.ideal > 0 else 0 %}
+                                        <div class="flex items-center">
+                                            <span class="mr-2 text-sm font-medium">{{ percentage }}%</span>
+                                            <div class="w-20 bg-gray-200 rounded-full h-2">
+                                                <div class="h-2 rounded-full 
+                                                    {% if percentage >= 80 and percentage <= 120 %}bg-green-500
+                                                    {% elif percentage >= 60 and percentage <= 140 %}bg-yellow-500
+                                                    {% else %}bg-red-500{% endif %}" 
+                                                    style="width: {{ [percentage, 100] | min }}%"></div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endif %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        {# fin contenido foliar #}
+        </div>
+    </div>
+{# fin tab foliar #}
+
+{# tab suelos #}
+    <div id="soil" class="tabs-content hidden">
+        <div class="mb-4 border p-4 rounded-lg">
+        {# contenido soil #}
+            <div class="flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5 text-green-500"><path d="M16 17l5-5l-5-5M2 12h6"></path><path d="M18 17v-1a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v1"></path></svg>
+                <h2 class="text-lg font-bold">Interpretación del Análisis de Suelo</h2>
+            </div>
+            <p class="text-muted-foreground">
+            Evaluación de los resultados según estándares para el cultivo.
+            </p>
+            {% if analysisData.soil %}
+                <div class="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <!-- Gráfico de Análisis de Suelo -->
+                    <div class="bg-white p-6 rounded-lg shadow-lg">
+                        <h2 class="text-xl font-bold text-green-800 text-center mb-6">Análisis de Suelo</h2>
+                        <div class="relative h-96 mb-6">
+                            <canvas id="soilChart"></canvas>
+                        </div>
+                    </div>
+                    <!-- Tabla de Datos de Suelo -->
+                    <div class="bg-white p-6 rounded-lg shadow-lg">
+                        <h2 class="text-xl font-bold text-green-800 mb-4">Valores Detallados</h2>
+                        <div class="overflow-x-auto">
+                            <table class="w-full bg-white rounded-lg overflow-hidden">
+                                <thead class="bg-green-600 text-white">
+                                    <tr>
+                                        <th class="px-6 py-4 text-left font-bold">Parámetro</th>
+                                        <th class="px-6 py-4 text-left font-bold">Valor</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-200">
+                                    {% for key, value in analysisData.soil.items() %}
+                                        {% if key != 'id' %}
+                                        <tr class="hover:bg-gray-50 transition-colors">
+                                            <td class="px-6 py-4">{{ key|title }}</td>
+                                            <td class="px-6 py-4 font-bold text-green-800">{{ value }}</td>
+                                        </tr>
+                                        {% endif %}
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            {% else %}
+                <p class="mt-4">Sin datos de análisis.</p>
+            {% endif %}
+        {# fin contenido soil #}
+        </div>
+    </div>
+{# fin tab suelos #}
+
+{# tab recomendaciones #}
+    <div id="recommendations" class="tabs-content hidden">
+        <div class="mb-4 border p-4 rounded-lg">
+        {# contenido recomendaciones #}
+            <div class="flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5 text-green-500"><path d="M16 17l5-5l-5-5M2 12h6"></path><path d="M18 17v-1a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v1"></path></svg>
+                <h2 class="text-lg font-bold">Recomendaciones Basadas en la Ley de Liebig</h2>
+            </div>
+            <p class="text-muted-foreground">
+                Acciones prioritarias para optimizar el rendimiento del cultivo
+            </p>
+            {# presentacion recomendaciones #}
+            {% if minimum_law_analyses and not minimum_law_analyses.error %}
+                <div class="mt-4">
+                    <h3 class="text-lg font-semibold">Nutriente Limitante Detectado</h3>
+                    <p>El <strong>{{ minimum_law_analyses.nutriente_limitante }}</strong> está actuando como factor limitante según la Ley de Liebig.</p>
+                </div>
+
+                <div class="mt-4">
+                    <h3 class="text-lg font-semibold">Deficiencias</h3>
+                    <ul>
+                        {% for nutrient, values in minimum_law_analyses.resultados.items() %}
+                            {% if values['%P'] is number and values['%P'] < 100 %}
+                                <li>{{ nutrient }}: {{ values['%P'] }}% (Mínimo recomendado: 100%)</li>
+                            {% endif %}
+                        {% endfor %}
+                    </ul>
+                </div>
+            {% else %}
+                <p class="mt-4">No se detectaron deficiencias significativas o no se pudo realizar el análisis de Liebig.</p>
+            {% endif %}
+            {# fin presentacion recomendaciones #}
+        {# fin contenido recomendaciones #}
+        </div>
+        <div class="mb-4  border p-4 rounded-lg">
+                <div class="flex items-center">
+                    <h2 class="text-lg font-bold">Recomendaciones de aplicación de fertilizante</h2>
+                </div>
+                <div class="space-y-4">
+                <pre>{{automatic_recommendations|safe}}</pre>
+                <div class="">
+                Nota técnica:
+Esta recomendación ha sido generada utilizando una versión preliminar del algoritmo de optimización basado en la Ley del Mínimo de Liebig y programación lineal. Actualmente se encuentra en fase de prueba de concepto y puede arrojar resultados desproporcionados debido a múltiples factores como coeficientes, unidades o contribuciones de productos no ajustadas aún a condiciones reales.
+
+Se recomienda revisar y validar esta recomendación con un ingeniero agrónomo antes de cualquier aplicación. Próximas versiones del sistema incorporarán ajustes de validación, límites máximos por nutriente y calibración por cultivo, suelo y región.
+                </div>
+            </div>
+        </div>
+         <div class="mb-4  border p-4 rounded-lg">
+                <div class="flex items-center">
+                    <h2 class="text-lg font-bold">Explicación de la Ley de Liebig</h2>
+                </div>
+                <div class="space-y-4">
+                    <p>
+                        La Ley del Mínimo de Liebig, formulada por el químico alemán Justus von Liebig en 1840, establece que el crecimiento de una planta no está determinado por la cantidad total de recursos disponibles, sino por el recurso más escaso (factor limitante).
+                    </p>
+                    <p>
+                        Esta ley se ilustra comúnmente con un barril con duelas de diferentes alturas, donde cada duela representa un nutriente. El nivel de agua en el barril (que representa el crecimiento potencial) está limitado por la duela más corta, independientemente de cuán altas sean las demás.
+                    </p>
+                    <p>En términos prácticos, esto significa que:</p>
+                    <ul class="list-disc pl-6 space-y-2">
+                        <li>
+                            Aumentar la disponibilidad de nutrientes que ya están en niveles adecuados tendrá poco o ningún efecto en el rendimiento.
+                        </li>
+                        <li>
+                            El mayor impacto se logra identificando y corrigiendo el factor limitante (el nutriente más deficiente).
+                        </li>
+                        <li>
+                            Una vez corregido un factor limitante, otro nutriente puede convertirse en el nuevo factor limitante.
+                        </li>
+                    </ul>
+                    <p>
+                        Las recomendaciones proporcionadas se basan en este principio, priorizando la corrección de los factores más limitantes para maximizar el rendimiento del cultivo.
+                    </p>
+                </div>
+            </div>
+    </div>
+{# fin tab recomendaciones #}
+
+{# tab historico #}
+    <div id="history" class="tabs-content hidden">
+        <div class="mb-4 border p-4 rounded-lg">
+        {# contenido recomehistoricondaciones #}
+            <div class="flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5 text-green-500"><path d="M16 17l5-5l-5-5M2 12h6"></path><path d="M18 17v-1a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v1"></path></svg>
+                <h2 class="text-lg font-bold">Histórico de Análisis</h2>
+            </div>
+            <p class="text-muted-foreground">
+                Evolución de los principales parámetros a lo largo del tiempo
+            </p>
+
+    <!-- Gráfica de datos históricos -->
+    <canvas id="historicalChart"></canvas>
+
+    <!-- Análisis de tendencias -->
+    <h2>Tendencias Observadas</h2>
+        <div class="card-body">
+            {% for nutrient, trend in trends.items() %}
+                <h3>{{ nutrient }}</h3>
+                {% if trend.percentage_change is none %}
+                    <p>No hay suficiente información para calcular el cambio porcentual.</p>
+                {% else %}
+                    {% set change_description = 'incremento' if trend.percentage_change >= 0 else 'decremento' %}
+                    {% set months = (trend.final_value - trend.initial_value) / trend.monthly_change if trend.monthly_change != 0 else 'desconocido' %}
+                    {% set rounded_months = months | round(2) if months != 'desconocido' else months %}
+                    <p>{{ change_description.capitalize() }} gradual del {{ trend.initial_value }}% al {{ trend.final_value }}% en los últimos {{ rounded_months }} meses.</p>
+                {% endif %}
+            {% endfor %}
+        </div>
+        {# fin contenido historico #}
+        </div>
+    </div>
+
+<!---------------------- -->
+
+            
+        </div>
+    </div>
+{% endblock %}
+{% block extra_js %}
+    {{ super() }}
+    <script src="/js/chart.js"></script>
+    <script src="/js/html2canvas.min.js"></script>
+    <script src="/js/jspdf.umd.min.js"></script>
+    <script>
+        // Datos del análisis foliar
+        const foliarData = {{ analysisData.foliar | tojson }};
+        const nutrientNames = {{ nutrient_names | tojson }};
+        
+        // Función para generar colores dinámicamente
+        function generateColors(count) {
+            const baseColors = [
+                '#10B981', '#3B82F6', '#F59E0B', '#EF4444', '#8B5CF6',
+                '#06B6D4', '#F97316', '#84CC16', '#EC4899', '#6366F1'
+            ];
+            
+            if (count > baseColors.length) {
+                for (let i = baseColors.length; i < count; i++) {
+                    const hue = (i * 137.5) % 360;
+                    baseColors.push(`hsl(${hue}, 70%, 50%)`);
+                }
+            }
+            
+            return baseColors.slice(0, count);
+        }
+        
+        // Separar nutrientes por tipo
+        function separateNutrientsByType(data) {
+            const macro = {};
+            const micro = {};
+            
+            Object.keys(data).forEach(key => {
+                if (key !== 'id' && data[key] && typeof data[key] === 'object') {
+                    const nutrient = data[key];
+                    if (nutrient.tipo === 'Macronutrient') {
+                        macro[key] = nutrient;
+                    } else if (nutrient.tipo === 'Micronutrient') {
+                        micro[key] = nutrient;
+                    }
+                }
+            });
+            
+            return { macro, micro };
+        }
+        
+        // Crear gráfico horizontal de barras de progreso
+        function createProgressChart(canvasId, data, title) {
+            const nutrients = Object.keys(data);
+            if (nutrients.length === 0) return;
+            
+            const labels = nutrients.map(nutrient => nutrientNames[nutrient] || nutrient.charAt(0).toUpperCase() + nutrient.slice(1));
+            const percentages = nutrients.map(nutrient => {
+                const ideal = data[nutrient].ideal;
+                const actual = data[nutrient].valor;
+                return ideal > 0 ? (actual / ideal) * 100 : 0;
+            });
+            
+            const colors = generateColors(nutrients.length);
+            
+            const ctx = document.getElementById(canvasId).getContext('2d');
+            
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: '% del Ideal',
+                        data: percentages,
+                        backgroundColor: colors,
+                        borderColor: colors.map(color => {
+                            if (color.startsWith('hsl')) {
+                                return color.replace('50%)', '40%)');
+                            }
+                            return color;
+                        }),
+                        borderWidth: 1,
+                        borderRadius: 4,
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const nutrientKey = nutrients[context.dataIndex];
+                                    const nutrient = data[nutrientKey];
+                                    const percentage = context.parsed.x.toFixed(1);
+                                    return [
+                                        `${percentage}% del ideal`,
+                                        `Actual: ${nutrient.valor} ${nutrient.unidad}`,
+                                        `Ideal: ${nutrient.ideal} ${nutrient.unidad}`
+                                    ];
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            max: 150, // Máximo 150% para mostrar mejor las barras
+                            title: {
+                                display: true,
+                                text: 'Porcentaje del Valor Ideal (%)',
+                                font: {
+                                    size: 12,
+                                    weight: 'bold'
+                                },
+                                color: '#1F2937'
+                            },
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.1)'
+                            },
+                            ticks: {
+                                callback: function(value) {
+                                    return value + '%';
+                                }
+                            }
+                        },
+                        y: {
+                            grid: {
+                                display: false
+                            },
+                            ticks: {
+                                font: {
+                                    size: 11
+                                }
+                            }
+                        }
+                    },
+                    animation: {
+                        duration: 1000,
+                        easing: 'easeInOutQuart'
+                    }
+                }
+            });
+        }
+        
+        // Separar los datos
+        const { macro, micro } = separateNutrientsByType(foliarData);
+        
+        // Crear los gráficos
+        if (Object.keys(macro).length > 0) {
+            createProgressChart('macroChart', macro, 'Macronutrientes');
+        } else {
+            const macroContainer = document.getElementById('macroChart').parentElement;
+            macroContainer.innerHTML = '<div class="flex items-center justify-center h-96"><p class="text-gray-500 text-lg">No hay macronutrientes disponibles</p></div>';
+        }
+        
+        if (Object.keys(micro).length > 0) {
+            createProgressChart('microChart', micro, 'Micronutrientes');
+        } else {
+            const microContainer = document.getElementById('microChart').parentElement;
+            microContainer.innerHTML = '<div class="flex items-center justify-center h-96"><p class="text-gray-500 text-lg">No hay micronutrientes disponibles</p></div>';
+        }
+
+        // Datos del análisis de suelo
+        const soilData = {{ analysisData.soil | tojson }};
+
+        // Crear gráfico de suelo
+        const soilChartCanvas = document.getElementById('soilChart');
+        if (soilChartCanvas) {
+            if (soilData && Object.keys(soilData).length > 1) {
+                createSoilChart('soilChart', soilData, 'Análisis de Suelo');
+            } else {
+                const soilContainer = soilChartCanvas.parentElement;
+                soilContainer.innerHTML = '<div class="flex items-center justify-center h-96"><p class="text-gray-500 text-lg">No hay datos de suelo disponibles para graficar</p></div>';
+            }
+        }
+
+        function createSoilChart(canvasId, data, title) {
+            const labels = Object.keys(data).filter(key => key !== 'id');
+            const values = labels.map(key => data[key]);
+            const colors = generateColors(labels.length);
+
+            const ctx = document.getElementById(canvasId).getContext('2d');
+
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels.map(l => l.charAt(0).toUpperCase() + l.slice(1)),
+                    datasets: [{
+                        label: 'Valor',
+                        data: values,
+                        backgroundColor: colors,
+                        borderColor: colors.map(color => {
+                            if (color.startsWith('hsl')) {
+                                return color.replace('50%)', '40%)');
+                            }
+                            return color;
+                        }),
+                        borderWidth: 1,
+                        borderRadius: 4,
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                    },
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Valor',
+                                font: {
+                                    size: 12,
+                                    weight: 'bold'
+                                },
+                                color: '#1F2937'
+                            },
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.1)'
+                            },
+                        },
+                        y: {
+                            grid: {
+                                display: false
+                            },
+                            ticks: {
+                                font: {
+                                    size: 11
+                                }
+                            }
+                        }
+                    },
+                    animation: {
+                        duration: 1000,
+                        easing: 'easeInOutQuart'
+                    }
+                }
+            });
+        }
+    
+
+{# manejo de tabs #}
+    const tabs = document.querySelectorAll('.tabs-trigger');
+    tabs.forEach(tab => {
+        tab.addEventListener('click', function() {
+            tabs.forEach(t => t.classList.remove('active'));
+            this.classList.add('active');
+            const targetContent = document.querySelector(this.getAttribute('data-target'));
+            document.querySelectorAll('.tabs-content').forEach(content => content.classList.add('hidden'));
+            targetContent.classList.remove('hidden');
+        });
+    });
+
+{# botón pdf #}
+    const exportBtn = document.getElementById('btnExportPDF');
+    if (exportBtn) {
+        exportBtn.addEventListener('click', () => {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF('p', 'pt', 'a4');
+            const element = document.getElementById('report-content');
+            html2canvas(element).then(canvas => {
+                const imgData = canvas.toDataURL('image/png');
+                const imgProps = doc.getImageProperties(imgData);
+                const pdfWidth = doc.internal.pageSize.getWidth();
+                const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+                doc.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+                doc.save('reporte.pdf');
+            });
+        });
+    }
+    </script>
+    <script>
+    // Obtén los datos históricos de la plantilla
+    var historicalData = {{ historical_data|tojson|safe }};
+
+    // Prepara los datos para la gráfica
+    var labels = [];
+    var datasets = {};
+
+    historicalData.forEach(function(entry) {
+        labels.push(entry.fecha);
+        for (var nutrient in entry) {
+            if (nutrient !== 'fecha') {
+                if (!datasets[nutrient]) {
+                    datasets[nutrient] = {
+                        label: nutrient,
+                        data: [],
+                        fill: false,
+                        borderColor: '#' + Math.floor(Math.random()*16777215).toString(16),
+                        tension: 0.1
+                    };
+                }
+                datasets[nutrient].data.push(entry[nutrient]);
+            }
+        }
+    });
+
+    // Crea la gráfica
+    var ctx = document.getElementById('historicalChart').getContext('2d');
+    var myLineChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: Object.values(datasets)
+        },
+        options: {
+            responsive: true,
+            scales: {
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Fecha'
+                    }
+                },
+                y: {
+                    title: {
+                        display: true,
+                        text: 'Valor'
+                    }
+                }
+            }
+        }
+    });
+</script>
+{% endblock %}

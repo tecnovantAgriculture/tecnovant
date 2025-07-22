@@ -1,0 +1,67 @@
+{# error.j2 #}
+<!DOCTYPE html>
+<html lang="es" class="h-full">
+<head>
+    {% include 'partials/head.j2' %}
+    {% from "settings/_ui_class.j2" import body_classes, main_clases, text_color, bg_color, hover_bg, menu_bg_color, shadow, rounded, padding, container, close_menu_button, menu_link_style %}
+</head>
+<body class="{{ body_classes }}">
+
+    {% set c_page = "flex flex-grow overflow-hidden" if dashboard else "container mx-auto px-0 py-0" %}
+    {% set is_full_width = dashboard %}
+    {% set has_login_button = not dashboard and request.endpoint != 'core.login' %}
+
+    {% if basic_form_view %}
+    {% set main_clases = "w-full" %}
+    {% set is_full_width = true %}
+    {% set c_page, bg_color, rounded, shadow, padding = "", "", "", "", "" %}
+    {% endif %}
+    
+    <div class="{{ c_page }}">
+
+        {% if dashboard %}
+        {% include 'partials/sidebar_toggle.j2' %}
+        {% include 'partials/sidebar.j2' %}
+        {% endif %}
+
+        <main class="{{ main_clases }} {% if is_full_width %} w-full {% endif %}" role="main">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+            <ul class="space-y-2">
+                {% for category, message in messages %}
+                <li class="p-4 rounded-md {% if category == 'success' %}bg-green-100 border border-green-400 text-green-700{% elif category == 'error' %}bg-red-100 border border-red-400 text-red-700{% else %}bg-blue-100 border border-blue-400 text-blue-700{% endif %}"
+                    role="alert">
+                    {{ message }}
+                </li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+            {% endwith %}
+            <div class="{{ bg_color }} {{ rounded }} {{ shadow }} {{ padding }}">
+                {% block content %}
+                {% if heading %}
+                <h1 class="text-4xl font-bold mb-4 dark:text-white">{{ heading }}</h1>
+                {% endif %}
+                <div class="text-lg text-gray-700 dark:text-white">
+                    {{ content | safe }}
+                </div>
+                {% if additional_content %}
+                <div class="mt-4 text-lg text-gray-700 dark:text-white">
+                    {{ additional_content | safe }}
+                </div>
+                {% endif %}
+                {% endblock %}
+            </div>
+
+
+
+        </main>
+    </div>
+
+    {% block footer %}
+    {% include 'partials/footer.j2' %}
+    {% endblock %}
+    {% block extra_js %}{% endblock %}
+</body>
+
+</html>

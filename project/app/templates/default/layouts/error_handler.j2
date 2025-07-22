@@ -1,0 +1,39 @@
+{# layouts/error_handler.j2 #}
+{# used to present errors (example 404) #}
+{% extends "error.j2" %}
+{% block title %}ERROR{% endblock %}
+{% block content %}
+<div class="flex justify-center">
+    <div class="w-full md:w-full">
+        <div class="py-10 text-center">
+            <h1 class="text-9xl font-bold pb-14">Oops!</h1>
+            <h2 class="text-6xl font-bold pb-8">Error {{ e }}</h2>
+            <h3 class="mb-4 text-xl">{{ e_description }}</h3>
+            <div class="mb-4 text-gray-600">
+                {{ e_details }}
+            </div>
+            <div class="space-x-4">
+                <a href="/"
+                    class="inline-flex items-center px-6 py-3 text-white bg-blue-600 hover:bg-blue-700 rounded-lg text-lg transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20"
+                        fill="currentColor">
+                        <path
+                            d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" />
+                    </svg>
+                    Volver al inicio
+                </a>
+                <a href="https://tecnovant.net/es/contacto/"
+                    class="inline-flex items-center px-6 py-3 text-white bg-gray-600 hover:bg-gray-700 rounded-lg text-lg transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20"
+                        fill="currentColor">
+                        <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />
+                        <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" />
+                    </svg>
+                    Contactar soporte
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

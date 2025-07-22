@@ -1,0 +1,37 @@
+<!-- macros/_forms.j2 -->
+{# example of use in contact_form.j2 #}
+{% macro render_form(form_fields, form_id, form_title, submit_button_text, extra_links=None) %}
+{% from "macros/_button.j2" import button %}
+<div class="px-4 py-6 sm:px-0">
+    <h2 class="text-2xl font-bold mb-4">{{ form_title }}</h2>
+    <form id="{{ form_id }}" class="space-y-4">
+
+        {% for field in form_fields %}
+        <div>
+            <label for="{{ field.id }}" class="block text-gray-700 text-sm font-bold mb-2">{{ field.label }}</label>
+            {% if field.type == 'textarea' %}
+            <textarea id="{{ field.id }}" name="{{ field.id }}" rows="4"
+                class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"></textarea>
+            {% else %}
+            <input type="{{ field.type }}" id="{{ field.id }}" name="{{ field.id }}"
+                class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline">
+            {% endif %}
+        </div>
+        {% endfor %}
+        <div>
+            <button type="submit"
+                class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                {{ submit_button_text }}
+            </button>
+        </div>
+    </form>
+</div>
+{% if extra_links %}
+<div class="mt-4">
+    {% for link in extra_links %}
+    <a href="{{ link.url }}" class="text-blue-500 hover:underline">{{ link.text }}</a>{% if not loop.last %} | {% endif
+    %}
+    {% endfor %}
+</div>
+{% endif %}
+{% endmacro %}
