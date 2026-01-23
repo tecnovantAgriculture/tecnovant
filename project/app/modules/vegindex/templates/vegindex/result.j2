@@ -1,0 +1,13 @@
+<div style="max-width:700px;margin:2rem auto">
+  <h2>Results</h2>
+  <p><b>Source:</b> {{ source }}</p>
+  {% if bbox %}<p><b>BBox:</b> {{ bbox }}</p>{% endif %}
+  <ul>
+    <li><b>Mean protein:</b> {{ "%.2f"|format(result.mean_protein) if result.mean_protein is not none else "N/A" }} %</li>
+    <li><b>VARI min:</b> {{ result.vari_stats.min if result.vari_stats else "N/A" }}</li>
+    <li><b>VARI max:</b> {{ result.vari_stats.max if result.vari_stats else "N/A" }}</li>
+    <li><b>VARI mean:</b> {{ result.vari_stats.mean if result.vari_stats else "N/A" }}</li>
+    <li><b>Pixels:</b> {{ result.count }}</li>
+  </ul>
+  <a href="{{ url_for('vegindex.hello') }}">← back</a>
+</div>

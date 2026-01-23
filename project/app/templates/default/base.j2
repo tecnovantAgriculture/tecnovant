@@ -4,6 +4,12 @@
 <head>
     {% include 'partials/head.j2' %}
     {% from "settings/_ui_class.j2" import body_classes, main_clases, text_color, bg_color, hover_bg, menu_bg_color, shadow, rounded, padding, container, close_menu_button, menu_link_style %}
+    {% block extra_css %}
+    {{ css_code|safe }}
+    {% endblock %}
+    {% block extra_head %}
+    {{ js_code|safe }}
+    {% endblock %}
 </head>
 <body class="{{ body_classes }} home">
     {% block header %}

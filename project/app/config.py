@@ -13,6 +13,7 @@ License:
 """
 # Python standard library imports
 import os
+import re
 from datetime import timedelta
 from pathlib import Path
 from typing import Literal
@@ -22,6 +23,36 @@ from dotenv import load_dotenv
 
 dotenv_path = Path(__file__).resolve().parents[1] / ".env"
 load_dotenv(dotenv_path)
+
+
+def _parse_size_bytes(value, default: int) -> int:
+    """Convert strings like ``"512M"`` or ``"2G"`` into integer bytes."""
+
+    if value is None:
+        return default
+    if isinstance(value, (int, float)):
+        return max(int(value), 0)
+
+    text = str(value).strip().lower()
+    if not text:
+        return default
+
+    match = re.fullmatch(r"(\d+(?:\.\d+)?)([kmgt]i?b?|[kmgt]|b)?", text)
+    if not match:
+        return default
+
+    number = float(match.group(1))
+    suffix = match.group(2) or ""
+    suffix = suffix.replace("ib", "").replace("b", "")
+    units = {
+        "": 1,
+        "k": 1024,
+        "m": 1024**2,
+        "g": 1024**3,
+        "t": 1024**4,
+    }
+    multiplier = units.get(suffix, 1)
+    return max(int(number * multiplier), 0)
 
 
 def validate_mail_config():
@@ -71,7 +102,7 @@ class Config:
     """
 
     CORE = True
-    MODULES = ["foliage", "foliage_report"]
+    MODULES = ["foliage", "foliage_report", "agrovista", "media"]
     THEME = "default"
     TITLE = os.getenv("TITLE")
     SECRET_KEY = os.getenv("SECRET_KEY")
@@ -120,6 +151,30 @@ class Config:
     # JSON configuration  UTF-8
     JSON_AS_ASCII = False
     JSONIFY_PRETTYPRINT_REGULAR = False
+
+    # Media storage
+    MEDIA_STORAGE_DIR = os.getenv("MEDIA_STORAGE_DIR")
+    MEDIA_MAX_UPLOAD_SIZE = os.getenv("MEDIA_MAX_UPLOAD_SIZE", "2G")
+    MEDIA_MAX_UPLOAD_BYTES = _parse_size_bytes(MEDIA_MAX_UPLOAD_SIZE, 2 * 1024 * 1024 * 1024)
+    MEDIA_UPLOAD_TMP_DIR = os.getenv("MEDIA_UPLOAD_TMP_DIR")
+    MEDIA_UPLOAD_CHUNK_SIZE = _parse_size_bytes(
+        os.getenv("MEDIA_UPLOAD_CHUNK_SIZE", str(16 * 1024 * 1024)),
+        16 * 1024 * 1024,
+    )
+    MAX_CONTENT_LENGTH = MEDIA_MAX_UPLOAD_BYTES
+    MEDIA_THUMBNAIL_SPECS = {
+        "gallery": {
+            "max_width": 512,
+            "max_height": 512,
+            "quality": 82,
+            "method": 3,
+        }
+    }
+    MEDIA_PREPROCESS_CACHE_DIR = os.getenv("MEDIA_PREPROCESS_CACHE_DIR")
+    MEDIA_PREPROCESS_MAX_WORKERS = int(os.getenv("MEDIA_PREPROCESS_MAX_WORKERS", "2"))
+    MEDIA_PREVIEW_MAX_DIM = int(os.getenv("MEDIA_PREVIEW_MAX_DIM", "2048"))
+    MEDIA_DISPLAY_MAX_DIM = int(os.getenv("MEDIA_DISPLAY_MAX_DIM", "4096"))
+    MEDIA_DISPLAY_MODE = os.getenv("MEDIA_DISPLAY_MODE", "auto")
 
     # overwrite for testing development purposes
     JWT_COOKIE_SECURE = True  # development purposes

@@ -90,6 +90,10 @@ error.txt
 logs.txt
 log.txt
 app_errors.log
+errors.log
+errors.log.*
+errors.log*
+
 
 ### Sistemas operativos ###
 # Windows
@@ -129,3 +133,9 @@ celerybeat.pid
 
 # Descargas
 downloads/
+project/ai_docs
+project/app/modules/agrovista/data/*
+!project/app/modules/agrovista/data/.gitkeep
+project/storage/
+agents.md
+CLAUDE.md

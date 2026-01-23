@@ -320,28 +320,31 @@
 </span><span id="L-235"><a href="#L-235"><span class="linenos">235</span></a>    <span class="k">if</span> <span class="ow">not</span> <span class="n">check_resource_access</span><span class="p">(</span><span class="n">lot</span><span class="o">.</span><span class="n">farm</span><span class="p">,</span> <span class="n">claims</span><span class="p">):</span>
 </span><span id="L-236"><a href="#L-236"><span class="linenos">236</span></a>        <span class="k">return</span> <span class="n">jsonify</span><span class="p">({</span><span class="s2">&quot;error&quot;</span><span class="p">:</span> <span class="s2">&quot;No tienes acceso a este lote&quot;</span><span class="p">}),</span> <span class="mi">403</span>
 </span><span id="L-237"><a href="#L-237"><span class="linenos">237</span></a>
-</span><span id="L-238"><a href="#L-238"><span class="linenos">238</span></a>    <span class="n">nutrients</span> <span class="o">=</span> <span class="n">Nutrient</span><span class="o">.</span><span class="n">query</span><span class="o">.</span><span class="n">order_by</span><span class="p">(</span><span class="n">Nutrient</span><span class="o">.</span><span class="n">id</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
-</span><span id="L-239"><a href="#L-239"><span class="linenos">239</span></a>    <span class="n">data</span> <span class="o">=</span> <span class="p">{</span><span class="n">n</span><span class="o">.</span><span class="n">name</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">n</span><span class="o">.</span><span class="n">cv</span><span class="p">)</span> <span class="k">if</span> <span class="n">n</span><span class="o">.</span><span class="n">cv</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">nutrients</span><span class="p">}</span>
-</span><span id="L-240"><a href="#L-240"><span class="linenos">240</span></a>
-</span><span id="L-241"><a href="#L-241"><span class="linenos">241</span></a>    <span class="k">return</span> <span class="n">jsonify</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
-</span><span id="L-242"><a href="#L-242"><span class="linenos">242</span></a>
+</span><span id="L-238"><a href="#L-238"><span class="linenos">238</span></a>    <span class="n">coeficientes</span> <span class="o">=</span> <span class="n">determinar_coeficientes_variacion</span><span class="p">(</span><span class="n">lot_id</span><span class="p">)</span>
+</span><span id="L-239"><a href="#L-239"><span class="linenos">239</span></a>    <span class="n">data</span> <span class="o">=</span> <span class="p">{</span>
+</span><span id="L-240"><a href="#L-240"><span class="linenos">240</span></a>        <span class="n">name</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
+</span><span id="L-241"><a href="#L-241"><span class="linenos">241</span></a>        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">coeficientes</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+</span><span id="L-242"><a href="#L-242"><span class="linenos">242</span></a>    <span class="p">}</span>
 </span><span id="L-243"><a href="#L-243"><span class="linenos">243</span></a>
-</span><span id="L-244"><a href="#L-244"><span class="linenos">244</span></a><span class="c1"># @api.route(&quot;/cv-nutrients&quot;)</span>
-</span><span id="L-245"><a href="#L-245"><span class="linenos">245</span></a><span class="c1"># @login_required</span>
-</span><span id="L-246"><a href="#L-246"><span class="linenos">246</span></a><span class="c1"># def get_cv_nutrients():</span>
-</span><span id="L-247"><a href="#L-247"><span class="linenos">247</span></a><span class="c1">#     &quot;&quot;&quot;Return coefficient of variation for nutrients on a lot.&quot;&quot;&quot;</span>
-</span><span id="L-248"><a href="#L-248"><span class="linenos">248</span></a><span class="c1">#     lot_id = request.args.get(&quot;lot_id&quot;, type=int)</span>
-</span><span id="L-249"><a href="#L-249"><span class="linenos">249</span></a><span class="c1">#     if not lot_id:</span>
-</span><span id="L-250"><a href="#L-250"><span class="linenos">250</span></a><span class="c1">#         return jsonify({&quot;error&quot;: &quot;lot_id es requerido&quot;}), 400</span>
-</span><span id="L-251"><a href="#L-251"><span class="linenos">251</span></a>
-</span><span id="L-252"><a href="#L-252"><span class="linenos">252</span></a><span class="c1">#     lot = Lot.query.get_or_404(lot_id)</span>
-</span><span id="L-253"><a href="#L-253"><span class="linenos">253</span></a><span class="c1">#     claims = get_jwt()</span>
-</span><span id="L-254"><a href="#L-254"><span class="linenos">254</span></a><span class="c1">#     if not check_resource_access(lot.farm, claims):</span>
-</span><span id="L-255"><a href="#L-255"><span class="linenos">255</span></a><span class="c1">#         return jsonify({&quot;error&quot;: &quot;No tienes acceso a este lote&quot;}), 403</span>
-</span><span id="L-256"><a href="#L-256"><span class="linenos">256</span></a>
-</span><span id="L-257"><a href="#L-257"><span class="linenos">257</span></a><span class="c1">#     coeficientes = determinar_coeficientes_variacion(lot_id)</span>
-</span><span id="L-258"><a href="#L-258"><span class="linenos">258</span></a><span class="c1">#     data = {name: float(value) for name, value in coeficientes.items()}</span>
-</span><span id="L-259"><a href="#L-259"><span class="linenos">259</span></a><span class="c1">#     return jsonify(data)</span>
+</span><span id="L-244"><a href="#L-244"><span class="linenos">244</span></a>    <span class="k">return</span> <span class="n">jsonify</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+</span><span id="L-245"><a href="#L-245"><span class="linenos">245</span></a>
+</span><span id="L-246"><a href="#L-246"><span class="linenos">246</span></a>
+</span><span id="L-247"><a href="#L-247"><span class="linenos">247</span></a><span class="c1"># @api.route(&quot;/cv-nutrients&quot;)</span>
+</span><span id="L-248"><a href="#L-248"><span class="linenos">248</span></a><span class="c1"># @login_required</span>
+</span><span id="L-249"><a href="#L-249"><span class="linenos">249</span></a><span class="c1"># def get_cv_nutrients():</span>
+</span><span id="L-250"><a href="#L-250"><span class="linenos">250</span></a><span class="c1">#     &quot;&quot;&quot;Return coefficient of variation for nutrients on a lot.&quot;&quot;&quot;</span>
+</span><span id="L-251"><a href="#L-251"><span class="linenos">251</span></a><span class="c1">#     lot_id = request.args.get(&quot;lot_id&quot;, type=int)</span>
+</span><span id="L-252"><a href="#L-252"><span class="linenos">252</span></a><span class="c1">#     if not lot_id:</span>
+</span><span id="L-253"><a href="#L-253"><span class="linenos">253</span></a><span class="c1">#         return jsonify({&quot;error&quot;: &quot;lot_id es requerido&quot;}), 400</span>
+</span><span id="L-254"><a href="#L-254"><span class="linenos">254</span></a>
+</span><span id="L-255"><a href="#L-255"><span class="linenos">255</span></a><span class="c1">#     lot = Lot.query.get_or_404(lot_id)</span>
+</span><span id="L-256"><a href="#L-256"><span class="linenos">256</span></a><span class="c1">#     claims = get_jwt()</span>
+</span><span id="L-257"><a href="#L-257"><span class="linenos">257</span></a><span class="c1">#     if not check_resource_access(lot.farm, claims):</span>
+</span><span id="L-258"><a href="#L-258"><span class="linenos">258</span></a><span class="c1">#         return jsonify({&quot;error&quot;: &quot;No tienes acceso a este lote&quot;}), 403</span>
+</span><span id="L-259"><a href="#L-259"><span class="linenos">259</span></a>
+</span><span id="L-260"><a href="#L-260"><span class="linenos">260</span></a><span class="c1">#     coeficientes = determinar_coeficientes_variacion(lot_id)</span>
+</span><span id="L-261"><a href="#L-261"><span class="linenos">261</span></a><span class="c1">#     data = {name: float(value) for name, value in coeficientes.items()}</span>
+</span><span id="L-262"><a href="#L-262"><span class="linenos">262</span></a><span class="c1">#     return jsonify(data)</span>
 </span></pre></div>
 
 
@@ -730,10 +733,13 @@
 </span><span id="get_cv_nutrients-236"><a href="#get_cv_nutrients-236"><span class="linenos">236</span></a>    <span class="k">if</span> <span class="ow">not</span> <span class="n">check_resource_access</span><span class="p">(</span><span class="n">lot</span><span class="o">.</span><span class="n">farm</span><span class="p">,</span> <span class="n">claims</span><span class="p">):</span>
 </span><span id="get_cv_nutrients-237"><a href="#get_cv_nutrients-237"><span class="linenos">237</span></a>        <span class="k">return</span> <span class="n">jsonify</span><span class="p">({</span><span class="s2">&quot;error&quot;</span><span class="p">:</span> <span class="s2">&quot;No tienes acceso a este lote&quot;</span><span class="p">}),</span> <span class="mi">403</span>
 </span><span id="get_cv_nutrients-238"><a href="#get_cv_nutrients-238"><span class="linenos">238</span></a>
-</span><span id="get_cv_nutrients-239"><a href="#get_cv_nutrients-239"><span class="linenos">239</span></a>    <span class="n">nutrients</span> <span class="o">=</span> <span class="n">Nutrient</span><span class="o">.</span><span class="n">query</span><span class="o">.</span><span class="n">order_by</span><span class="p">(</span><span class="n">Nutrient</span><span class="o">.</span><span class="n">id</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
-</span><span id="get_cv_nutrients-240"><a href="#get_cv_nutrients-240"><span class="linenos">240</span></a>    <span class="n">data</span> <span class="o">=</span> <span class="p">{</span><span class="n">n</span><span class="o">.</span><span class="n">name</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">n</span><span class="o">.</span><span class="n">cv</span><span class="p">)</span> <span class="k">if</span> <span class="n">n</span><span class="o">.</span><span class="n">cv</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">nutrients</span><span class="p">}</span>
-</span><span id="get_cv_nutrients-241"><a href="#get_cv_nutrients-241"><span class="linenos">241</span></a>
-</span><span id="get_cv_nutrients-242"><a href="#get_cv_nutrients-242"><span class="linenos">242</span></a>    <span class="k">return</span> <span class="n">jsonify</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+</span><span id="get_cv_nutrients-239"><a href="#get_cv_nutrients-239"><span class="linenos">239</span></a>    <span class="n">coeficientes</span> <span class="o">=</span> <span class="n">determinar_coeficientes_variacion</span><span class="p">(</span><span class="n">lot_id</span><span class="p">)</span>
+</span><span id="get_cv_nutrients-240"><a href="#get_cv_nutrients-240"><span class="linenos">240</span></a>    <span class="n">data</span> <span class="o">=</span> <span class="p">{</span>
+</span><span id="get_cv_nutrients-241"><a href="#get_cv_nutrients-241"><span class="linenos">241</span></a>        <span class="n">name</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
+</span><span id="get_cv_nutrients-242"><a href="#get_cv_nutrients-242"><span class="linenos">242</span></a>        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">coeficientes</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+</span><span id="get_cv_nutrients-243"><a href="#get_cv_nutrients-243"><span class="linenos">243</span></a>    <span class="p">}</span>
+</span><span id="get_cv_nutrients-244"><a href="#get_cv_nutrients-244"><span class="linenos">244</span></a>
+</span><span id="get_cv_nutrients-245"><a href="#get_cv_nutrients-245"><span class="linenos">245</span></a>    <span class="k">return</span> <span class="n">jsonify</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
 </span></pre></div>
 
 

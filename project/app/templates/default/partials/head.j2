@@ -27,11 +27,4 @@
     <link rel="stylesheet" type="text/css" href="/css/extra.css">
 
     
-    {% block extra_css %}
-    {{ css_code|safe }}
-    {% endblock %}
-    {% block extra_head %}
-    {{ js_code|safe }}
-    {% endblock %}
-    
     <title>{% block title %}{{ title }} - {{ site_title }}{% endblock %}</title>

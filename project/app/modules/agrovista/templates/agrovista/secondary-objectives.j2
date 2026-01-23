@@ -1,0 +1,498 @@
+{% extends "base.j2" %}
+{% set dashboard = True %}
+{% from "settings/_ui_class.j2" import base_button_classes, button_bg_color, delete_button_bg_color, focus_ring_color, border_color %}
+
+{% block content %}
+<div class="bg-white dark:bg-gray-900 rounded-lg shadow p-6">
+  <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
+    <div>
+      <h1 class="text-xl font-semibold text-gray-900 dark:text-gray-100">Objetivos secundarios</h1>
+      <p class="text-sm text-gray-500 dark:text-gray-400">Gestiona los objetivos derivados de analisis NDVI.</p>
+    </div>
+    <div class="flex gap-2">
+      <button id="btn-new-objective" type="button" class="{{ base_button_classes }} {{ button_bg_color }} text-white {{ focus_ring_color }}">Crear manual</button>
+      <button id="btn-refresh-objectives" type="button" class="{{ base_button_classes }} border {{ border_color }} bg-white dark:bg-gray-900">Actualizar</button>
+    </div>
+  </div>
+
+  <div class="overflow-x-auto">
+    <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 text-sm" aria-describedby="secondary-objectives-caption">
+      <caption id="secondary-objectives-caption" class="sr-only">Lista de objetivos secundarios</caption>
+      <thead class="bg-gray-50 dark:bg-gray-800 text-xs uppercase tracking-wide text-gray-600 dark:text-gray-300">
+        <tr>
+          <th scope="col" class="px-4 py-2 text-left">Cultivo</th>
+          <th scope="col" class="px-4 py-2 text-left">Proteina</th>
+          <th scope="col" class="px-4 py-2 text-left">Nitrogeno</th>
+          <th scope="col" class="px-4 py-2 text-left">Nutrientes</th>
+          <th scope="col" class="px-4 py-2 text-left">Actualizado</th>
+          <th scope="col" class="px-4 py-2 text-right">Acciones</th>
+        </tr>
+      </thead>
+      <tbody id="secondary-objectives-body" class="divide-y divide-gray-100 dark:divide-gray-800">
+        <tr>
+          <td colspan="6" class="px-4 py-6 text-center text-gray-500 dark:text-gray-400">Sin registros disponibles.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div id="objective-editor" class="hidden fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
+  <div class="relative w-full max-w-4xl bg-white dark:bg-gray-900 rounded-lg shadow-xl border {{ border_color }} p-6">
+    <div class="flex items-start justify-between mb-4">
+      <div>
+        <h2 id="editor-title" class="text-lg font-semibold text-gray-900 dark:text-gray-100">Editar objetivo</h2>
+        <p id="editor-subtitle" class="text-sm text-gray-500 dark:text-gray-400">Ajusta los valores y guarda los cambios.</p>
+      </div>
+      <button type="button" id="btn-close-editor" class="{{ base_button_classes }}">Cerrar</button>
+    </div>
+
+    <form id="objective-form" class="space-y-4" novalidate>
+      <input type="hidden" id="objective-id">
+
+      <div class="grid gap-4 sm:grid-cols-2">
+        <label class="flex flex-col text-sm gap-1">
+          <span class="text-gray-700 dark:text-gray-200">Cultivo registrado</span>
+          <select id="edit-analysis-crop-select" class="px-3 py-2 border {{ border_color }} rounded-md bg-white dark:bg-gray-800">
+            <option value="">-- Selecciona --</option>
+          </select>
+        </label>
+        <label class="flex flex-col text-sm gap-1">
+          <span class="text-gray-700 dark:text-gray-200">Nuevo cultivo (opcional)</span>
+          <input type="text" id="edit-analysis-crop-name" class="px-3 py-2 border {{ border_color }} rounded-md bg-white dark:bg-gray-800" placeholder="Ej: Kikuyo" autocomplete="off">
+        </label>
+      </div>
+
+      <div class="grid gap-4 sm:grid-cols-2">
+        <label class="flex flex-col text-sm gap-1">
+          <span class="text-gray-700 dark:text-gray-200">Proteina promedio (%)</span>
+          <input type="number" step="0.01" id="edit-protein" class="px-3 py-2 border {{ border_color }} rounded-md bg-white dark:bg-gray-800" placeholder="Ej: 12.5">
+        </label>
+        <label class="flex flex-col text-sm gap-1">
+          <span class="text-gray-700 dark:text-gray-200">Nitrogeno estimado (%)</span>
+          <input type="number" step="0.01" id="edit-nitrogen" class="px-3 py-2 border {{ border_color }} rounded-md bg-white dark:bg-gray-800" placeholder="Ej: 2.3">
+        </label>
+      </div>
+
+      <section>
+        <h3 class="text-sm font-semibold text-gray-800 dark:text-gray-100 mb-2">Objetivos por nutriente</h3>
+        <div id="nutrient-fields" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"></div>
+      </section>
+
+      <div class="flex justify-between items-center pt-4 border-t {{ border_color }}">
+        <button type="button" id="btn-delete-objective" class="{{ base_button_classes }} {{ delete_button_bg_color }} text-white">Eliminar</button>
+        <div class="flex gap-2">
+          <button type="submit" class="{{ base_button_classes }} {{ button_bg_color }} text-white {{ focus_ring_color }}">Guardar cambios</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{{ super() }}
+<script>
+(function(){
+  "use strict";
+
+  const ENDPOINTS = {
+    objectives: "/api/agrovista/secondary-objectives",
+    crops: "/api/agrovista/analysis-crops",
+    nutrients: "/api/agrovista/nutrients",
+  };
+
+  const state = {
+    objectives: [],
+    crops: [],
+    nutrients: [],
+  };
+
+  const el = {
+    tableBody: document.getElementById("secondary-objectives-body"),
+    refresh: document.getElementById("btn-refresh-objectives"),
+    create: document.getElementById("btn-new-objective"),
+    editor: document.getElementById("objective-editor"),
+    closeEditor: document.getElementById("btn-close-editor"),
+    form: document.getElementById("objective-form"),
+    fieldId: document.getElementById("objective-id"),
+    cropSelect: document.getElementById("edit-analysis-crop-select"),
+    cropName: document.getElementById("edit-analysis-crop-name"),
+    protein: document.getElementById("edit-protein"),
+    nitrogen: document.getElementById("edit-nitrogen"),
+    nutrientFields: document.getElementById("nutrient-fields"),
+    deleteBtn: document.getElementById("btn-delete-objective"),
+    editorTitle: document.getElementById("editor-title"),
+    editorSubtitle: document.getElementById("editor-subtitle"),
+  };
+
+  let currentObjectiveId = null;
+  let isSaving = false;
+
+  function getCsrfToken(){
+    const value = `; ${document.cookie}`;
+    const parts = value.split('; csrf_access_token=');
+    if(parts.length === 2){
+      return parts.pop().split(';').shift();
+    }
+    return '';
+  }
+
+  function fmtNumber(value, digits = 2){
+    if(typeof value !== "number" || !isFinite(value)){
+      return "--";
+    }
+    return value.toFixed(digits);
+  }
+
+  function fmtDate(value){
+    if(!value){
+      return "--";
+    }
+    try{
+      const d = new Date(value);
+      if(Number.isNaN(d.getTime())){
+        return value;
+      }
+      return d.toLocaleString();
+    }catch(_){
+      return value;
+    }
+  }
+
+  function renderTable(){
+    if(!el.tableBody){
+      return;
+    }
+    el.tableBody.innerHTML = "";
+    if(state.objectives.length === 0){
+      const row = document.createElement("tr");
+      const cell = document.createElement("td");
+      cell.colSpan = 6;
+      cell.className = "px-4 py-6 text-center text-gray-500 dark:text-gray-400";
+      cell.textContent = "Sin registros disponibles.";
+      row.appendChild(cell);
+      el.tableBody.appendChild(row);
+      return;
+    }
+
+    for(const objective of state.objectives){
+      const row = document.createElement("tr");
+      row.className = "hover:bg-gray-50 dark:hover:bg-gray-800";
+
+      const cropCell = document.createElement("td");
+      cropCell.className = "px-4 py-3 font-medium text-gray-800 dark:text-gray-100";
+      cropCell.textContent = objective.analysis_crop?.name || "Sin cultivo";
+
+      const proteinCell = document.createElement("td");
+      proteinCell.className = "px-4 py-3 tabular-nums";
+      proteinCell.textContent = fmtNumber(objective.protein_average, 2);
+
+      const nitrogenCell = document.createElement("td");
+      nitrogenCell.className = "px-4 py-3 tabular-nums";
+      nitrogenCell.textContent = fmtNumber(objective.nitrogen_estimated, 2);
+
+      const nutrientCell = document.createElement("td");
+      nutrientCell.className = "px-4 py-3 text-xs text-gray-600 dark:text-gray-300";
+      const nutrientNames = (objective.nutrient_targets || []).slice(0, 4).map(nt => nt.nutrient_symbol || nt.nutrient_name);
+      nutrientCell.textContent = nutrientNames.join(', ');
+      if((objective.nutrient_targets || []).length > 4){
+        nutrientCell.textContent += '...';
+      }
+
+      const updatedCell = document.createElement("td");
+      updatedCell.className = "px-4 py-3 text-xs text-gray-500 dark:text-gray-400";
+      updatedCell.textContent = fmtDate(objective.updated_at || objective.created_at);
+
+      const actionsCell = document.createElement("td");
+      actionsCell.className = "px-4 py-3 text-right";
+      const editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.className = "{{ base_button_classes }} text-sm px-3 py-1 border {{ border_color }}";
+      editBtn.textContent = "Editar";
+      editBtn.addEventListener('click', () => openEditor(objective.id));
+      actionsCell.appendChild(editBtn);
+
+      row.appendChild(cropCell);
+      row.appendChild(proteinCell);
+      row.appendChild(nitrogenCell);
+      row.appendChild(nutrientCell);
+      row.appendChild(updatedCell);
+      row.appendChild(actionsCell);
+      el.tableBody.appendChild(row);
+    }
+  }
+
+  async function loadObjectives(){
+    try{
+      const res = await fetch(ENDPOINTS.objectives, { credentials: "include" });
+      if(!res.ok){
+        throw new Error('No se pudieron obtener los objetivos');
+      }
+      const data = await res.json();
+      state.objectives = Array.isArray(data) ? data : [];
+    }catch(err){
+      console.error(err);
+      state.objectives = [];
+    }
+  }
+
+  async function loadCrops(){
+    try{
+      const res = await fetch(ENDPOINTS.crops, { credentials: "include" });
+      if(!res.ok){
+        throw new Error('No se pudieron obtener los cultivos');
+      }
+      const data = await res.json();
+      state.crops = Array.isArray(data) ? data : [];
+    }catch(err){
+      console.error(err);
+      state.crops = [];
+    }
+    populateCropSelect();
+  }
+
+  async function loadNutrients(){
+    try{
+      const res = await fetch(ENDPOINTS.nutrients, { credentials: "include" });
+      if(!res.ok){
+        throw new Error('No se pudieron obtener los nutrientes');
+      }
+      const data = await res.json();
+      state.nutrients = Array.isArray(data) ? data : [];
+    }catch(err){
+      console.error(err);
+      state.nutrients = [];
+    }
+  }
+
+  async function refreshAll(){
+    await Promise.all([loadObjectives(), loadCrops(), loadNutrients()]);
+    renderTable();
+  }
+
+  function populateCropSelect(selectedId){
+    if(!el.cropSelect){
+      return;
+    }
+    const options = ["<option value=\"\">-- Selecciona --</option>"];
+    for(const crop of state.crops){
+      if(!crop || !crop.name){ continue; }
+      const selected = selectedId && Number(selectedId) === Number(crop.id) ? ' selected' : '';
+      options.push(`<option value="${crop.id}"${selected}>${crop.name}</option>`);
+    }
+    el.cropSelect.innerHTML = options.join('');
+  }
+
+  function buildNutrientFields(targets){
+    if(!el.nutrientFields){
+      return;
+    }
+    el.nutrientFields.innerHTML = "";
+    const targetMap = new Map();
+    for(const target of targets || []){
+      if(target?.nutrient_id){
+        targetMap.set(Number(target.nutrient_id), target);
+      }
+    }
+    const nutrients = state.nutrients.length ? state.nutrients : (targets || []);
+    for(const nutrient of nutrients){
+      if(!nutrient){ continue; }
+      const id = Number(nutrient.id || nutrient.nutrient_id);
+      if(!id){ continue; }
+      const target = targetMap.get(id);
+      const value = target?.target_value ?? null;
+      const wrapper = document.createElement("label");
+      wrapper.className = "flex flex-col text-xs gap-1";
+      const name = nutrient.name || target?.nutrient_name || `Nutriente ${id}`;
+      const symbol = nutrient.symbol || target?.nutrient_symbol || "";
+      const unit = nutrient.unit || target?.nutrient_unit || "";
+      const title = symbol ? `${name} (${symbol})` : name;
+      const span = document.createElement("span");
+      span.className = "text-gray-700 dark:text-gray-200";
+      span.textContent = `${title}${unit ? ` [${unit}]` : ''}`;
+      const input = document.createElement("input");
+      input.type = "number";
+      input.step = "0.001";
+      input.className = "px-2 py-1.5 border {{ border_color }} rounded-md bg-white dark:bg-gray-800";
+      input.dataset.nutrientId = String(id);
+      if(value != null && isFinite(Number(value))){
+        input.value = Number(value).toFixed(3);
+      }
+      wrapper.appendChild(span);
+      wrapper.appendChild(input);
+      el.nutrientFields.appendChild(wrapper);
+    }
+  }
+
+  function openEditor(objectiveId){
+    currentObjectiveId = objectiveId ?? null;
+    let objective = null;
+    if(currentObjectiveId != null){
+      objective = state.objectives.find(item => Number(item.id) === Number(currentObjectiveId));
+    }
+    if(objective){
+      el.editorTitle.textContent = "Editar objetivo";
+      el.editorSubtitle.textContent = "Actualiza los valores seleccionados.";
+    }else{
+      el.editorTitle.textContent = "Nuevo objetivo";
+      el.editorSubtitle.textContent = "Completa los campos para crear un objetivo secundario.";
+    }
+    populateCropSelect(objective?.analysis_crop_id ?? "");
+    if(el.cropName){
+      el.cropName.value = "";
+    }
+    if(el.protein){
+      el.protein.value = objective?.protein_average ?? "";
+    }
+    if(el.nitrogen){
+      el.nitrogen.value = objective?.nitrogen_estimated ?? "";
+    }
+    buildNutrientFields(objective?.nutrient_targets ?? state.nutrients.map(n => ({
+      nutrient_id: n.id,
+      nutrient_name: n.name,
+      nutrient_symbol: n.symbol,
+      nutrient_unit: n.unit,
+      target_value: null,
+    })));
+    if(el.editor){
+      el.editor.classList.remove("hidden");
+      el.editor.setAttribute("aria-hidden", "false");
+    }
+  }
+
+  function closeEditor(){
+    currentObjectiveId = null;
+    if(el.editor){
+      el.editor.classList.add("hidden");
+      el.editor.setAttribute("aria-hidden", "true");
+    }
+    if(el.form){
+      el.form.reset();
+    }
+  }
+
+  function collectNutrientPayload(){
+    const inputs = el.nutrientFields ? el.nutrientFields.querySelectorAll('input[data-nutrient-id]') : [];
+    const out = [];
+    inputs.forEach(input => {
+      const nutrientId = Number(input.dataset.nutrientId);
+      if(!nutrientId){
+        return;
+      }
+      const value = parseFloat(input.value);
+      if(Number.isNaN(value)){
+        return;
+      }
+      out.push({
+        nutrient_id: nutrientId,
+        target_value: value,
+      });
+    });
+    return out;
+  }
+
+  async function submitForm(event){
+    event.preventDefault();
+    if(isSaving){
+      return;
+    }
+    const cropIdRaw = el.cropSelect ? el.cropSelect.value : "";
+    const cropName = el.cropName ? el.cropName.value.trim() : "";
+    const protein = el.protein ? parseFloat(el.protein.value) : NaN;
+    const nitrogen = el.nitrogen ? parseFloat(el.nitrogen.value) : NaN;
+    const nutrientTargets = collectNutrientPayload();
+
+    const payload = {
+      analysis_crop_id: cropIdRaw ? Number(cropIdRaw) : null,
+      analysis_crop_name: cropName || null,
+      protein: Number.isFinite(protein) ? protein : null,
+      nitrogen: Number.isFinite(nitrogen) ? nitrogen : null,
+      nutrient_targets: nutrientTargets,
+    };
+
+    const method = currentObjectiveId == null ? "POST" : "PUT";
+    const endpoint = currentObjectiveId == null
+      ? ENDPOINTS.objectives
+      : `${ENDPOINTS.objectives}/${currentObjectiveId}`;
+
+    isSaving = true;
+    const csrf = getCsrfToken();
+    try{
+      const res = await fetch(endpoint, {
+        method,
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-TOKEN": csrf || "",
+        },
+        body: JSON.stringify(payload),
+      });
+      const body = await res.json().catch(() => ({}));
+      if(!res.ok){
+        throw new Error(body?.description || 'No se pudo guardar el objetivo');
+      }
+      closeEditor();
+      await refreshAll();
+    }catch(err){
+      console.error(err);
+      alert(err?.message || 'Error al guardar el objetivo');
+    }finally{
+      isSaving = false;
+    }
+  }
+
+  async function deleteObjective(){
+    if(currentObjectiveId == null){
+      closeEditor();
+      return;
+    }
+    if(!window.confirm('?Eliminar objetivo seleccionado?')){
+      return;
+    }
+    const csrf = getCsrfToken();
+    try{
+      const res = await fetch(`${ENDPOINTS.objectives}/${currentObjectiveId}`, {
+        method: "DELETE",
+        credentials: "include",
+        headers: { "X-CSRF-TOKEN": csrf || "" },
+      });
+      if(!res.ok){
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.description || 'No se pudo eliminar el objetivo');
+      }
+      closeEditor();
+      await refreshAll();
+    }catch(err){
+      console.error(err);
+      alert(err?.message || 'Error al eliminar objetivo');
+    }
+  }
+
+  if(el.refresh){
+    el.refresh.addEventListener('click', () => refreshAll());
+  }
+  if(el.create){
+    el.create.addEventListener('click', () => openEditor(null));
+  }
+  if(el.closeEditor){
+    el.closeEditor.addEventListener('click', closeEditor);
+  }
+  if(el.form){
+    el.form.addEventListener('submit', submitForm);
+  }
+  if(el.deleteBtn){
+    el.deleteBtn.addEventListener('click', deleteObjective);
+  }
+  if(el.editor){
+    el.editor.addEventListener('click', (event) => {
+      if(event.target === el.editor){
+        closeEditor();
+      }
+    });
+  }
+
+  refreshAll().catch(()=>{});
+})();
+</script>
+{% endblock %}

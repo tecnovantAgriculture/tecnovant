@@ -1,0 +1,9 @@
+<form method="post" action="{{ url_for('vegindex.analyze') }}" style="max-width:600px;margin:2rem auto">
+  <h2>vegindex | VARI → Protein</h2>
+  <label>Source (local:/path | s3://bucket/key)</label>
+  <input name="source" placeholder="local:/data/image.tif" style="width:100%;padding:.5rem" required>
+  <label>Bounding box (xmin,ymin,xmax,ymax) opcional</label>
+  <input name="bbox" placeholder="100,100,300,300" style="width:100%;padding:.5rem">
+  <button type="submit" style="margin-top:1rem">Analyze</button>
+  <p style="margin-top:.5rem;color:#666">Config: VEGINDEX_LOCAL_BASE, VEGINDEX_S3_BUCKET, AWS_* vars</p>
+</form>

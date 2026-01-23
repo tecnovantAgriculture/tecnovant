@@ -1,0 +1,885 @@
+"""Agrovista helper utilities for NDVI analysis and reporting.
+
+This module concentrates the heavy lifting for the Agrovista workflows:
+reading multi-band imagery, computing true NDVI or visible approximations,
+generating preview assets, and translating vegetation indices into agronomic
+indicators such as protein or nutrient targets. The functions are intentionally
+verbose so they can be reused safely from batch jobs, HTTP handlers, or
+notebooks without rediscovering implementation details.
+"""
+
+from __future__ import annotations
+
+import math
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple
+
+import rasterio
+from rasterio.errors import RasterioIOError
+from rasterio.io import DatasetReader
+from rasterio.transform import Affine
+
+from matplotlib import cm, colors
+import matplotlib
+
+import numpy as np
+from PIL import Image
+
+matplotlib.use("Agg")
+
+try:
+    from scipy.ndimage import median_filter as _median_filter
+except Exception:  # optional dependency
+    _median_filter = None
+
+
+DATA_DIR = Path(__file__).resolve().parent / "data"
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+ALLOWED_EXTS = {".tif", ".tiff", ".jp2", ".png", ".jpg", ".jpeg"}
+
+
+def allowed_file(filename: str) -> bool:
+    """Return True when the provided filename uses a supported extension.
+
+    Args:
+        filename: Raw filename string received from uploads or job configs.
+
+    Returns:
+        bool: ``True`` when the suffix is present in ``ALLOWED_EXTS``.
+    """
+
+    return Path(filename).suffix.lower() in ALLOWED_EXTS
+
+
+# ----------------------------- Color & IO utils ----------------------------- #
+
+def srgb_to_linear(x: np.ndarray) -> np.ndarray:
+    """Convert sRGB samples in the ``[0, 1]`` range into linear RGB.
+
+    Args:
+        x: Array with sRGB values normalized to ``[0, 1]``; the function is
+            agnostic to shape and works channel-wise.
+
+    Returns:
+        np.ndarray: Array with the same shape as the input but encoded using a
+        linear light response, which prevents color shifts during math-heavy
+        vegetation index computations.
+    """
+    a, thr = 0.055, 0.04045
+    y = np.empty_like(x, dtype=np.float32)
+    low = x <= thr
+    y[low] = x[low] / 12.92
+    y[~low] = ((x[~low] + a) / (1.0 + a)) ** 2.4
+    return y
+
+
+def gray_world_white_balance(img: np.ndarray) -> np.ndarray:
+    """Apply gray-world white balance on linear RGB values.
+
+    Args:
+        img: Float array in linear RGB space. Values are expected within
+            ``[0, 1]``, but the math itself only assumes non-negative inputs.
+
+    Returns:
+        np.ndarray: Image scaled so the mean of each channel converges to a
+        shared gray level, minimizing color casts before index derivation.
+    """
+    means = img.reshape(-1, 3).mean(axis=0)
+    scale = means.mean() / (means + 1e-8)
+    return np.clip(img * scale, 0, 1)
+
+
+def robust_u8_range(
+    x: np.ndarray,
+    vmin: float = -1.0,
+    vmax: float = 1.0,
+) -> np.ndarray:
+    """Scale numeric values to ``uint8`` using an explicit min/max window.
+
+    Args:
+        x: Arbitrary float array that will be normalized.
+        vmin: Lower bound that maps to 0 in the resulting ``uint8`` raster.
+        vmax: Upper bound that maps to 255 in the resulting ``uint8`` raster.
+
+    Returns:
+        np.ndarray: Array using 8-bit encoding suitable for quick previews or
+        serialization APIs that expect integers.
+    """
+    x = np.clip((x - vmin) / (vmax - vmin), 0, 1)
+    return (x * 255).astype(np.uint8)
+
+
+def percent_u8(
+    x: np.ndarray,
+    p_low: float = 1.0,
+    p_high: float = 99.0,
+) -> np.ndarray:
+    """Render arrays as ``uint8`` using percentile-based contrast stretching.
+
+    Args:
+        x: Input values that may contain ``NaN`` entries.
+        p_low: Lower percentile used as the target black point.
+        p_high: Upper percentile used as the target white point.
+
+    Returns:
+        np.ndarray: 8-bit array emphasizing the dynamic range between the two
+        percentiles; degenerate inputs return zeros for safety.
+    """
+    finite = np.isfinite(x)
+    if not finite.any():
+        return np.zeros_like(x, dtype=np.uint8)
+    lo, hi = np.percentile(x[finite], [p_low, p_high])
+    if hi - lo < 1e-6:
+        return np.zeros_like(x, dtype=np.uint8)
+    y = np.clip((x - lo) / (hi - lo), 0, 1)
+    return (y * 255).astype(np.uint8)
+
+
+def _band_max(dtype_str: str) -> float:
+    """Return the maximum representable value for raster bands.
+
+    Args:
+        dtype_str: String representation of the dtype reported by Rasterio.
+
+    Returns:
+        float: The numeric ceiling for integer dtypes; defaults to ``1.0`` for
+        float inputs so callers can treat values as normalized already.
+    """
+    try:
+        info = np.iinfo(np.dtype(dtype_str))
+        return float(info.max)
+    except Exception:
+        return 1.0
+
+
+def read_rgb_from_any(path: Path) -> np.ndarray:
+    """Return RGB data from common raster formats as linearized float arrays.
+
+    Args:
+        path: Path to an RGB-compatible asset. The helper first tries Rasterio
+            so GeoTIFF metadata is preserved when available, then falls back to
+            Pillow for vanilla images.
+
+    Returns:
+        np.ndarray: Array with shape ``(H, W, 3)`` normalized to ``[0, 1]`` and
+        padded with ``NaN`` where the source reports NoData.
+    """
+    p = Path(path)
+    try:
+        with rasterio.open(p) as src:
+            if src.count >= 3:
+                r = src.read(1).astype(np.float32)
+                g = src.read(2).astype(np.float32)
+                b = src.read(3).astype(np.float32)
+                maxv = _band_max(src.dtypes[0])
+                if maxv > 1:
+                    r /= maxv
+                    g /= maxv
+                    b /= maxv
+                rgb = np.stack([r, g, b], axis=-1)
+                if src.nodata is not None:
+                    nod = src.nodata
+                    mask = (r == nod) | (g == nod) | (b == nod)
+                    rgb[mask] = np.nan
+                return rgb
+    except Exception:
+        pass
+
+    im = Image.open(p).convert("RGB")
+    rgb = np.asarray(im, dtype=np.float32) / 255.0
+    return rgb
+
+
+def read_red_nir(
+    src: DatasetReader,
+    red_band: int = 3,
+    nir_band: int = 4,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Return red and near-infrared bands ready for NDVI math.
+
+    Args:
+        src: Open Rasterio dataset.
+        red_band: One-based index for the visible red band.
+        nir_band: One-based index for the near-infrared band.
+
+    Returns:
+        Tuple[np.ndarray, np.ndarray]: Pair of ``float32`` arrays normalized to
+        ``[0, 1]`` with NoData propagated as ``NaN`` so downstream math can use
+        vectorized ``np.isfinite`` checks.
+    """
+    red = src.read(red_band).astype(np.float32)
+    nir = src.read(nir_band).astype(np.float32)
+    maxv = _band_max(src.dtypes[0])
+    if maxv > 1:
+        red /= maxv
+        nir /= maxv
+    if src.nodata is not None:
+        mask = (red == src.nodata) | (nir == src.nodata)
+        red[mask] = np.nan
+        nir[mask] = np.nan
+    return red, nir
+
+
+def save_quick_preview(
+    src_path: Path,
+    out_path: Path,
+    max_size: int = 1024,
+) -> Tuple[int, int]:
+    """Generate a fast RGB preview PNG from the source image.
+
+    Args:
+        src_path: Location of the source raster image on disk.
+        out_path: Path where the preview PNG will be persisted.
+        max_size: Maximum width or height in pixels, preserving aspect ratio.
+
+    Returns:
+        Tuple[int, int]: Final preview size expressed as ``(width, height)``.
+    """
+    rgb = read_rgb_from_any(src_path)
+    if rgb.ndim != 3:
+        raise ValueError("preview requires RGB data")
+    arr = np.nan_to_num(rgb, nan=0.0)
+    arr = np.clip(arr, 0.0, 1.0)
+    im = Image.fromarray((arr * 255).astype(np.uint8))
+    w, h = im.size
+    if max(w, h) > max_size:
+        im.thumbnail((max_size, max_size))
+    im.save(out_path)
+    return im.size
+
+
+# ------------------------ Visible indices & combination ---------------------- #
+
+@dataclass(slots=True)
+class VisibleConfig:
+    """Toggles controlling the preprocessing pipeline for visible indices."""
+
+    do_linearize: bool = True
+    do_white_balance: bool = True
+    shadow_mask: bool = True
+    shadow_thr: float = 0.06
+    median_size: int = 3
+
+
+def compute_visible_indices(
+    rgb: np.ndarray,
+    cfg: VisibleConfig,
+) -> Dict[str, np.ndarray]:
+    """Compute VARI, NGRDI, GLI, and ExG indices from RGB imagery.
+
+    Args:
+        rgb: Float array with three channels in the ``[0, 1]`` interval. ``NaN``
+            values are supported and masked throughout the computation.
+        cfg: ``VisibleConfig`` that enables optional linearization, white
+            balance, and median filtering.
+
+    Returns:
+        Dict[str, np.ndarray]: Mapping that includes the vegetation indices plus
+        helper masks (``shadow_mask`` and ``preproc_nan``) to simplify later
+        visualization steps.
+    """
+    arr = rgb.copy().astype(np.float32)
+    nan_mask = np.isnan(arr).any(axis=-1)
+    arr[nan_mask] = 0.0
+
+    if cfg.do_linearize:
+        arr = srgb_to_linear(arr)
+    if cfg.do_white_balance:
+        arr = gray_world_white_balance(arr)
+
+    R = arr[..., 0]
+    G = arr[..., 1]
+    B = arr[..., 2]
+    eps = 1e-6
+
+    with np.errstate(divide="ignore", invalid="ignore"):
+        vari = (G - R) / (G + R - B + eps)
+        ngrdi = (G - R) / (G + R + eps)
+        gli = (2 * G - R - B) / (2 * G + R + B + eps)
+        total = R + G + B
+        rN = np.where(total > 0, R / (total + eps), 0.0)
+        gN = np.where(total > 0, G / (total + eps), 0.0)
+        bN = np.where(total > 0, B / (total + eps), 0.0)
+        exg = 2.0 * gN - rN - bN
+
+    dark = np.zeros_like(ngrdi, dtype=bool)
+    if cfg.shadow_mask:
+        dark = (R + G + B) < cfg.shadow_thr
+        for arr_idx in (vari, ngrdi, gli, exg):
+            arr_idx[dark] = np.nan
+
+    out = {
+        "VARI": np.clip(vari, -1, 1),
+        "NGRDI": np.clip(ngrdi, -1, 1),
+        "GLI": np.clip(gli, -1, 1),
+        "ExG": np.clip(exg, -1, 1),
+        "shadow_mask": dark,
+        "preproc_nan": nan_mask,
+    }
+
+    if cfg.median_size and cfg.median_size > 1 and _median_filter is not None:
+        for k in ("VARI", "NGRDI", "GLI", "ExG"):
+            x = out[k]
+            valid = np.isfinite(x)
+            x_f = x.copy()
+            x_f[~valid] = 0
+            x_f = _median_filter(x_f, size=cfg.median_size)
+            x_f[~valid] = np.nan
+            out[k] = x_f
+
+    for k in ("VARI", "NGRDI", "GLI", "ExG"):
+        x = out[k]
+        x[nan_mask] = np.nan
+        out[k] = x
+
+    return out
+
+
+def combine_indices(
+    indices: Dict[str, np.ndarray],
+    method: str = "combined",
+    weights: Tuple[float, float, float, float] = (0.4, 0.3, 0.2, 0.1),
+) -> np.ndarray:
+    """Return a pseudo-NDVI map synthesized from visible-band indices.
+
+    Args:
+        indices: Output of :func:`compute_visible_indices`.
+        method: Name of the single index to favor or ``"combined"`` to run a
+            weighted fusion.
+        weights: Weight tuple applied when ``method == "combined"``.
+
+    Returns:
+        np.ndarray: Array constrained to ``[-1, 1]`` matching NDVI semantics.
+    """
+    v = indices
+    if method == "ngrdi":
+        out = v["NGRDI"]
+    elif method == "vari":
+        out = v["VARI"]
+    elif method == "gli":
+        out = v["GLI"]
+    elif method == "exg":
+        out = v["ExG"]
+    else:
+        out = (
+            weights[0] * v["NGRDI"]
+            + weights[1] * v["VARI"]
+            + weights[2] * v["GLI"]
+            + weights[3] * v["ExG"]
+        )
+    return np.clip(out, -1, 1)
+
+
+# --------------------------- True NDVI (with NIR) ---------------------------- #
+
+def compute_true_ndvi(
+    src: DatasetReader,
+    red_band: int = 3,
+    nir_band: int = 4,
+) -> np.ndarray:
+    """Compute NDVI directly from red and near-infrared bands.
+
+    Args:
+        src: Rasterio dataset already opened in read mode.
+        red_band: Red band index; defaults to 3 for Sentinel-style products.
+        nir_band: NIR band index; defaults to 4.
+
+    Returns:
+        np.ndarray: ``float32`` NDVI values in the canonical ``[-1, 1]`` range.
+    """
+    red, nir = read_red_nir(src, red_band=red_band, nir_band=nir_band)
+    denom = nir + red
+    ndvi = np.divide(
+        nir - red,
+        denom,
+        out=np.full_like(red, np.nan, dtype=np.float32),
+        where=denom != 0,
+    )
+    return ndvi.astype(np.float32)
+
+
+# ---------------------------- Pipeline interface ---------------------------- #
+
+@dataclass(slots=True)
+class PipelineResult:
+    """Container returned by :func:`compute_ndvi` with extra metadata."""
+
+    method: str
+    has_nir: bool
+    ndvi_or_approx: np.ndarray
+    indices: Optional[Dict[str, np.ndarray]]
+    meta: Dict[str, object]
+
+
+def compute_ndvi(
+    src_path: Path,
+    *,
+    red_band: int = 3,
+    nir_band: int = 4,
+    method: str = "combined",
+    weights: Tuple[float, float, float, float] = (0.4, 0.3, 0.2, 0.1),
+    visible_cfg: Optional[VisibleConfig] = None,
+) -> PipelineResult:
+    """Compute NDVI using NIR bands when available or a visible approximation.
+
+    Args:
+        src_path: Raster path accepted by Rasterio and/or Pillow.
+        red_band: 1-based red band index for true NDVI computation.
+        nir_band: 1-based NIR band index for true NDVI computation.
+        method: Combination strategy to use when the file lacks NIR channels.
+        weights: Fusion weights applied when ``method == "combined"``.
+        visible_cfg: Optional overrides for visible preprocessing toggles.
+
+    Returns:
+        PipelineResult: Rich payload with the computed raster, raw indices, and
+        descriptive metadata useful for logging or downstream storage.
+    """
+    visible_cfg = visible_cfg or VisibleConfig()
+    path = Path(src_path)
+
+    try:
+        with rasterio.open(path) as src:
+            has_nir = src.count >= max(red_band, nir_band)
+            meta: Dict[str, object] = {
+                "source": str(path),
+                "bands": src.count,
+                "dtype": tuple(src.dtypes),
+                "crs": src.crs.to_string() if src.crs else None,
+                "transform": tuple(src.transform),
+                "nodata": src.nodata,
+            }
+
+            if has_nir:
+                ndvi = compute_true_ndvi(src, red_band=red_band, nir_band=nir_band)
+                indices: Optional[Dict[str, np.ndarray]] = None
+
+                if src.count >= 3:
+                    try:
+                        r = src.read(1).astype(np.float32)
+                        g = src.read(2).astype(np.float32)
+                        b = src.read(3).astype(np.float32)
+                        nod_mask = None
+                        if src.nodata is not None:
+                            nod = src.nodata
+                            nod_mask = (r == nod) | (g == nod) | (b == nod)
+                        maxv = _band_max(src.dtypes[0])
+                        if maxv > 1:
+                            r /= maxv
+                            g /= maxv
+                            b /= maxv
+                        rgb = np.stack([r, g, b], axis=-1)
+                        if nod_mask is not None:
+                            rgb[nod_mask] = np.nan
+                        indices = compute_visible_indices(rgb, visible_cfg)
+                    except Exception:
+                        indices = None
+
+                meta.update({
+                    "has_nir": True,
+                    "method": "ndvi",
+                    "visible_method": None,
+                })
+                return PipelineResult("ndvi", True, ndvi, indices, meta)
+
+        # No NIR bands detected; fall back to visible indices.
+        rgb = read_rgb_from_any(path)
+        indices = compute_visible_indices(rgb, visible_cfg)
+        ndvi_approx = combine_indices(indices, method=method, weights=weights)
+        meta = {
+            "source": str(path),
+            "bands": rgb.shape[-1],
+            "has_nir": False,
+            "method": "ndvi_approx",
+            "visible_method": method,
+            "weights": weights if method == "combined" else None,
+        }
+        return PipelineResult("ndvi_approx", False, ndvi_approx, indices, meta)
+
+    except RasterioIOError:
+        # Handle files unsupported by rasterio (e.g. plain PNG/JPG)
+        rgb = read_rgb_from_any(path)
+        if rgb.shape[-1] < 3:
+            raise ValueError(
+                "Input image must contain at least three channels for NDVI approximation"
+            )
+        indices = compute_visible_indices(rgb, visible_cfg)
+        ndvi_approx = combine_indices(indices, method=method, weights=weights)
+        meta = {
+            "source": str(path),
+            "bands": rgb.shape[-1],
+            "has_nir": False,
+            "method": "ndvi_approx",
+            "visible_method": method,
+            "weights": weights if method == "combined" else None,
+        }
+        return PipelineResult("ndvi_approx", False, ndvi_approx, indices, meta)
+
+
+# ----------------------------- PNG utilities -------------------------------- #
+
+def save_png_float(
+    arr: np.ndarray,
+    out_path: Path,
+    *,
+    cmap_name: str = "RdYlGn",
+    vmin: float = -1.0,
+    vmax: float = 1.0,
+    percentile_stretch: Tuple[float, float] | None = None,
+    transparent_nodata: bool = True,
+) -> None:
+    """Save a float map as PNG (RGBA) with the given colormap.
+
+    Args:
+        arr: Any float array; ``NaN`` pixels are treated as transparent.
+        out_path: Destination where the PNG will be written.
+        cmap_name: Matplotlib colormap name.
+        vmin: Minimum value used for normalization.
+        vmax: Maximum value used for normalization.
+        percentile_stretch: Optional ``(low, high)`` percentiles that override
+            ``vmin``/``vmax`` using the data distribution.
+        transparent_nodata: When ``True`` set alpha to 0 for invalid pixels.
+    """
+    arr = arr.astype(np.float32)
+    valid = np.isfinite(arr)
+
+    if percentile_stretch is not None and valid.any():
+        p_lo, p_hi = percentile_stretch
+        lo, hi = np.nanpercentile(arr, [p_lo, p_hi])
+        if hi > lo:
+            vmin, vmax = float(lo), float(hi)
+
+    norm = colors.Normalize(vmin=vmin, vmax=vmax, clip=True)
+    cmap = cm.get_cmap(cmap_name).copy()
+    cmap.set_bad((0, 0, 0, 0))
+
+    rgba = (cmap(norm(arr)) * 255).astype("uint8")
+    if transparent_nodata:
+        rgba[..., 3] = np.where(valid, 255, 0)
+    Image.fromarray(rgba, mode="RGBA").save(out_path)
+
+
+def save_png(ndvi: np.ndarray, out_path: Path) -> None:
+    """Backward-compatible shorthand that delegates to ``save_png_float``.
+
+    Args:
+        ndvi: NDVI raster ready for visualization.
+        out_path: Destination path for the PNG artifact.
+    """
+    save_png_float(ndvi, out_path, cmap_name="RdYlGn", vmin=-1, vmax=1)
+
+
+# --------------------------- Protein estimation ----------------------------- #
+
+DEFAULT_PROTEIN_TABLE: List[Tuple[float, float]] = [
+    (0.10, 6.0),
+    (0.40, 12.0),
+    (0.70, 18.0),
+]
+
+
+def ndvi_to_protein(
+    value: float,
+    table: Sequence[Tuple[float, float]] | None = None,
+) -> float:
+    """Interpolate a single NDVI value into a protein estimate.
+
+    Args:
+        value: NDVI number expected within the domain of ``table``.
+        table: Optional calibration table ordered as ``(ndvi, protein)`` pairs.
+
+    Returns:
+        float: Estimated protein percentage or ``NaN`` when the value is out of
+        bounds.
+    """
+    table = table or DEFAULT_PROTEIN_TABLE
+    xs = np.array([x for x, _ in table], dtype=np.float32)
+    ys = np.array([y for _, y in table], dtype=np.float32)
+    order = np.argsort(xs)
+    xs, ys = xs[order], ys[order]
+    if not (xs[0] <= value <= xs[-1]):
+        return float("nan")
+    return float(np.interp(value, xs, ys))
+
+
+def ndvi_to_protein_vec(
+    values: np.ndarray,
+    table: Sequence[Tuple[float, float]] | None = None,
+) -> np.ndarray:
+    """Vectorized variant of :func:`ndvi_to_protein` for entire rasters.
+
+    Args:
+        values: NDVI array, typically the output of :func:`compute_true_ndvi`.
+        table: Optional calibration table identical to the scalar helper.
+
+    Returns:
+        np.ndarray: Protein estimates where valid and ``NaN`` elsewhere.
+    """
+    table = table or DEFAULT_PROTEIN_TABLE
+    xs = np.array([x for x, _ in table], dtype=np.float32)
+    ys = np.array([y for _, y in table], dtype=np.float32)
+    order = np.argsort(xs)
+    xs, ys = xs[order], ys[order]
+    out = np.interp(values, xs, ys)
+    out[(values < xs[0]) | (values > xs[-1]) | ~np.isfinite(values)] = np.nan
+    return out.astype(np.float32)
+
+
+def protein_to_nitrogen(value: float, factor: float = 6.25) -> float:
+    """Convert protein percentage into nitrogen percentage.
+
+    Args:
+        value: Protein concentration expressed in percent.
+        factor: Conversion factor; defaults to the Kjeldahl coefficient.
+
+    Returns:
+        float: Nitrogen percentage or ``NaN`` when the inputs are invalid.
+    """
+    if factor <= 0:
+        return float("nan")
+    if not np.isfinite(value):
+        return float("nan")
+    return float(value / factor)
+
+
+def protein_to_nitrogen_vec(values: np.ndarray, factor: float = 6.25) -> np.ndarray:
+    """Vectorized version of :func:`protein_to_nitrogen` for rasters.
+
+    Args:
+        values: Protein raster produced by :func:`ndvi_to_protein_vec`.
+        factor: Conversion coefficient applied element-wise.
+
+    Returns:
+        np.ndarray: Nitrogen percentages with ``NaN`` for invalid pixels.
+    """
+    out = np.full_like(values, np.nan, dtype=np.float32)
+    if factor <= 0:
+        return out
+    mask = np.isfinite(values)
+    out[mask] = (values[mask] / factor).astype(np.float32)
+    return out
+
+
+# ------------------------------ Polygon masking ----------------------------- #
+
+def polygon_mask(
+    shape: Tuple[int, int],
+    vertices: Iterable[Tuple[float, float]],
+    transform: Optional[Affine] = None,
+) -> np.ndarray:
+    """Return a boolean mask describing the pixels contained in a polygon.
+
+    Args:
+        shape: Output mask shape expressed as ``(rows, cols)``.
+        vertices: Polygon coordinates in pixel or map space.
+        transform: Optional affine transform from pixel to map coordinates.
+
+    Returns:
+        np.ndarray: Boolean mask with ``True`` inside the polygon.
+    """
+    from matplotlib.path import Path as MplPath
+
+    verts = np.asarray(list(vertices), dtype=np.float64)
+    if transform is not None:
+        inv = ~transform
+        pts = np.array([inv * (x, y) for x, y in verts], dtype=np.float64)
+    else:
+        pts = verts
+
+    y_idx, x_idx = np.meshgrid(np.arange(shape[0]), np.arange(shape[1]), indexing="ij")
+    coords = np.column_stack((x_idx.ravel() + 0.5, y_idx.ravel() + 0.5))
+    return MplPath(pts).contains_points(coords).reshape(shape)
+
+
+def average_protein(
+    ndvi_map: np.ndarray,
+    mask: np.ndarray,
+    table: Sequence[Tuple[float, float]] | None = None,
+    min_count: int = 20,
+    reducer: str = "mean",
+) -> float:
+    """Summarize protein estimates inside a polygon mask.
+
+    Args:
+        ndvi_map: NDVI raster.
+        mask: Boolean mask selecting the region of interest.
+        table: Optional calibration table to override the default.
+        min_count: Required valid-pixel count before returning a statistic.
+        reducer: ``"mean"`` or ``"median"`` aggregation strategy.
+
+    Returns:
+        float: Aggregated protein value or ``NaN`` when the mask is too small.
+    """
+    valid = mask & np.isfinite(ndvi_map)
+    vals = ndvi_map[valid]
+    if vals.size < min_count:
+        return float("nan")
+    prot = ndvi_to_protein_vec(vals, table=table)
+    prot = prot[np.isfinite(prot)]
+    if prot.size == 0:
+        return float("nan")
+    return float(np.median(prot) if reducer == "median" else np.mean(prot))
+
+
+# ---------------------- Secondary objective estimations --------------------- #
+
+def _coerce_non_negative(value: float | int | None) -> float:
+    """Cast inputs to ``float`` while ensuring non-negative results."""
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    if not math.isfinite(v):
+        return 0.0
+    return max(v, 0.0)
+
+
+def _dummy_rule_factory(
+    factor: float,
+    *,
+    bias: float = 0.0,
+    min_nitrogen: float = 0.05,
+) -> Callable[[float, float], float]:
+    """Return simplistic rules that map protein/nitrogen to nutrient targets.
+
+    Args:
+        factor: Scaling factor applied to the product of protein and nitrogen.
+        bias: Constant offset added to the computed value.
+        min_nitrogen: Minimum nitrogen accepted in the calculation.
+
+    Returns:
+        Callable[[float, float], float]: Function that receives ``(protein,
+        nitrogen)`` and yields a synthetic nutrient target.
+    """
+    def _rule(protein: float, nitrogen: float) -> float:
+        prot = _coerce_non_negative(protein)
+        nit = _coerce_non_negative(nitrogen)
+        if nit < min_nitrogen:
+            nit = min_nitrogen
+        return bias + prot * nit * factor
+
+    return _rule
+
+
+DEFAULT_SECONDARY_RULE = _dummy_rule_factory(1.0)
+
+
+NUTRIENT_DUMMY_RULES: Dict[str, Callable[[float, float], float]] = {
+    # Macronutrients
+    "n": _dummy_rule_factory(8.4, bias=0.12),
+    "nitrogeno": _dummy_rule_factory(8.4, bias=0.12),
+    "p": _dummy_rule_factory(3.6, bias=0.05),
+    "fosforo": _dummy_rule_factory(3.6, bias=0.05),
+    "k": _dummy_rule_factory(4.8, bias=0.08),
+    "potasio": _dummy_rule_factory(4.8, bias=0.08),
+    "ca": _dummy_rule_factory(1.9, bias=0.04),
+    "calcio": _dummy_rule_factory(1.9, bias=0.04),
+    "mg": _dummy_rule_factory(1.5, bias=0.03),
+    "magnesio": _dummy_rule_factory(1.5, bias=0.03),
+    "s": _dummy_rule_factory(1.15, bias=0.02),
+    "azufre": _dummy_rule_factory(1.15, bias=0.02),
+    # Micronutrients
+    "cu": _dummy_rule_factory(0.045, bias=0.001, min_nitrogen=0.01),
+    "cobre": _dummy_rule_factory(0.045, bias=0.001, min_nitrogen=0.01),
+    "zn": _dummy_rule_factory(0.062, bias=0.001, min_nitrogen=0.01),
+    "zinc": _dummy_rule_factory(0.062, bias=0.001, min_nitrogen=0.01),
+    "mn": _dummy_rule_factory(0.081, bias=0.001, min_nitrogen=0.01),
+    "manganeso": _dummy_rule_factory(0.081, bias=0.001, min_nitrogen=0.01),
+    "b": _dummy_rule_factory(0.024, bias=0.0005, min_nitrogen=0.01),
+    "boro": _dummy_rule_factory(0.024, bias=0.0005, min_nitrogen=0.01),
+    "mo": _dummy_rule_factory(0.0009, bias=0.0001, min_nitrogen=0.01),
+    "molibdeno": _dummy_rule_factory(0.0009, bias=0.0001, min_nitrogen=0.01),
+    "fe": _dummy_rule_factory(0.27, bias=0.002, min_nitrogen=0.02),
+    "hierro": _dummy_rule_factory(0.27, bias=0.002, min_nitrogen=0.02),
+    "si": _dummy_rule_factory(0.18, bias=0.001, min_nitrogen=0.02),
+    "silicio": _dummy_rule_factory(0.18, bias=0.001, min_nitrogen=0.02),
+}
+
+
+def compute_secondary_objective_targets(
+    protein_average: float,
+    nitrogen_estimated: float,
+    nutrients: Sequence[object],
+    *,
+    digits: int | None = 3,
+) -> List[Dict[str, object]]:
+    """Return dummy nutrient targets for a given protein/nitrogen pair.
+
+    Args:
+        protein_average: Average protein percentage for the zone.
+        nitrogen_estimated: Nitrogen estimate matching the same zone.
+        nutrients: Iterable of ORM-like objects with ``symbol``, ``name``,
+            ``unit``, and ``id`` attributes.
+        digits: Decimal precision applied to the generated values.
+
+    Returns:
+        List[Dict[str, object]]: Payload ready for serialization in API
+        responses.
+    """
+
+    def _resolve_rule(symbol: str | None, name: str | None) -> Callable[[float, float], float]:
+        for key in filter(None, [symbol, name]):
+            key_l = key.lower()
+            if key_l in NUTRIENT_DUMMY_RULES:
+                return NUTRIENT_DUMMY_RULES[key_l]
+        return DEFAULT_SECONDARY_RULE
+
+    out: List[Dict[str, object]] = []
+    for nutrient in nutrients:
+        symbol = getattr(nutrient, "symbol", None)
+        name = getattr(nutrient, "name", None)
+        unit = getattr(nutrient, "unit", None)
+        nutrient_id = getattr(nutrient, "id", None)
+        func = _resolve_rule(symbol, name)
+        value = func(protein_average, nitrogen_estimated)
+        if digits is not None and math.isfinite(value):
+            value = round(value, digits)
+        out.append(
+            {
+                "nutrient_id": nutrient_id,
+                "nutrient_name": name,
+                "nutrient_symbol": symbol,
+                "nutrient_unit": unit,
+                "target_value": value,
+            }
+        )
+    return out
+
+
+def secondary_target_map(
+    protein_average: float,
+    nitrogen_estimated: float,
+    nutrients: Sequence[object],
+    *,
+    digits: int | None = 3,
+) -> Dict[int, float]:
+    """Return a mapping from nutrient identifiers to target values.
+
+    Args:
+        protein_average: Average protein percentage.
+        nitrogen_estimated: Estimated nitrogen percentage.
+        nutrients: Same sequence used by
+            :func:`compute_secondary_objective_targets`.
+        digits: Decimal precision for the output map.
+
+    Returns:
+        Dict[int, float]: Compact lookup keyed by ``nutrient_id``.
+    """
+
+    mapping: Dict[int, float] = {}
+    for payload in compute_secondary_objective_targets(
+        protein_average,
+        nitrogen_estimated,
+        nutrients,
+        digits=digits,
+    ):
+        nutrient_id = payload.get("nutrient_id")
+        target_value = payload.get("target_value")
+        if nutrient_id is None:
+            continue
+        try:
+            mapping[int(nutrient_id)] = float(target_value)
+        except (TypeError, ValueError):
+            continue
+    return mapping

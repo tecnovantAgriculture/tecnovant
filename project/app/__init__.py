@@ -87,6 +87,7 @@ def create_app():
     template_folder = os.path.join(app.root_path, "templates", theme)
     app.template_folder = template_folder
 
+
     # Initialize extensions and blueprints
     init_extensions(app)
     register_blueprints(app)

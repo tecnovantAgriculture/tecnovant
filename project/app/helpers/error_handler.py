@@ -21,7 +21,7 @@ from logging.handlers import RotatingFileHandler
 
 # Third party imports
 from flask import Flask, Response, render_template, request
-from werkzeug.exceptions import HTTPException
+from werkzeug.exceptions import HTTPException, RequestEntityTooLarge
 
 
 def setup_logging(log_file="errors.log"):
@@ -64,6 +64,21 @@ def error_handler(app: Flask, logger) -> None:
         accept_header = request.headers.get("Accept", "").lower()
         return "application/json" in accept_header or request.path.startswith("/api/")
 
+    def _format_bytes(limit: int | float | None) -> str:
+        """Return a human-readable representation for a byte limit."""
+
+        if limit is None or limit <= 0:
+            return "desconocido"
+        units = ["B", "KiB", "MiB", "GiB", "TiB"]
+        size = float(limit)
+        for unit in units:
+            if size < 1024 or unit == units[-1]:
+                if unit == "B":
+                    return f"{int(size)} {unit}"
+                return f"{size:.1f} {unit}"
+            size /= 1024
+        return f"{size:.1f} TiB"
+
     @app.errorhandler(Exception)
     def handle_exception(e: Exception) -> tuple:
         """Handle global exceptions, log them, and return appropriate responses.
@@ -83,7 +98,13 @@ def error_handler(app: Flask, logger) -> None:
         )
 
         # Determine error details based on exception type
-        if isinstance(e, HTTPException):
+        if isinstance(e, RequestEntityTooLarge):
+            error_code = e.code
+            error_description = e.name
+            max_bytes = app.config.get("MAX_CONTENT_LENGTH")
+            readable = _format_bytes(max_bytes)
+            error_details = f"El archivo excede el límite permitido ({readable})."
+        elif isinstance(e, HTTPException):
             error_code = e.code
             error_description = e.name
             error_details = e.description if hasattr(e, "description") else str(e)

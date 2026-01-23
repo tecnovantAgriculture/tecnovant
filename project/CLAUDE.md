@@ -4,7 +4,7 @@
 
 ---
 
-## Research Query
+## Research Query 
 
 crea un mapa visual de la arquitectura del proyecto
 
@@ -143,3 +143,454 @@ Este diseño modular permite una clara separación de preocupaciones, facilitand
 10. **Understanding the General Application Flow**
    The application's general flow begins when a user makes an HTTP request, which is routed through API or web routes in the core or specific modules. The corresponding controller processes the request, interacting with models for data access or modification. Helper functions are utilized for common tasks. For web requests, the controller renders a Jinja2 template. Static files are served directly to the browser, and the final response is sent back to the user.
 
+
+*******************************
+
+# CODE_AGENT_GUIDE
+
+Guía operativa para agentes de código en el proyecto TecnoAgro. Resume la arquitectura, convenciones y flujos necesarios para mantener y extender la aplicación con foco en modularidad, seguridad, rendimiento y escalabilidad.
+
+---
+
+## Panorama General
+
+- **Stack**: Flask 3.1 (factory pattern), SQLAlchemy + Flask-Migrate, JWT cookies (flask-jwt-extended), Jinja2 + Tailwind CSS, Flask-Caching, Redis opcional, Marshmallow para validaciones.
+- **Dominios clave**: Núcleo (`app/core`) para autenticación, control de usuarios y utilidades; módulos verticales (`app/modules/*`) para features de negocio (follaje, reportes, agrovista, media, etc.); helpers transversales (`app/helpers`) para CRUD, validaciones, CSV, mailing, logging y listados de rutas.
+- **Patrones**: Blueprints (web/api), servicios por módulo, controladores MethodView con JWT y RBAC, soft delete vía bandera `active`, manejo de errores centralizado con logging rotativo, plantillas temáticas (`app/templates/<theme>`).
+- **Entrada**: `run.py` instancia la app vía `create_app()`; configuración leída de `.env` validada por `Config.validate_config()`.
+
+---
+
+## Arquitectura y Estructura
+
+- `app/__init__.py`: crea la app, inicializa extensiones (`mail`, `jwt`, `db`, `migrate`, `cache`), registra blueprints dinámicamente (core + `Config.MODULES`), publica `/list_endpoints` y `/info`, configura filtros/contexts de Jinja.
+- `app/config.py`: clase `Config` centraliza variables de entorno, mail, JWT, caché, base de datos (SQLite local o motores externos). Valida claves críticas (`SECRET_KEY`, credenciales DB).
+- `app/extensions.py`: instancia única de extensiones para evitar import circular.
+- `app/core`: dos blueprints (`core`, `core_api`) con rutas web (`web_routes.py`) y REST (`api_routes.py`), controladores RBAC (`controller.py`), modelos de usuarios/organizaciones/roles (`models.py`), esquemas Marshmallow (`schemas.py`), plantillas base del dashboard.
+- `app/helpers`: utilidades reutilizables (`crud_pattern.CRUDMixin`, `validators.APIValidator`, `error_handler`, `mail`, `route_lister`, `csv_handler`, etc.).
+- `app/modules/<module>`: cada módulo repite patrón `__init__.py` (blueprints web/api), `controller.py` con servicios específicos, `models.py`, `schemas.py`, `helpers.py`, `templates/` con vistas Jinja enfocadas en dashboard.
+- `app/templates/default`: layout base, macros y parciales reutilizables (Tailwind, Flowbite).
+- `migrations/`: scripts Alembic gestionados vía Flask-Migrate.
+- `Makefile`, `start.sh`: scripts de gestión (ejecución, lint, migrate).
+- `requirements*.txt`, `pyproject.toml`, `setup.cfg`: dependencias, herramientas (black/isort/flake8) con line length 88.
+
+---
+
+## 📂 Estructura general del módulo
+
+Cada módulo creado se ubica en:
+
+```
+project/app/modules/<nombre_modulo>/
+```
+
+Su diseño está orientado a **separar responsabilidades** entre la capa de presentación (UI), la capa de API, la lógica de negocio y el manejo de datos.
+
+---
+
+## 📄 Archivos principales
+
+### 1. `__init__.py`
+
+- **Responsabilidad**: inicializa el módulo.
+- **Función**:
+
+  - *Declara los *blueprints* de Flask.
+  - Si hay interfaz web, se crea un blueprint para rutas web (`/<nombre_modulo>`).
+  - Si hay API, se crea un blueprint para rutas de API (`/api/<nombre_modulo>`).
+  - Importa los archivos de rutas correspondientes (`web_routes`, `api_routes`).
+
+### 2. `api_routes.py`
+
+- **Responsabilidad**: definir los endpoints de API.
+- **Función**:
+
+  - Manejar peticiones HTTP tipo REST (JSON).
+  - Exponer endpoints públicos/privados para el consumo de datos.
+  - No contiene lógica de negocio; solo enruta y entrega respuestas usando los *controllers*.
+
+---
+
+### 3. `web_routes.py`
+
+- **Responsabilidad**: manejar las rutas que devuelven vistas HTML.
+- **Función**:
+
+  - Renderizar plantillas (Jinja2) para la interfaz del usuario.
+  - Consumir datos ya procesados por la API o los *controllers*.
+  - **Nota clave**: aquí solo se consumen los endpoints de api_routes usando vanilla JS.
+
+---
+
+### 4. `templates/<nombre_vista>/`
+
+- **Responsabilidad**: contener las plantillas HTML (Jinja2).
+- **Función**:
+
+  - Define la presentación visual de las páginas del módulo.
+  - Se alimenta de los datos entregados por `web_routes.py`.
+
+---
+
+### 5.  CRUD y Helpers `controller.py` y `helpers.py`
+
+Patrón de vistas CRUD reutilizable con RBAC y helpers.
+
+- Procura Extender CRUDMixin para heredar JWT, access control y paginación.
+- Delegar persistencia en servicios especializados por módulo.
+- Validar payloads con APIValidator antes de invocar lógica CRUD.
+- Usa check_resource_access para respetar reglas multi-tenant.
+
+#### controller.py
+
+- **Responsabilidad**: lógica de negocio del módulo.
+- **Función**:
+
+  - Procesar la información recibida desde API o UI.
+  - Coordinar interacciones entre modelos, esquemas y helpers.
+  - Es el “cerebro” del módulo.
+
+#### helpers.py
+
+- **Responsabilidad**: concentrar utilidades auxiliares.
+- **Función**:
+
+  - Funciones comunes que pueden ser reutilizadas por `controllers`, `routes` o `models`.
+  - Ejemplo: formateo de fechas, cálculos, transformaciones de texto.
+
+#### Código de ejemplo
+
+```python
+from typing import Any, Dict, List
+
+from flask import Blueprint, Response, request
+from flask_caching import Cache
+
+from app.extensions import cache as default_cache, db
+from app.helpers.crud_pattern import CRUDMixin
+from app.helpers.validators import APIValidator
+from app.modules.foliage.models import Farm
+from app.modules.foliage.schemas import FarmSchema
+
+foliage_api = Blueprint("foliage_api", __name__, url_prefix="/api/foliage")
+
+
+class FarmService:
+    """Servicios de datos reutilizados por vistas y tareas."""
+    schema = FarmSchema()
+
+    def get_all(self):
+        return (
+            Farm.query.filter_by(active=True)
+            .order_by(Farm.name.asc())
+            .options(db.joinedload(Farm.organization))
+            .all()
+        )
+
+    def get_all_paginated(self, page: int, per_page: int):
+        return (
+            Farm.query.filter_by(active=True)
+            .order_by(Farm.name.asc())
+            .paginate(page=page, per_page=per_page, error_out=False)
+        )
+
+    def get_by_id(self, farm_id: int):
+        return Farm.query.filter_by(id=farm_id, active=True).first()
+
+    def create(self, data: Dict[str, Any]) -> Farm:
+        farm = Farm(**data)
+        db.session.add(farm)
+        db.session.commit()
+        return farm
+
+    def update(self, farm: Farm, data: Dict[str, Any]) -> Farm:
+        for key, value in data.items():
+            setattr(farm, key, value)
+        db.session.commit()
+        return farm
+
+    def soft_delete(self, farm_ids: List[int]) -> int:
+        affected = (
+            Farm.query.filter(Farm.id.in_(farm_ids))
+            .update({"active": False}, synchronize_session=False)
+        )
+        db.session.commit()
+        return affected
+
+
+class FarmView(CRUDMixin):
+    """Exposición de CRUD Farm con control de acceso basado en claims."""
+    def __init__(self):
+        super().__init__(
+            Farm,
+            FarmSchema(),
+            FarmService(),
+            required_roles=["administrator", "reseller"],
+        )
+
+    @APIValidator.validate_form(
+        name={"validators": [], "required": True},
+        org_id=APIValidator.validate_number(min_value=1),
+    )
+    def post(self) -> Response:
+        request.json = request.validated_data
+        return super().post()
+
+    def _has_access(self, farm: Farm, claims: Dict[str, Any]) -> bool:
+        from app.core.controller import check_resource_access
+
+        return check_resource_access(farm, claims)
+
+    def _serialize_resource(self, farm: Farm) -> Dict[str, Any]:
+        return FarmSchema().dump(farm)
+
+    def _delete_resource(self, resource_id: int) -> Response:
+        deleted = self.service.soft_delete([resource_id])
+        return self._build_success_response(
+            f"Deleted {deleted} farm(s)", {"deleted": deleted}
+        )
+
+
+def register_farm_routes(api_blueprint: Blueprint, cache: Cache = default_cache) -> None:
+    """Registra rutas API con cabeceras de caché ligeras."""
+    view = FarmView.as_view("foliage_farm_view")
+    api_blueprint.add_url_rule(
+        "/farms/", defaults={"resource_id": None}, view_func=view, methods=["GET"]
+    )
+    api_blueprint.add_url_rule("/farms/", view_func=view, methods=["POST", "DELETE"])
+    api_blueprint.add_url_rule(
+        "/farms/<int:resource_id>", view_func=view, methods=["GET", "PUT", "DELETE"]
+    )
+
+    @api_blueprint.after_request
+    def inject_cache_headers(response: Response) -> Response:
+        if request.method == "GET" and response.status_code == 200:
+            response.headers.setdefault("Cache-Control", "public, max-age=60")
+        return response
+
+
+register_farm_routes(foliage_api)
+```
+
+### 6. Modelos y Datos `model.py`
+
+- **Responsabilidad**: representar las entidades de datos en la base de datos.
+- **Función**:
+  - Definir modelos ORM (SQLAlchemy).
+  - Encargarse de la persistencia y consultas a la base de datos.
+
+Modelo de gestión y verificación SQLAlchemy alineados con RBAC y servicios reutilizables.
+
+- **Recomendaciones**:
+  - Enums de roles, permisos y acciones; reaprovechados en JWT y controladores están presentes en `app/core/models.py`.
+  - Soft delete via bandera `active`; tablas de asociación para multi-tenancy.
+  - Helpers `verify_user_in_organization` y `get_clients_for_user`.
+
+---
+
+### 7. `schemas.py`
+
+- **Responsabilidad**: definir validaciones y serialización de datos.
+- **Función**:
+
+  - Transformar objetos Python ↔ JSON (p. ej., con Marshmallow).
+  - Asegurar consistencia en entrada y salida de datos.
+
+---
+
+---
+
+## 🚦 Resumen de responsabilidades
+
+- **UI (web\_routes + templates)** → Mostrar y consumir datos.
+- **API (api\_routes)** → Exponer servicios JSON.
+- **Controller** → Procesar la lógica central.
+- **Models** → Conexión y estructura de la base de datos.
+- **Schemas** → Validación y serialización de datos.
+- **Helpers** → Funciones auxiliares reutilizables.
+- ****init**** → Registro de *blueprints* y punto de entrada del módulo.
+
+---
+
+## Vistas, templates y macros Jinja2
+
+- **Lineamientos**: 
+  - Uso de Tailwind css, heredan de /app/templates/default/
+  - Vanilla JS
+  - ejemplo:
+
+```jinja
+{# app/modules/foliage/templates/farms.j2: patrón de dashboards modulares #}
+{% extends "base.j2" %}
+{% from "macros/_forms.j2" import render_input, render_select %}
+{% set page_title = "Granjas" %}
+{% set data_menu = data_menu or get_dashboard_menu() %}
+
+{% block head_extra %}
+  <link rel="preload" href="{{ url_for('static', filename='assets/css/dashboard.css') }}" as="style">
+{% endblock %}
+
+{% block content %}
+  <section class="space-y-6">
+    <header class="flex items-center justify-between">
+      <div>
+        <h1 class="text-2xl font-semibold text-slate-900">{{ page_title }}</h1>
+        <p class="text-sm text-slate-500">Gestión multiorganización administrada por JWT claims.</p>
+      </div>
+      <a
+        href="{{ url_for('foliage.create_farm') }}"
+        class="btn-primary"
+        data-testid="create-farm-button"
+      >
+        Nueva granja
+      </a>
+    </header>
+
+    <form
+      method="get"
+      class="bg-white shadow-sm ring-1 ring-slate-200 rounded-md p-4 grid gap-4 md:grid-cols-3"
+      data-controller="filters"
+    >
+      {{ render_select('filter_value', org_dict, request.args.get('filter_value'), 'Organización') }}
+      {{ render_input('search', request.args.get('search'), 'Buscar granja', placeholder='Nombre o código') }}
+      <button type="submit" class="btn-secondary mt-auto">Aplicar</button>
+    </form>
+
+    <div class="bg-white shadow ring-1 ring-slate-200 rounded-lg overflow-hidden">
+      <table class="min-w-full divide-y divide-slate-200">
+        <thead class="bg-slate-50">
+          <tr>
+            <th scope="col" class="table-head">Nombre</th>
+            <th scope="col" class="table-head">Organización</th>
+            <th scope="col" class="table-head text-right">Acciones</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          {% for farm in items %}
+            <tr>
+              <td class="table-cell">{{ farm.name }}</td>
+              <td class="table-cell">{{ org_dict|dict_get(farm.org_id, default='-') }}</td>
+              <td class="table-cell text-right space-x-2">
+                <a href="{{ url_for('foliage.view_farm', farm_id=farm.id) }}" class="btn-link">Ver</a>
+                <button
+                  type="button"
+                  class="btn-link text-rose-600"
+                  data-action="farms#promptDelete"
+                  data-farms-id-value="{{ farm.id }}"
+                >
+                  Eliminar
+                </button>
+              </td>
+            </tr>
+          {% else %}
+            <tr>
+              <td colspan="3" class="py-6 text-center text-slate-400">
+                No hay granjas disponibles con los filtros seleccionados.
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endblock %}
+```
+
+---
+
+## Recomendaciones y Consideraciones
+
+```python
+def recommendations() -> dict[str, tuple[str, ...]]:
+    """Guardrails para escalabilidad, seguridad y rendimiento.
+
+    - Falla rápido si faltan variables críticas en Config.validate_config().
+    - Usa Flask-Caching para endpoints costosos (estadísticas, CSV, GeoTIFF).
+    - Optimiza las consultas a DB, procura el rendimiento de la APP
+    - Reutiliza check_permission / check_resource_access en cada MethodView.
+    - Stream de payloads grandes con Response(stream_with_context(...)).
+    - Sanitiza uploads con helpers.csv_handler y validators antes de persistir.
+    - Log estructurado via setup_logging; integra con observabilidad externa.
+    - Documenta nuevas rutas para que RouteLister exponga metadata correcta.
+    - Esquemas Marshmallow con type hints y docstrings estilo OpenAPI.
+    - Cobertura de pruebas: unit + integration + security + performance.
+    """
+    return {
+        "scalabilidad": (
+            "Aplica paginación del CRUDMixin para listados grandes.",
+            "Carga relacionadas con selectinload/joinedload para evitar N+1.",
+            "Externaliza tareas intensivas a jobs asíncronos si exceden SLAs.",
+        ),
+        "seguridad": (
+            "JWT cookies seguras + CSRF; nunca desactivar en producción.",
+            "Valida siempre payloads con Marshmallow o APIValidator.",
+            "Mantén scope de organización en servicios antes de mutar datos.",
+        ),
+        "rendimiento": (
+            "Cachea catálogos (nutrients, objectives) con cache.memoize.",
+            "Pre-carga assets críticos en templates (Tailwind, Flowbite).",
+            "Activa SQLALCHEMY_ECHO solo para debugging temporal.",
+        ),
+        "operaciones": (
+            "Publica migraciones con Flask-Migrate; evita bifurcar heads.",
+            "Versiona plantillas y assets estáticos junto a cada módulo.",
+            "Expose feature flags via Config o Organization.settings.",
+        ),
+    }
+```
+
+---
+
+## Flujo de Trabajo Recomendado
+
+### Preparación
+
+1. Analiza requisitos y define si se necesita nuevo módulo/blueprint.
+2. Diseña esquema de base de datos y migraciones (Flask-Migrate).
+3. Planea rutas y vistas, considerando rendimiento (caché, streaming).
+4. Define plantillas Jinja y JS complementario si aplica.
+5. Asegura cumplimiento de roles/permisos desde el diseño.
+
+### Desarrollo
+
+1. Usa estructura modular (routes.py, model.py, functions/service.py, `__init__`.py).
+2. Implementa autenticación (JWT) y manejo de errores consistente.
+3. Optimiza performance (consultas con `selectinload`, cache, streaming).
+4. Documenta rutas para `RouteLister`; actualiza guías si cambian flujos.
+
+### Testing
+
+- **Unit**: Modelos, servicios, validadores.
+- **Integración**: Endpoints REST, flujos JWT, RBAC.
+- **Seguridad**: Validaciones de entrada, control de acceso, CSRF.
+- **Performance**: Endpoints intensivos, manejo de archivos grandes.
+
+---
+
+## Lineamientos de Código
+
+- Sigue PEP 8, PEP 257, SOLID, DRY.
+- Usa Blueprints para modularidad; separa controladores/servicios.
+- Sanitiza entradas contra SQLi, XSS, CSRF (JWT cookies + CSRF tokens).
+- Documenta métodos/rutas con docstrings claros (`RouteLister`).
+- Emplea type hints, docstrings y Marshmallow actualizado.
+- Logging estructurado con RotatingFileHandler (`errors.log`).
+- Configura Tailwind/Flowbite a través de macros/settings en `templates/default`.
+
+---
+
+## Observabilidad y Errores
+
+- `app/helpers/error_handler.py` captura excepciones globales, loggea contexto (método, headers, body, traceback).
+- Respuestas JSON para `/api/*`, HTML para web; fallback textual si falla plantilla.
+- Rotating logs (máx 1 MB, 10 backups). Ajusta rutas según despliegue.
+
+---
+
+## Assets y Tema
+
+- `Config.THEME` selecciona carpeta de templates (`app/templates/<theme>`).
+- Plantillas base (`base.j2`) usan macros/partials; mantén UI consistente (Tailwind).
+- Assets estáticos en `app/static/assets`; preferir bundling ligero y preloads.
+
+---

@@ -235,8 +235,11 @@ def get_cv_nutrients():
     if not check_resource_access(lot.farm, claims):
         return jsonify({"error": "No tienes acceso a este lote"}), 403
 
-    nutrients = Nutrient.query.order_by(Nutrient.id).all()
-    data = {n.name: float(n.cv) if n.cv is not None else None for n in nutrients}
+    coeficientes = determinar_coeficientes_variacion(lot_id)
+    data = {
+        name: float(value) if value is not None else None
+        for name, value in coeficientes.items()
+    }
 
     return jsonify(data)
 

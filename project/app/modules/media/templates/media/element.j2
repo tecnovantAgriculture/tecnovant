@@ -1,0 +1,171 @@
+{% extends "base.j2" %}
+
+{% set dashboard = true %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto">
+  <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
+    <div>
+      <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">Detalle del elemento</h1>
+      <p class="text-sm text-gray-500 dark:text-gray-300">Información del archivo <span class="font-medium text-gray-900 dark:text-gray-100">{{ asset.original_name }}</span>.</p>
+    </div>
+    <div class="flex gap-2">
+      <a href="{{ url_for('media.library') }}" class="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-900">Volver a la biblioteca</a>
+      <a href="{{ download_url }}" class="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md bg-blue-600 text-white hover:bg-blue-700">Descargar</a>
+    </div>
+  </div>
+
+  <div class="grid gap-6 md:grid-cols-2">
+    <div id="media-card-preview" class="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
+      <div class="aspect-video flex items-center justify-center bg-gray-100 dark:bg-gray-800">
+        <img src="{{ thumb_url }}" alt="Miniatura de {{ asset.original_name }}" class="max-h-full max-w-full object-contain" loading="lazy" decoding="async">
+      </div>
+      <div class="flex items-center justify-between gap-3 border-t border-gray-200 dark:border-gray-800 px-4 py-3 text-sm">
+        <a href="{{ asset_url }}" target="_blank" class="inline-flex items-center text-blue-600 hover:text-blue-700 dark:text-blue-300 dark:hover:text-blue-200">Ver original</a>
+        <span class="text-gray-500 dark:text-gray-400">ID interno: {{ asset.id }}</span>
+      </div>
+    </div>
+
+    <div id="media-card-properties" class="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-4">
+      <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Propiedades</h2>
+      {% set size_bytes = asset.size_bytes or 0 %}
+      {% set size_kb = size_bytes / 1024 %}
+      {% if size_kb < 1024 %}
+        {% set display_size = size_kb %}
+        {% set display_unit = 'KB' %}
+      {% elif size_kb < 1024 * 1024 %}
+        {% set display_size = size_kb / 1024 %}
+        {% set display_unit = 'MB' %}
+      {% else %}
+        {% set display_size = size_kb / (1024 * 1024) %}
+        {% set display_unit = 'GB' %}
+      {% endif %}
+      <dl class="space-y-3 text-sm">
+        <div class="flex justify-between gap-4">
+          <dt class="w-32 text-gray-500 dark:text-gray-400">Nombre</dt>
+          <dd class="flex-1 text-gray-900 dark:text-gray-100 break-words">{{ asset.original_name }}</dd>
+        </div>
+        <div class="flex justify-between gap-4">
+          <dt class="w-32 text-gray-500 dark:text-gray-400">Tipo</dt>
+          <dd class="flex-1 text-gray-900 dark:text-gray-100">{{ asset.asset_type }}</dd>
+        </div>
+        <div class="flex justify-between gap-4">
+          <dt class="w-32 text-gray-500 dark:text-gray-400">MIME</dt>
+          <dd class="flex-1 text-gray-900 dark:text-gray-100">{{ asset.mime }}</dd>
+        </div>
+        <div class="flex justify-between gap-4">
+          <dt class="w-32 text-gray-500 dark:text-gray-400">Extensión</dt>
+          <dd class="flex-1 text-gray-900 dark:text-gray-100">{{ asset.ext }}</dd>
+        </div>
+        <div class="flex justify-between gap-4">
+          <dt class="w-32 text-gray-500 dark:text-gray-400">Dimensiones</dt>
+          <dd class="flex-1 text-gray-900 dark:text-gray-100">{{ asset.width or '?' }} × {{ asset.height or '?' }} px</dd>
+        </div>
+        <div class="flex justify-between gap-4">
+          <dt class="w-32 text-gray-500 dark:text-gray-400">Tamaño</dt>
+          <dd class="flex-1 text-gray-900 dark:text-gray-100">{{ display_size|round(2) }} {{ display_unit }}</dd>
+        </div>
+        <div class="flex justify-between gap-4">
+          <dt class="w-32 text-gray-500 dark:text-gray-400">Almacenamiento</dt>
+          <dd class="flex-1 text-gray-900 dark:text-gray-100">{{ asset.storage }}</dd>
+        </div>
+        <div class="flex justify-between gap-4">
+          <dt class="w-32 text-gray-500 dark:text-gray-400">Clave</dt>
+          <dd class="flex-1 text-gray-900 dark:text-gray-100 break-all">{{ asset.storage_key }}</dd>
+        </div>
+        <div class="flex justify-between gap-4">
+          <dt class="w-32 text-gray-500 dark:text-gray-400">SHA-256</dt>
+          <dd class="flex-1 text-gray-900 dark:text-gray-100 break-all">{{ asset.sha256 }}</dd>
+        </div>
+        <div class="flex justify-between gap-4">
+          <dt class="w-32 text-gray-500 dark:text-gray-400">Creado</dt>
+          <dd class="flex-1 text-gray-900 dark:text-gray-100">{{ asset.created_at.strftime('%d/%m/%Y %H:%M') }}</dd>
+        </div>
+        <div class="flex justify-between gap-4">
+          <dt class="w-32 text-gray-500 dark:text-gray-400">Geoespacial</dt>
+          <dd class="flex-1 text-gray-900 dark:text-gray-100">{{ 'Sí' if asset.is_geo else 'No' }}</dd>
+        </div>
+        {% if asset.crs %}
+        <div class="flex justify-between gap-4">
+          <dt class="w-32 text-gray-500 dark:text-gray-400">CRS</dt>
+          <dd class="flex-1 text-gray-900 dark:text-gray-100">{{ asset.crs }}</dd>
+        </div>
+        {% endif %}
+      </dl>
+    </div>
+  </div>
+
+  <div id="media-card-preprocess" class="mt-6 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-4">
+    <div class="flex items-start justify-between gap-3">
+      <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Preprocesamiento RGB</h2>
+      {% if preproc_status.is_processing %}
+      <div class="flex items-center gap-2 text-sm text-blue-600 dark:text-blue-300">
+        <svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+        </svg>
+        <span>Preprocesamiento en curso…</span>
+      </div>
+      {% endif %}
+    </div>
+
+    {% if preproc_status.error %}
+    <div class="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-700 dark:bg-red-900/40 dark:text-red-200">
+      <p class="font-medium">El último intento de procesamiento falló.</p>
+      <p class="mt-1 break-words text-xs">{{ preproc_status.error }}</p>
+    </div>
+    {% endif %}
+
+    {% if preproc_previews %}
+    <div class="mt-4 grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-4">
+      {% for preview in preproc_previews %}
+      <div class="rounded-md border border-gray-200 dark:border-gray-800 overflow-hidden bg-gray-50 dark:bg-gray-950">
+        <div class="aspect-video flex items-center justify-center bg-gray-100 dark:bg-gray-900">
+          <img src="{{ preview.url }}" alt="{{ preview.label }} de {{ asset.original_name }}" class="max-h-full max-w-full object-contain" loading="lazy" decoding="async">
+        </div>
+        <div class="px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-200">{{ preview.label }}</div>
+      </div>
+      {% endfor %}
+    </div>
+    {% elif not preproc_status.is_processing %}
+    <p class="mt-4 text-sm text-gray-600 dark:text-gray-300">Aún no hay previsualizaciones disponibles para este activo.</p>
+    {% endif %}
+
+    <div class="mt-5 flex flex-wrap items-center gap-3">
+      {% if preproc_status.is_processing %}
+      <span class="text-xs text-gray-500 dark:text-gray-400">Vuelve a revisar en unos minutos para ver los resultados.</span>
+      {% else %}
+      {# <form method="post" action="{{ url_for('media.element_reprocess', objective_id=asset.id) }}">
+        <button type="submit" class="inline-flex items-center rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-100 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+          {% if preproc_status.error %}Reprocesar imágenes{% else %}Generar preprocesamiento{% endif %}
+        </button>
+      </form> #}
+      {% endif %}
+    </div>
+  </div>
+
+  {% if asset.exif %}
+  <div id="media-card-exif" class="mt-6 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-4">
+    <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-3">Metadatos EXIF</h2>
+    <pre class="max-h-80 overflow-auto whitespace-pre-wrap break-words text-xs text-gray-700 dark:text-gray-200">{{ asset.exif | tojson(indent=2) }}</pre>
+  </div>
+  {% endif %}
+
+  {% if asset.bounds or asset.transform %}
+  <div class="mt-6 grid gap-4 md:grid-cols-2">
+    {% if asset.bounds %}
+    <div id="media-card-bounds" class="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-4">
+      <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">Límites</h2>
+      <pre class="whitespace-pre-wrap break-words text-xs text-gray-700 dark:text-gray-200">{{ asset.bounds | tojson(indent=2) }}</pre>
+    </div>
+    {% endif %}
+    {% if asset.transform %}
+    <div id="media-card-transform" class="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-4">
+      <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">Transformación</h2>
+      <pre class="whitespace-pre-wrap break-words text-xs text-gray-700 dark:text-gray-200">{{ asset.transform | tojson(indent=2) }}</pre>
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

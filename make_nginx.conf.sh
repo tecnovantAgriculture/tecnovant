@@ -8,6 +8,16 @@ if [ -z "$DOMAIN" ]; then
   exit 1
 fi
 
+CLIENT_MAX_BODY_SIZE="$MEDIA_MAX_UPLOAD_SIZE"
+PROJECT_ENV="project/.env"
+if [ -z "$CLIENT_MAX_BODY_SIZE" ] && [ -f "$PROJECT_ENV" ]; then
+  CLIENT_MAX_BODY_SIZE=$(grep -E '^MEDIA_MAX_UPLOAD_SIZE=' "$PROJECT_ENV" | tail -n1 | cut -d '=' -f2-)
+fi
+if [ -z "$CLIENT_MAX_BODY_SIZE" ]; then
+  CLIENT_MAX_BODY_SIZE="2G"
+fi
+CLIENT_MAX_BODY_SIZE=$(echo "$CLIENT_MAX_BODY_SIZE" | tr -d '"' | tr -d "'")
+
 cat > nginx.conf <<EOF
 events {
     worker_connections 1024;
@@ -26,6 +36,7 @@ http {
     server {
         listen 80;
         server_name $DOMAIN;
+        client_max_body_size $CLIENT_MAX_BODY_SIZE;
 
         location /.well-known/acme-challenge/ {
             root /var/www/certbot;
@@ -39,6 +50,7 @@ http {
     server {
         listen 443 ssl;
         server_name $DOMAIN;
+        client_max_body_size $CLIENT_MAX_BODY_SIZE;
 
         ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
         ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
@@ -78,4 +90,3 @@ http {
 EOF
 
 echo "✅ nginx.conf generado para el dominio: $DOMAIN"
-
