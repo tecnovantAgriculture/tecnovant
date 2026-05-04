@@ -1,0 +1,391 @@
+{% set form_fields = {
+    "nombre": {
+        "label": "Nombre del Proyecto",
+        "type": "text",
+        "required": True,
+        "placeholder": "Ej: Proyecto X"
+    },
+    "contraseña": {
+        "label": "Contraseña",
+        "type": "password",
+        "required": True
+    },
+    "correo": {
+        "label": "Correo Electrónico",
+        "type": "email",
+        "required": True,
+        "placeholder": "ejemplo@dominio.com"
+    },
+    "fecha_inicio": {
+        "label": "Fecha de Inicio",
+        "type": "date",
+        "required": True
+    },
+    "fecha_hora": {
+        "label": "Fecha y Hora",
+        "type": "datetime-local",
+        "required": True
+    },
+    "telefono": {
+        "label": "Teléfono",
+        "type": "tel",
+        "placeholder": "+1234567890"
+    },
+    "sitio_web": {
+        "label": "Sitio Web",
+        "type": "url",
+        "placeholder": "https://ejemplo.com"
+    },
+    "presupuesto": {
+        "label": "Presupuesto",
+        "type": "number",
+        "required": True,
+        "min": 0,
+        "max": 1000000
+    },
+    "color_fondo": {
+        "label": "Color de Fondo",
+        "type": "color",
+        "required": False
+    },
+    "mes": {
+        "label": "Mes",
+        "type": "month",
+        "required": True
+    },
+    "semana": {
+        "label": "Semana",
+        "type": "week",
+        "required": False
+    },
+    "hora": {
+        "label": "Hora",
+        "type": "time",
+        "required": False
+    },
+    "busqueda": {
+        "label": "Búsqueda",
+        "type": "search",
+        "placeholder": "Buscar..."
+    },
+    "progreso": {
+        "label": "Progreso",
+        "type": "range",
+        "min": 0,
+        "max": 100
+    },
+    "documento": {
+        "label": "Documento",
+        "type": "file",
+        "required": False
+    },
+    "imagen": {
+        "label": "Imagen",
+        "type": "image",
+        "required": False
+    },
+    "oculto": {
+        "label": "Campo Oculto",
+        "type": "hidden"
+    },
+    "estado": {
+        "label": "Estado",
+        "type": "select",
+        "required": True,
+        "options": {
+            "Activo": "activo",
+            "Inactivo": "inactivo",
+            "Pendiente": "pendiente"
+        },
+        "new_value": True  # Permite agregar una opción personalizada
+    },
+    "prioridad": {
+        "label": "Prioridad",
+        "type": "radio",
+        "required": True,
+        "options": {
+            "Alta": "alta",
+            "Media": "media",
+            "Baja": "baja"
+        }
+    },
+    "terminado": {
+        "label": "Terminado",
+        "type": "checkbox",
+        "required": False
+    }
+}
+%}
+{% block extra_js %}
+<script>
+{{ super() }} // para incluir el js preexistente
+    function initializeFieldHandlers() {
+        // text
+        const nombre = document.getElementById('nombre');
+        if (nombre) {
+            nombre.addEventListener('input', function(e) {
+                if (e.target.value.length > 50) {
+                    e.target.value = e.target.value.slice(0, 50);
+                    alert('El nombre no puede exceder 50 caracteres');
+                }
+            });
+        }
+
+        // password
+        const contraseña = document.getElementById('contraseña');
+        if (contraseña) {
+            contraseña.addEventListener('change', function(e) {
+                if (e.target.value.length < 8) {
+                    e.target.setCustomValidity('La contraseña debe tener al menos 8 caracteres');
+                } else {
+                    e.target.setCustomValidity('');
+                }
+            });
+        }
+
+        // email
+        const correo = document.getElementById('correo');
+        if (correo) {
+            correo.addEventListener('input', function(e) {
+                const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                if (!emailRegex.test(e.target.value)) {
+                    e.target.setCustomValidity('Correo inválido');
+                } else {
+                    e.target.setCustomValidity('');
+                }
+            });
+        }
+
+        // date
+        const fechaInicio = document.getElementById('fecha_inicio');
+        if (fechaInicio) {
+            fechaInicio.addEventListener('change', function(e) {
+                const today = new Date().toISOString().split('T')[0];
+                if (e.target.value < today) {
+                    e.target.setCustomValidity('La fecha no puede ser anterior a hoy');
+                } else {
+                    e.target.setCustomValidity('');
+                }
+            });
+        }
+
+        // datetime-local
+        const fechaHora = document.getElementById('fecha_hora');
+        if (fechaHora) {
+            fechaHora.addEventListener('change', function(e) {
+                const now = new Date().toISOString().slice(0, 16);
+                if (e.target.value < now) {
+                    e.target.setCustomValidity('La fecha y hora no pueden ser pasadas');
+                } else {
+                    e.target.setCustomValidity('');
+                }
+            });
+        }
+
+        // tel
+        const telefono = document.getElementById('telefono');
+        if (telefono) {
+            telefono.addEventListener('input', function(e) {
+                e.target.value = e.target.value.replace(/[^0-9+]/g, '');
+            });
+        }
+
+        // url
+        const sitioWeb = document.getElementById('sitio_web');
+        if (sitioWeb) {
+            sitioWeb.addEventListener('input', function(e) {
+                if (!e.target.value.startsWith('http')) {
+                    e.target.value = 'https://' + e.target.value;
+                }
+            });
+        }
+
+        // number
+        const presupuesto = document.getElementById('presupuesto');
+        if (presupuesto) {
+            presupuesto.addEventListener('change', function(e) {
+                const value = parseFloat(e.target.value);
+                if (value < 0 || value > 1000000) {
+                    e.target.setCustomValidity('El presupuesto debe estar entre 0 y 1,000,000');
+                } else {
+                    e.target.setCustomValidity('');
+                }
+            });
+        }
+
+        // color
+        const colorFondo = document.getElementById('color_fondo');
+        if (colorFondo) {
+            colorFondo.addEventListener('change', function(e) {
+                document.body.style.backgroundColor = e.target.value;
+            });
+        }
+
+        // month
+        const mes = document.getElementById('mes');
+        if (mes) {
+            mes.addEventListener('change', function(e) {
+                console.log('Mes seleccionado:', e.target.value);
+            });
+        }
+
+        // week
+        const semana = document.getElementById('semana');
+        if (semana) {
+            semana.addEventListener('change', function(e) {
+                console.log('Semana seleccionada:', e.target.value);
+            });
+        }
+
+        // time
+        const hora = document.getElementById('hora');
+        if (hora) {
+            hora.addEventListener('change', function(e) {
+                console.log('Hora seleccionada:', e.target.value);
+            });
+        }
+
+        // search
+        const busqueda = document.getElementById('busqueda');
+        if (busqueda) {
+            busqueda.addEventListener('input', function(e) {
+                console.log('Buscando:', e.target.value);
+            });
+        }
+
+        // range
+        const progreso = document.getElementById('progreso');
+        if (progreso) {
+            progreso.addEventListener('input', function(e) {
+                console.log('Progreso:', e.target.value + '%');
+            });
+        }
+
+        // file
+        const documento = document.getElementById('documento');
+        if (documento) {
+            documento.addEventListener('change', function(e) {
+                if (e.target.files[0] && e.target.files[0].size > 5 * 1024 * 1024) { // 5MB
+                    alert('El archivo no puede exceder 5MB');
+                    e.target.value = '';
+                }
+            });
+        }
+
+        // image (tratado como input de archivo en este contexto)
+        const imagen = document.getElementById('imagen');
+        if (imagen) {
+            imagen.addEventListener('change', function(e) {
+                if (e.target.files[0]) {
+                    const reader = new FileReader();
+                    reader.onload = function(event) {
+                        console.log('Imagen cargada:', event.target.result);
+                    };
+                    reader.readAsDataURL(e.target.files[0]);
+                }
+            });
+        }
+
+        // hidden
+        const oculto = document.getElementById('oculto');
+        if (oculto) {
+            oculto.value = 'valor_oculto'; // Ejemplo de asignación
+            console.log('Valor oculto asignado:', oculto.value);
+        }
+
+        // select
+        const estado = document.getElementById('estado');
+        if (estado) {
+            estado.addEventListener('change', function(e) {
+                const customInput = document.getElementById('estado_custom');
+                if (e.target.value === 'other' && customInput) {
+                    customInput.focus();
+                }
+            });
+        }
+
+        // radio
+        const prioridadRadios = document.getElementsByName('prioridad');
+        prioridadRadios.forEach(radio => {
+            radio.addEventListener('change', function(e) {
+                console.log('Prioridad seleccionada:', e.target.value);
+            });
+        });
+
+        // checkbox
+        const terminado = document.getElementById('terminado');
+        if (terminado) {
+            terminado.addEventListener('change', function(e) {
+                console.log('Terminado:', e.target.checked);
+            });
+        }
+    }
+
+    // Ejecutar las inicializaciones cuando el DOM esté listo
+    document.addEventListener('DOMContentLoaded', initializeFieldHandlers);
+
+    // Modificar saveProyecto para manejar todos los tipos de campos
+    async function saveProyecto() {
+        const data = {
+            nombre: document.getElementById('nombre').value,
+            contraseña: document.getElementById('contraseña').value,
+            correo: document.getElementById('correo').value,
+            fecha_inicio: document.getElementById('fecha_inicio').value,
+            fecha_hora: document.getElementById('fecha_hora').value,
+            telefono: document.getElementById('telefono').value,
+            sitio_web: document.getElementById('sitio_web').value,
+            presupuesto: document.getElementById('presupuesto').value,
+            color_fondo: document.getElementById('color_fondo').value,
+            mes: document.getElementById('mes').value,
+            semana: document.getElementById('semana').value,
+            hora: document.getElementById('hora').value,
+            busqueda: document.getElementById('busqueda').value,
+            progreso: document.getElementById('progreso').value,
+            documento: document.getElementById('documento').files[0] || null,
+            imagen: document.getElementById('imagen').files[0] || null,
+            oculto: document.getElementById('oculto').value,
+            estado: (function() {
+                const selectValue = document.getElementById('estado').value;
+                const customInput = document.getElementById('estado_custom');
+                return (selectValue === 'other' && customInput && !customInput.disabled) ? customInput.value : selectValue;
+            })(),
+            prioridad: document.querySelector('input[name="prioridad"]:checked')?.value || '',
+            terminado: document.getElementById('terminado').checked
+        };
+
+        const hasFiles = data.documento !== null || data.imagen !== null;
+        let url = '{{ api_url }}';
+        let method = currentAction === 'edit' ? 'PUT' : 'POST';
+
+        if (currentAction === 'edit') {
+            data.id = currentProyectoId;
+            url += currentProyectoId.toString();
+        }
+
+        if (hasFiles) {
+            const formData = new FormData();
+            for (const key in data) {
+                if (data[key] !== null && data[key] !== '') {
+                    formData.append(key, data[key]);
+                }
+            }
+            await fetch(url, {
+                method: method,
+                credentials: 'include',
+                headers: { "X-CSRF-TOKEN": getCookie("csrf_access_token") },
+                body: formData
+            }).then(response => response.ok ? location.reload() : alert('Error al guardar'));
+        } else {
+            await fetch(url, {
+                method: method,
+                credentials: 'include',
+                headers: {
+                    'Content-Type': 'application/json',
+                    "X-CSRF-TOKEN": getCookie("csrf_access_token")
+                },
+                body: JSON.stringify(data)
+            }).then(response => response.ok ? location.reload() : alert('Error al guardar'));
+        }
+    }
+</script>
+{% endblock %}

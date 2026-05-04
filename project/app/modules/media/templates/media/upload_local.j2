@@ -1,0 +1,189 @@
+{% extends "base.j2" %}
+
+{% set dashboard = dashboard if dashboard is defined else true %}
+
+{% block header %}
+  {% if not picker_mode %}
+    {{ super() }}
+  {% endif %}
+{% endblock %}
+
+{% block footer %}
+  {% if not picker_mode %}
+    {{ super() }}
+  {% endif %}
+{% endblock %}
+
+{% block extra_css %}
+  {{ super() }}
+  {% if picker_mode %}
+  <style>
+    body { background-color: transparent; }
+  </style>
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+<div id="media-upload-overlay" class="fixed inset-0 z-40 hidden items-center justify-center bg-black/40 backdrop-blur-sm">
+  <div class="flex flex-col items-center gap-3 rounded-2xl border border-white/30 bg-white/90 px-6 py-5 shadow-xl dark:bg-gray-900/90">
+    <div class="relative h-12 w-12">
+       <div class="absolute inset-0 rounded-full border-4 border-emerald-500/40"></div>
+       <div class="absolute inset-0 rounded-full border-4 border-emerald-500 border-t-transparent animate-spin"></div>
+      <div class="absolute inset-2 rounded-full bg-white/95 dark:bg-gray-900/95"></div>
+    </div>
+    <p class="text-sm font-medium text-gray-700 dark:text-gray-200">Subiendo archivo…</p>
+    <p class="text-xs text-gray-500 dark:text-gray-400">Esto puede tardar unos segundos.</p>
+  </div>
+</div>
+<div class="max-w-3xl">
+  <h1 class="text-2xl font-semibold text-gray-900 dark:text-white mb-2">Subir desde tu equipo</h1>
+  <p class="text-sm text-gray-500 dark:text-gray-300 mb-6">Formatos permitidos: .tiff, .png, .jpg, .jpeg.</p>
+
+  <form method="post" enctype="multipart/form-data" class="rounded-lg border border-dashed border-gray-300 dark:border-gray-700 p-6 bg-white dark:bg-gray-900">
+    <div class="mb-4">
+      <label for="media_files" class="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Selecciona archivo</label>
+       <input id="media_files" name="media_files" type="file" accept=".tiff,.tif,.png,.jpg,.jpeg" class="block w-full text-sm text-gray-900 dark:text-gray-100 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 dark:file:bg-emerald-900 dark:file:text-emerald-100">
+    </div>
+
+    <div class="flex items-center gap-2">
+        <button id="btn-upload" type="submit" class="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md bg-emerald-600 text-white hover:bg-emerald-700">Subir archivo</button>
+       {% if picker_mode %}
+       <a href="{{ url_for('media.library', picker=1, event=picker_event_name, multi=1 if picker_multi else 0, allowed=picker_allowed_types | join(',') if picker_allowed_types else '') }}" class="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-900">Volver a la biblioteca</a>
+       {% else %}
+       <a href="{{ url_for('media.library') }}" class="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-900">Volver a la biblioteca</a>
+       {% endif %}
+    </div>
+  </form>
+
+  <div class="mt-6 text-sm text-gray-500 dark:text-gray-300">
+    Al subir, se guarda localmente y se registra en la base de datos.
+  </div>
+
+  <div id="upload-msg" class="mt-4 text-sm"></div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function getCookie(name) {
+  const value = `; ${document.cookie}`;
+  const parts = value.split(`; ${name}=`);
+  if (parts.length === 2) return parts.pop().split(';').shift();
+}
+
+{% if picker_mode %}
+(function(){
+  const eventName = {{ picker_event_name|tojson }};
+  const allowMulti = {{ picker_multi | tojson }};
+
+  function postToParent(payload) {
+    try {
+      window.parent.postMessage(payload, '*');
+    } catch (err) {
+      console.error('No se pudo enviar el mensaje al padre', err);
+    }
+  }
+
+  function sendSelection(assetData) {
+    const payload = {
+      type: eventName,
+      payload: assetData
+    };
+    postToParent(payload);
+  }
+
+  function sendLifecycle(kind) {
+    postToParent({ type: `${eventName}:${kind}` });
+  }
+
+  // Exponer funciones para uso en el upload handler
+  window.__pickerSendSelection = sendSelection;
+  window.__pickerSendLifecycle = sendLifecycle;
+
+  // Notificar que el picker está listo
+  sendLifecycle('ready');
+})();
+{% endif %}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const form = document.querySelector('form[enctype="multipart/form-data"]');
+  const input = document.getElementById('media_files');
+  const msg = document.getElementById('upload-msg');
+  const btn = document.getElementById('btn-upload');
+  const overlay = document.getElementById('media-upload-overlay');
+  let overlayCounter = 0;
+
+  const showOverlay = () => {
+    overlayCounter += 1;
+    if (overlay) {
+      overlay.classList.remove('hidden');
+      overlay.classList.add('flex');
+    }
+    window.dispatchEvent(new CustomEvent('media:upload:start'));
+    window.postMessage({ type: 'media-upload-start' }, '*');
+  };
+
+  const hideOverlay = () => {
+    overlayCounter = Math.max(0, overlayCounter - 1);
+    if (overlay && overlayCounter === 0) {
+      overlay.classList.add('hidden');
+      overlay.classList.remove('flex');
+    }
+    window.dispatchEvent(new CustomEvent('media:upload:end'));
+    window.postMessage({ type: 'media-upload-end' }, '*');
+  };
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    msg.textContent = '';
+    const file = input.files && input.files[0];
+    if (!file) { msg.textContent = 'Selecciona un archivo.'; return; }
+    btn.disabled = true; btn.classList.add('opacity-60', 'cursor-not-allowed');
+    showOverlay();
+    try {
+      const fd = new FormData();
+      fd.append('file', file, file.name);
+      const csrf = getCookie('csrf_access_token');
+      const res = await fetch('{{ url_for('media_api.upload_local_api') }}', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'X-CSRF-TOKEN': csrf || '' },
+        body: fd,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+         msg.className = 'mt-4 text-sm text-emerald-700';
+        msg.textContent = 'Subida exitosa';
+        input.value = '';
+        {% if picker_mode %}
+        // En modo picker, enviar el asset al padre después de subir
+        if (data.asset && window.__pickerSendSelection) {
+          window.__pickerSendSelection({
+            id: data.asset.id || null,
+            storage_key: data.asset.storage_key || '',
+            original_name: data.asset.original_name || file.name,
+            mime: data.asset.mime || '',
+            asset_type: data.asset.asset_type || '',
+            width: data.asset.width || null,
+            height: data.asset.height || null,
+            size_bytes: data.asset.size_bytes || null,
+            serve_url: data.asset.serve_url || '',
+            download_url: data.asset.download_url || ''
+          });
+        }
+        {% endif %}
+      } else {
+         msg.className = 'mt-4 text-sm text-red-600';
+        msg.textContent = data.message || 'Error al subir el archivo';
+      }
+    } catch (err) {
+       msg.className = 'mt-4 text-sm text-red-600';
+      msg.textContent = 'Error de red al subir.';
+    } finally {
+      btn.disabled = false; btn.classList.remove('opacity-60', 'cursor-not-allowed');
+      hideOverlay();
+    }
+  });
+});
+</script>
+{% endblock %}

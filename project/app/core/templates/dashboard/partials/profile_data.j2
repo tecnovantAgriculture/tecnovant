@@ -1,0 +1,96 @@
+{# profile_data.j2 - User profile data form #}
+{% from "settings/_ui_class.j2" import card_base, base_button_classes, button_bg_color, base_input_classes %}
+{% from "macros/_forms.j2" import render_alert %}
+
+<!-- Sección Perfil de Usuario -->
+<div class="{{ card_base }}">
+    <div class="border-b border-gray-100 dark:border-gray-700 pb-4 mb-5">
+        <h2 class="text-sm font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+            <i class="fas fa-user text-emerald-600"></i>
+            Perfil de Usuario
+        </h2>
+    </div>
+    <div id="profile-alerts"></div>
+    <form id="profileForm" autocomplete="on">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+
+            <!-- Nombre de Usuario (deshabilitado) -->
+            <div>
+                <label for="username" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Nombre de Usuario
+                </label>
+                <input type="text"
+                       id="username"
+                       name="username"
+                       autocomplete="username"
+                       class="block w-full rounded-lg px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed"
+                       disabled
+                       value="{{ username }}">
+                <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                    Rol: <span class="font-medium text-gray-600 dark:text-gray-300">{{ role }}</span>
+                </p>
+            </div>
+
+            <!-- Nombre Completo -->
+            <div>
+                <label for="full_name" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Nombre Completo
+                </label>
+                <input type="text"
+                       id="full_name"
+                       name="full_name"
+                       class="{{ base_input_classes }}"
+                       value="{{ full_name }}">
+                {% if organizations %}
+                <div class="mt-2">
+                    <p class="text-xs text-gray-400 dark:text-gray-500 mb-1.5">Organizaciones asignadas:</p>
+                    <div class="flex flex-wrap gap-1.5">
+                        {% for org in organizations %}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-600">
+                            {{ org.name }}
+                        </span>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% else %}
+                <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">Sin organizaciones asignadas.</p>
+                {% endif %}
+            </div>
+
+            <!-- Correo Electrónico -->
+            <div>
+                <label for="email" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Correo Electrónico
+                </label>
+                <input type="email"
+                       id="email"
+                       name="email"
+                       autocomplete="email"
+                       class="{{ base_input_classes }}"
+                       value="{{ email }}">
+            </div>
+
+            <!-- Fecha de Nacimiento -->
+            <div>
+                <label for="birthday" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Fecha de Nacimiento
+                </label>
+                <input type="date"
+                       id="birthday"
+                       name="birthday"
+                       class="{{ base_input_classes }}"
+                       value="{{ birthday or '' }}">
+                <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">Formato: AAAA-MM-DD</p>
+            </div>
+
+        </div>
+        <div class="mt-5 pt-4 border-t border-gray-100 dark:border-gray-700 flex justify-end">
+            <button type="submit"
+                    id="updateProfileBtn"
+                    class="{{ base_button_classes }} {{ button_bg_color }} text-white"
+                    aria-label="Actualizar perfil">
+                <i class="fas fa-save mr-1.5"></i>Guardar cambios
+            </button>
+        </div>
+    </form>
+</div>

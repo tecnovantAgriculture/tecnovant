@@ -1,0 +1,24 @@
+{% extends "layouts/crud_base.j2" %}
+{# identificadores de entidad #}
+{% set entity_name = "Analisis_de_suelos" %}
+{% set entity_name_lower = "analisis_de_suelo" %}
+{% set show_select_box = True %}
+{# Mostrar la grid de ítems #}
+{% set table_headers = ["ID", "ID del análisis común", "Energía", "Pastoreo", "Fecha de creación", "Fecha de actualización"] %}
+{% set item_fields = ["id", "common_analysis_id", "energy", "grazing", "created_at", "updated_at"] %}
+
+{# formulario de editar y add #}
+{% set form_fields = {
+    
+     "common_analysis_id": {
+            "type": "select",
+            "label": "Análisis común",
+            "options": common_analysis_options,
+            "required": True,
+        },
+    'energy': {'type': 'text', 'label': 'Energía', 'required': True},
+    'grazing': {'type': 'text', 'label': 'Pastoreo', 'required': True},
+} %}
+{# entregado desde el endpoint #}
+{# api de consumo #}
+{% set api_url = url_for('foliage_api.nutrient_applications') %}

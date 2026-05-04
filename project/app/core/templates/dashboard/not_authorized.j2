@@ -1,0 +1,20 @@
+{% extends "base.j2" %}
+
+{% block content %}
+<div class="flex justify-center items-center home p-4">
+<div class="text-center">
+    <h1 class="text-8xl font-extrabold text-red-600 tracking-wider">
+      NO AUTORIZADO
+    </h1>
+     <p class="mt-4 text-xl text-gray-600 dark:text-gray-400">
+      No tienes permiso para acceder a esta página.
+    </p>
+     <button class="mt-8 bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-800 text-white font-semibold py-2 px-4 rounded transition-colors">
+      <a href="{{ url_for('core.login') }}">Volver</a>
+    </button>
+  </div>
+  </div>
+  
+{% endblock %}
+
+

@@ -1,0 +1,76 @@
+{# _csrf.j2 — Centralized CSRF token helper
+#
+# Included once in <head> (via partials/head.j2).
+# Provides two globals:
+#   getCsrfToken()   — returns the token string
+#   apiFetch(url, opts) — drop-in replacement for fetch()
+#
+# Usage in JS:
+#   apiFetch('/api/something', { method: 'POST', body: JSON.stringify(data) })
+#     .then(r => r.json()).then(console.log);
+#
+# Or with explicit token:
+#   headers: { 'X-CSRFToken': getCsrfToken() }
+#}
+<script>
+(function() {
+    'use strict';
+
+    /**
+     * Retrieve CSRF token from (in priority order):
+     *  1. <meta name="csrf-token" content="...">  (injected by backend)
+     *  2. Cookie: csrf_token  (Flask-WTF default)
+     *  3. Cookie: csrf_access_token (Flask-JWT-Extended)
+     *
+     * Returns '' if nothing found.
+     */
+    window.getCsrfToken = function() {
+        // 1) Meta tag
+        var meta = document.querySelector('meta[name="csrf-token"]');
+        if (meta && meta.content) return meta.content;
+
+        // 2) Cookie — try both common names
+        var token = _getCookie('csrf_token');
+        if (token) return token;
+        return _getCookie('csrf_access_token') || '';
+    };
+
+    /**
+     * Drop-in fetch wrapper that automatically attaches the CSRF token
+     * and sets JSON content-type.
+     *
+     * @param {string|Request} url
+     * @param {Object} [options]
+     * @returns {Promise<Response>}
+     */
+    window.apiFetch = function(url, options) {
+        options = options || {};
+        var headers = Object.assign({}, options.headers || {});
+
+        // Attach CSRF token
+        var csrf = getCsrfToken();
+        if (csrf) {
+            headers['X-CSRFToken'] = csrf;
+        }
+
+        // Default to JSON if body is provided and Content-Type not already set
+        if (options.body && !headers['Content-Type']) {
+            headers['Content-Type'] = 'application/json';
+        }
+
+        return fetch(url, Object.assign({}, options, {
+            headers: headers,
+            credentials: 'same-origin'
+        }));
+    };
+
+    /* ── Internal helpers ─────────────────────────────────── */
+
+    function _getCookie(name) {
+        var match = document.cookie.match(
+            new RegExp('(^|;\\s*)' + name + '=([^;]*)')
+        );
+        return match ? decodeURIComponent(match[2]) : '';
+    }
+})();
+</script>

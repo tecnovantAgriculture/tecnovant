@@ -1,0 +1,61 @@
+{# profile.j2 - Main profile page (refactored to use partials) #}
+{% extends "base.j2" %}
+{% set dashboard = true %}
+
+{% set data_menu = {
+"menu": [
+{"name": "Home", "url": url_for('core.index') },
+{"name": "Logout", "url": url_for('core.logout') },
+{"name": "Profile", "url": url_for('core.profile') }
+]
+} %}
+{% set title = "Mi Perfil" %}
+
+{% block content %}
+<div class="w-full bg-gray-50 dark:bg-gray-900 min-h-screen">
+    <div class="max-w-7xl mx-auto px-6 py-6 space-y-6">
+
+        {# Profile hero section: avatar and user info #}
+        {% include "dashboard/partials/profile_hero.j2" %}
+
+        {# Avatar upload form (hidden by default) #}
+        {% include "dashboard/partials/profile_avatar_upload.j2" %}
+
+        {# Profile data form: full_name, email, birthday, organizations #}
+        {% include "dashboard/partials/profile_data.j2" %}
+
+        {# Password change form #}
+        {% include "dashboard/partials/profile_password.j2" %}
+
+        {# Notifications placeholder #}
+        {% from "settings/_ui_class.j2" import card_base %}
+        <div class="{{ card_base }} opacity-80">
+            <div class="flex items-center gap-4">
+                <div class="p-2.5 rounded-xl bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 flex-shrink-0">
+                    <i class="fas fa-bell text-base"></i>
+                </div>
+                <div class="flex-1 min-w-0">
+                    <h2 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Notificaciones</h2>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Esta sección estará disponible próximamente.</p>
+                </div>
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 whitespace-nowrap flex-shrink-0">
+                    Próximamente
+                </span>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    window.PROFILE_CONFIG = {
+        avatarDefault: '{{ avatar_default }}',
+        changePasswordUrl: "{{ url_for('core_api.change_password_view') }}"
+    };
+</script>
+<script src="/js/modules/avatar-manager.js"></script>
+<script src="/js/modules/profile-form.js"></script>
+<script src="/js/modules/password-form.js"></script>
+<script src="/js/profile.js"></script>
+{% endblock %}

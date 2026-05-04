@@ -1,0 +1,188 @@
+{# partials/sidebar.j2 #}
+{# Dynamic sidebar, show menus based on user role #}
+{% from "settings/_ui_class.j2" import class_sidebar_menu %}
+{% from "settings/_flowbite_solid_icons.j2" import icon_caret_down, icon_caret_left, icon_home, icon_window, icon_users, icon_microscope, icon_file_chart_bar, icon_tractor, icon_satellite_dish %}
+
+{# "name": "Administración", "url": "#", "icon": icon_window, "pro": true #}
+{% set sidebar_menu = {
+    "menu": [
+        {"name": "Inicio", "url": url_for('core.dashboard'), "icon": icon_home},
+    ]
+} %}
+
+{% set analysis_image_submenu = [
+    {"name": "NDVI / VARI Tool", "url": url_for('agrovista.hello') },
+    {"name": "Objetivos secundarios", "url": url_for('agrovista.secondary_objectives') },
+] %}
+{% if user_id %}
+    {% set analysis_image_submenu = analysis_image_submenu + [
+        {"name": "Ortofotos y medios", "url": url_for('media.library') },
+        {"name": "Importar local", "url": url_for('media.upload_local') },
+        {"name": "Importar desde S3", "url": url_for('media.upload_s3') },
+    ] %}
+{% endif %}
+{% set analysis_image_menu = {
+    "name": "Análisis de imagen",
+    "url": "#",
+    "icon": icon_satellite_dish,
+    "submenu": analysis_image_submenu
+} %}
+{% set sidebar_menu = {
+    "menu": sidebar_menu.menu + [analysis_image_menu]
+} %}
+
+{% if rol == "administrator" or rol == "reseller" %}
+    {% set fincas_lotes_menu = {
+        "name": "Fincas y lotes",
+        "url": "#",
+    "icon": icon_tractor,
+        "submenu": [
+            {"name": "Clientes", "url": url_for('core.amd_clients')},
+            {"name": "Fincas", "url": url_for('foliage.amd_farms') },
+            {"name": "Lotes", "url": url_for('foliage.amd_lots') },
+            {"name": "Lote / Cultivo", "url": url_for('foliage.amd_lot_crops') },
+        ]
+    } %}
+    {% set sidebar_menu = {
+        "menu": sidebar_menu.menu + [fincas_lotes_menu]
+    } %}
+{% endif %}
+
+{% if rol == "administrator" or rol == "reseller" %}
+    {% set forms_menu = {
+        "name": "Formularios de análisis",
+        "url": "#",
+        "icon": icon_microscope,
+        "submenu": [
+            {"name": "Análisis foliar (físico)", "url": url_for('foliage.amd_common_analyses') },
+            {"name": "Foliares digitales", "url": url_for('foliage.amd_leaf_analyses') },
+            {"name": "Análisis de suelo", "url": url_for('foliage.amd_soil_analyses') },
+            {"name": "Aplicaciones de nutrientes", "url": url_for('foliage.amd_nutrient_applications') },
+            {"name": "Producción", "url": url_for('foliage.amd_productions') },
+        ]
+    } %}
+    {% set sidebar_menu = {
+        "menu": sidebar_menu.menu + [forms_menu]
+    } %}
+{% endif %}
+
+{# "name": "Ver reporte", "url": url_for('foliage_report.vista_reporte') #}
+{% set reportes = {
+    "name": "Reportes",
+    "url": "#",
+    "icon": icon_file_chart_bar,
+    "submenu": [
+        {"name": "Recomendaciones", "url": url_for('foliage_report.listar_reportes') },
+        {"name": "Generar reporte", "url": url_for('foliage_report.generar_informe') },
+    ]
+} %}
+{% set sidebar_menu = {
+    "menu": sidebar_menu.menu + [reportes]
+} %}
+
+
+
+ <aside id="sidebar" class="z-10 w-100 md:w-64 flex-shrink-0 h-full overflow-y-auto sidebar-hidden md:block mobile-drawer sidebar-transition bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white transition-colors duration-150"
+    aria-label="Sidebar">
+    <div class="h-full px-3 py-4 overflow-y-auto bg-gray-50 dark:bg-gray-800">
+    {% if sidebar_menu %}
+        <ul class="space-y-2 font-medium">
+            {% for item in sidebar_menu.menu %}
+                {% set is_active = false %}
+                  {% if item.submenu %}
+                       {% set ns = namespace(match_count=0) %}
+                      {% for submenu_item in item.submenu %}
+                          {% set normalized_request = request.path.rstrip('/') %}
+                          {% set normalized_submenu = submenu_item.url.rstrip('/') %}
+                          {% set is_match = normalized_request == normalized_submenu %}
+                          {% if is_match %}
+                              {% set ns.match_count = ns.match_count + 1 %}
+                          {% endif %}
+
+
+                      {% endfor %}
+                      {% set is_active = ns.match_count > 0 %}
+
+                {% else %}
+                    {% set normalized_request = request.path.rstrip('/') %}
+                    {% set normalized_link = item.url.rstrip('/') %}
+                    {% if normalized_request == normalized_link %}
+                        {% set is_active = true %}
+                    {% endif %}
+                {% endif %}
+                <li class="sidebar__item" data-title="{{ item.name }}" data-visible="{% if item.submenu %}{{ item.visible|default('onClick') }}{% endif %}">
+                    {% if item.submenu %}
+                        {% set icon_svg = item.icon %}
+                        {% set chevron_svg = icon_caret_down %}
+                        {% if is_active %}
+                            {% set icon_svg = icon_svg|replace('text-gray-500', 'text-emerald-600')|replace('dark:text-gray-400', 'dark:text-emerald-400')|replace('group-hover:text-gray-900', 'group-hover:text-emerald-600')|replace('dark:group-hover:text-white', 'dark:group-hover:text-emerald-400') %}
+                            {% set chevron_svg = chevron_svg|replace('text-gray-500', 'text-emerald-600')|replace('dark:text-gray-400', 'dark:text-emerald-400')|replace('group-hover:text-gray-900', 'group-hover:text-emerald-600')|replace('dark:group-hover:text-white', 'dark:group-hover:text-emerald-400') %}
+                        {% endif %}
+
+                            <button type="button" data-active="{{ is_active }}" class="z-40 flex items-center w-full p-2 rounded-lg {% if not is_active %}hover:bg-gray-100 dark:hover:bg-gray-700{% endif %} group text-left transition-colors duration-150 {% if is_active %}bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300{% else %}text-gray-900 dark:text-white{% endif %}">
+                             {{ icon_svg|safe }}
+                               <span class="sidebar__label flex-1 ms-3 whitespace-nowrap {% if is_active %}font-medium text-emerald-700 dark:text-emerald-300{% else %}{% if is_active %}font-medium text-gray-900 dark:text-white{% endif %}{% endif %}">{{ item.name }}</span>
+                            {{ chevron_svg|safe }}
+                        </button>
+                         <ul class="hidden pl-1 mt-2 space-y-2 rounded-lg bg-gray-100 dark:bg-gray-800">
+                            {% for submenu_item in item.submenu %}
+                                {% set normalized_request = request.path.rstrip('/') %}
+                                {% set normalized_submenu = submenu_item.url.rstrip('/') %}
+                                {% set is_sub_active = normalized_request == normalized_submenu %}
+                                <li>
+                                      <a href="{{ submenu_item.url }}" class="flex p-2 rounded-lg dark:text-white hover:bg-gray-300 dark:hover:bg-gray-700 group transition-colors duration-150 {% if is_sub_active %}bg-emerald-200 dark:bg-emerald-800 font-medium text-emerald-800 dark:text-emerald-200{% else %}text-gray-900{% endif %}">
+                                         <span class="sidebar__label flex-1 ms-3 whitespace-nowrap">{{ submenu_item.name }}</span>
+                                    </a>
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        {% set normalized_request = request.path.rstrip('/') %}
+                        {% set normalized_link = item.url.rstrip('/') %}
+                        {% set is_link_active = normalized_request == normalized_link %}
+                         <a href="{{ item.url }}" data-active="{{ is_link_active }}" class="flex items-center p-2 rounded-lg {% if not is_link_active %}hover:bg-gray-100 dark:hover:bg-gray-700{% endif %} group transition-colors duration-150 {% if is_link_active %}bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300{% else %}text-gray-900 dark:text-white{% endif %}">
+                              {% set icon_svg = item.icon %}
+                              {% if is_link_active %}
+                                  {% set icon_svg = icon_svg|replace('text-gray-500', 'text-emerald-600')|replace('dark:text-gray-400', 'dark:text-emerald-400') %}
+                              {% endif %}
+                              {{ icon_svg|safe }}
+                                <span class="sidebar__label flex-1 ms-3 whitespace-nowrap {% if is_link_active %}font-medium text-emerald-700 dark:text-emerald-300{% else %}{% if is_link_active %}font-medium text-gray-900 dark:text-white{% endif %}{% endif %}">{{ item.name }}</span>
+                            {% if item.pro %}
+                                <span class="inline-flex items-center justify-center px-2 ms-3 text-sm font-medium text-gray-800 bg-gray-300 rounded-full dark:bg-gray-700 dark:text-gray-300">Pro</span>
+                            {% endif %}
+                            {% if item.notifications %}
+                                <span class="inline-flex items-center justify-center w-3 h-3 p-3 ms-3 text-sm font-medium text-sky-800 bg-sky-100 rounded-full dark:bg-sky-900 dark:text-sky-300">
+                                    {{ item.notifications }}
+                                </span>
+                            {% endif %}
+                        </a>
+                    {% endif %}
+                </li>
+            {% endfor %}
+         </ul>
+
+          {# Desktop sidebar toggle button (hidden on mobile) #}
+         <div class="hidden lg:block mt-auto pt-4 border-t border-gray-200 dark:border-gray-700">
+           <button id="sidebar-toggle-desktop"
+                   class="w-full flex items-center justify-center p-3 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors duration-150"
+                   aria-label="Colapsar menú"
+                   aria-expanded="true">
+             {{ icon_caret_left|safe }}
+           </button>
+         </div>
+        {% else %}
+            <p class="text-center text-gray-500">No menu items</p>
+        {% endif %}
+    </div>
+</aside>
+
+<!-- Mobile Toggle Button (hidden in desktop) -->
+<button id="sidebar-toggle" class="md:hidden fixed bottom-4 right-4 z-50 p-3 bg-emerald-600 text-white rounded-full shadow-lg hover:bg-emerald-700 transition-colors" aria-label="Toggle Sidebar">
+    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"></path>
+    </svg>
+</button>
+
+<!-- Overlay for mobile (hidden by default) -->
+<div id="sidebar-overlay" class="md:hidden fixed inset-0 bg-black bg-opacity-50 z-40 hidden"></div>
+

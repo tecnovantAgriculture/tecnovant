@@ -1,0 +1,27 @@
+{% extends "layouts/crud_base.j2" %}
+
+{# identificadores de entidad #}
+{% set entity_name = "Usuarios" %}
+{% set entity_name_lower = "usuario" %}
+{% set show_select_box = True %}
+
+{# Mostrar la grid de ítems #}
+{% set table_headers = ["ID", "Nombre de Usuario", "Nombre Completo", "Correo Electrónico", "Rol", "Cliente", "Estado"] %}
+{% set item_fields = ["id", "username", "full_name", "email", "role", "org", 'active' ] %}
+
+
+{# formulario de editar y add #}
+{% set form_fields = {
+    'username': {'type': 'text', 'label': 'Nombre de usuario', 'required': True, 'disabled_in_edit': True},
+    'full_name': {'type': 'text', 'label': 'Nombre completo', 'required': True},
+    'email': {'type': 'email', 'label': 'Correo electrónico', 'required': True},
+    'role': {'type': 'select', 'label': 'Roles', 'options': {'Administrador': 'administrator', 'Reseller': 'reseller', 'Org Admin': 'org_admin','Org Editor': 'org_editor', 'Usuario Básico': 'org_viewer'}, 'required': True, 'new_value': False},    
+    'organization_id': {'type': 'select', 'label': 'Cliente', 'options': org_dict, 'required': True, 'new_value': True},
+    'password': {'type': 'password', 'label': 'Clave', 'required': True},
+    'password_confirm': {'type': 'password', 'label': 'Confirmar Clave', 'required': True}
+} %}
+
+{# entregado desde el endpoint #}
+
+{# api de consumo #}
+{% set api_url = url_for('core_api.user_view') %}

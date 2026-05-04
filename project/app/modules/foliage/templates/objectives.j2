@@ -1,0 +1,65 @@
+{% extends "layouts/crud_base.j2" %}
+{# identificadores de entidad #}
+{% set entity_name = "Objetivos" %}
+{% set entity_name_lower = "objetivo" %}
+{% set show_select_box = False %}
+
+{% set show_view_button = True %}
+{# Mostrar la grid de ítems #}
+
+{% set base_headers = ["ID", "Cultivo", "Valor Objetivo", "Proteína", "Descanso", "Fecha de Creación", "Fecha de Actualización"] %}
+{% set nutrient_headers = [] %}
+{% for nutrient in nutrient_ids %}
+    {% set nutrient_headers = nutrient_headers + [nutrient.name] %}
+{% endfor %}
+{% set table_headers = base_headers + nutrient_headers %}
+
+{% set base_fields = ["id", "crop_name", "target_value", "protein", "rest", "created_at", "updated_at"] %}
+{% set nutrient_fields = [] %}
+{% for nutrient in nutrient_ids %}
+    {% set nutrient_fields = nutrient_fields + ["nutrient_" ~ nutrient.id] %}
+{% endfor %}
+{% set item_fields = base_fields + nutrient_fields %}
+
+
+{# formulario de editar y add #}
+{% for key, value in form_fields.items() %}
+    {% if key != 'crop_id' %}
+        {{ render_field(value, form[key]) }}
+    {% else %}
+        {{ render_field(value, form[key]) }}
+    {% endif %}
+{% endfor %}
+
+
+{# api de consumo #}
+
+{% set api_url = url_for('foliage_api.objectives') %}
+
+
+{% block extra_js %}
+{{ super() }} 
+<script>
+// Rellena el formulario con los datos del elemento seleccionado
+function fillFormWithData(id) {
+        const item = {{ items | tojson | safe }}.find(f => String(f.id) === String(id));
+        if (item) {
+            document.getElementById('{{ entity_name_lower }}Id').value = item.id;
+            document.getElementById('crop_id').value = item.crop_id || '';
+            document.getElementById('target_value').value = item.target_value || '';
+            document.getElementById('protein').value = item.protein || '';
+            document.getElementById('rest').value = item.rest || '';
+
+            {# Rellenar los valores de nutrient_targets #}
+            if (item.nutrient_targets) {
+                item.nutrient_targets.forEach(target => {
+                    const field = document.getElementById(`nutrient_${target.nutrient_id}`);
+                    if (field) {
+                        field.value = target.target_value || '';
+                    }
+                });
+            }
+        }
+    }
+</script>
+{% endblock %}

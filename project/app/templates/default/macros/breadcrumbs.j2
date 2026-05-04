@@ -1,0 +1,29 @@
+{# macros/breadcrumbs.j2 #}
+{# Macro para renderizar breadcrumbs de navegación #}
+{# Uso: {% from "macros/breadcrumbs.j2" import render_breadcrumbs %}
+       {{ render_breadcrumbs(breadcrumbs) }} #}
+
+{% macro render_breadcrumbs(breadcrumbs) %}
+{% if breadcrumbs and breadcrumbs|length > 0 %}
+<nav class="mb-4 flex items-center text-xs text-gray-500 dark:text-gray-400" aria-label="Breadcrumb">
+  <ol class="inline-flex items-center space-x-1">
+    {% for crumb in breadcrumbs %}
+      {% if not loop.last %}
+        <li class="flex items-center">
+          {% if crumb.url %}
+            <a href="{{ url_for(crumb.url) }}" class="hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors duration-150">
+              {{ crumb.name }}
+            </a>
+          {% else %}
+            <span class="text-gray-600 dark:text-gray-500">{{ crumb.name }}</span>
+          {% endif %}
+          <span class="mx-1 text-gray-500 dark:text-gray-400">/</span>
+        </li>
+      {% else %}
+        <li class="font-medium text-gray-700 dark:text-gray-300">{{ crumb.name }}</li>
+      {% endif %}
+    {% endfor %}
+  </ol>
+</nav>
+{% endif %}
+{% endmacro %}

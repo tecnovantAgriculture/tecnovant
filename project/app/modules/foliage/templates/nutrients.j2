@@ -1,0 +1,24 @@
+{% extends "layouts/crud_base.j2" %}
+{# identificadores de entidad #}
+{% set entity_name = "Nutrientes" %}
+{% set entity_name_lower = "nutriente" %}
+{% set show_select_box = True %}
+{# Mostrar la grid de ítems #}
+{% set table_headers = ["ID", "Nombre del nutriente", "Símbolo del nutriente", "Unidad del nutriente", "Descripción", "CV"] %}
+{% set item_fields = ["id", "name", "symbol", "unit", "description", "cv"] %}
+
+{# formulario de editar y add #}
+{% set form_fields = {
+    'name': {'type': 'text', 'label': 'Nombre del nutriente', 'required': True},
+    'symbol': {'type': 'text', 'label': 'Símbolo del nutriente', 'required': True},
+    'unit': {'type': 'text', 'label': 'Unidad del nutriente', 'required': True},
+    'cv': {
+        'type': 'number',
+        'label': 'Coeficiente de variación',
+        'step': 'any',
+    },
+} %}
+{# entregado desde el endpoint #}
+{# api de consumo #}
+{% set api_url = url_for('foliage_api.nutrients') %}
+

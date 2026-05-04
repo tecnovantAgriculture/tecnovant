@@ -1,0 +1,1832 @@
+{% extends "base.j2" %}
+{% set dashboard = true %}
+{% set bg_color = "bg-transparent" %}
+{% set rounded = "" %}
+{% set shadow = "" %}
+{% set padding = "" %}
+{% set main_clases = "flex-grow overflow-y-auto p-0" %}
+{% block extra_css %}
+  {{ css_code|safe }}
+  {{ super() }}
+{% endblock %}
+
+{% block extra_head %}
+  {{ js_code|safe }}
+  {{ super() }}
+{% endblock %}
+
+{% block content %}
+<!-- Hidden metadata for PDF export -->
+<span id="meta-username" class="hidden">{{ claims.get('full_name', 'Sistema') if claims else 'Sistema' }}</span>
+<span id="meta-orgname" class="hidden">{{ context_client if context_client else '' }}</span>
+<div class="min-h-screen bg-slate-50">
+  <div id="comparison-content" class="mx-auto max-w-7xl px-4 py-6 lg:px-8 lg:py-8">
+    <div id="comparison-error" class="hidden mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"></div>
+
+    <nav class="mb-4 flex items-center text-xs text-gray-500" aria-label="Breadcrumb">
+      <ol class="inline-flex items-center space-x-1">
+        <li>
+          <a href="{{ url_for('core.dashboard') }}" class="hover:text-emerald-700">Inicio</a>
+        </li>
+        <li class="flex items-center">
+          <span class="mx-1">/</span>
+          <a href="{{ url_for('agrovista.hello') }}" class="hover:text-emerald-700">Análisis</a>
+        </li>
+        <li class="flex items-center">
+          <span class="mx-1">/</span>
+          <span class="font-medium text-gray-700">Comparación nutricional</span>
+        </li>
+      </ol>
+    </nav>
+
+    <header class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <h1 class="text-xl font-semibold text-gray-900">Comparación nutricional</h1>
+        <p class="mt-1 text-sm text-gray-600">
+          Revisa las brechas nutricionales entre el lote analizado y su referencia
+          (objetivo ideal o lote comparativo) y visualiza la tabla de Ley de Mínimos.
+        </p>
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        <span id="modeBadge" class="inline-flex items-center rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-800">
+          Modo: --
+        </span>
+        <a href="{{ url_for('agrovista.hello') }}"
+           class="inline-flex items-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50">
+          Volver al mapa
+        </a>
+      </div>
+    </header>
+
+    <section class="mb-6 grid gap-4 lg:grid-cols-12">
+      <article class="lg:col-span-5 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+        <div class="mb-3 flex items-center justify-between gap-2">
+          <h2 id="analysisCardTitle" class="text-sm font-semibold text-gray-800">Lote analizado</h2>
+          <span id="analysisCardBadge" class="rounded-full bg-gray-100 px-2.5 py-0.5 text-[11px] font-medium uppercase tracking-wide text-gray-500">
+            Lote
+          </span>
+        </div>
+        <div class="grid gap-3 sm:grid-cols-2">
+          <div class="rounded-xl bg-slate-100 p-2">
+            <div class="mb-2 flex h-24 items-center justify-center rounded-lg bg-slate-300 text-[11px] font-medium text-slate-700">
+              Vista ortofoto lote
+            </div>
+            <dl class="space-y-1 text-xs text-gray-600">
+              <div class="flex justify-between">
+                <dt class="text-gray-500">Nombre</dt>
+                <dd id="analysisLotName" class="font-medium text-gray-800">--</dd>
+              </div>
+              <div class="flex justify-between">
+                <dt class="text-gray-500">Área</dt>
+                <dd id="analysisLotArea" class="font-medium text-gray-800">--</dd>
+              </div>
+              <div class="flex justify-between">
+                <dt class="text-gray-500">Cultivo</dt>
+                <dd id="analysisLotCrop" class="font-medium text-gray-800">--</dd>
+              </div>
+              <div class="flex justify-between">
+                <dt class="text-gray-500">Fecha análisis</dt>
+                <dd id="analysisLotDate" class="font-medium text-gray-800">--</dd>
+              </div>
+            </dl>
+          </div>
+
+          <div class="space-y-2 rounded-xl bg-slate-50 p-3 text-xs">
+            <h3 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-gray-600">
+              Índices promedio (lote)
+            </h3>
+            <div class="grid grid-cols-3 gap-2 text-center">
+              <div class="rounded-lg bg-white px-2 py-2 shadow-sm">
+                <dt class="text-[11px] uppercase tracking-wide text-gray-500">NDVI</dt>
+                <dd id="analysisNdvi" class="mt-1 text-base font-semibold text-gray-900">--</dd>
+              </div>
+              <div class="rounded-lg bg-white px-2 py-2 shadow-sm">
+                <dt class="text-[11px] uppercase tracking-wide text-gray-500">VARI</dt>
+                <dd id="analysisVari" class="mt-1 text-base font-semibold text-gray-900">--</dd>
+              </div>
+              <div class="rounded-lg bg-white px-2 py-2 shadow-sm">
+                <dt class="text-[11px] uppercase tracking-wide text-gray-500">NBI</dt>
+                <dd id="analysisNbi" class="mt-1 text-base font-semibold text-gray-900">--</dd>
+              </div>
+            </div>
+            <p class="mt-1 text-[11px] text-gray-500">
+              Valores calculados a partir de los polígonos seleccionados en la ortofoto.
+            </p>
+          </div>
+        </div>
+      </article>
+
+      <article class="lg:col-span-5 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+        <div class="mb-3 flex items-center justify-between gap-2">
+          <h2 id="referenceCardTitle" class="text-sm font-semibold text-gray-800">
+            Referencia de comparación
+          </h2>
+          <span id="referenceCardBadge" class="rounded-full bg-indigo-50 px-2.5 py-0.5 text-[11px] font-medium uppercase tracking-wide text-indigo-700">
+            --
+          </span>
+        </div>
+        <div class="mb-3">
+          <button id="changeReferenceBtn"
+                  type="button"
+                  class="inline-flex w-full items-center justify-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-700 shadow-sm hover:bg-indigo-100 dark:border-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 dark:hover:bg-indigo-900/50">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+            Cambiar referencia
+          </button>
+        </div>
+        <div class="grid gap-3 sm:grid-cols-2">
+          <div class="rounded-xl bg-slate-100 p-2">
+            <div class="mb-2 flex h-24 items-center justify-center rounded-lg bg-slate-300 text-[11px] font-medium text-slate-700">
+              Vista de referencia
+            </div>
+            <dl class="space-y-1 text-xs text-gray-600">
+              <div class="flex justify-between">
+                <dt class="text-gray-500">Objetivo</dt>
+                <dd id="referenceName" class="font-medium text-gray-800">--</dd>
+              </div>
+              <div class="flex justify-between">
+                <dt class="text-gray-500">Fuente</dt>
+                <dd id="referenceSource" class="font-medium text-gray-800">--</dd>
+              </div>
+              <div class="flex justify-between">
+                <dt class="text-gray-500">Tipo</dt>
+                <dd id="referenceType" class="font-medium text-gray-800">--</dd>
+              </div>
+            </dl>
+          </div>
+
+          <div class="space-y-2 rounded-xl bg-slate-50 p-3 text-xs">
+            <h3 class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-gray-600">
+              Índices de referencia
+            </h3>
+            <div class="grid grid-cols-3 gap-2 text-center">
+              <div class="rounded-lg bg-white px-2 py-2 shadow-sm">
+                <dt class="text-[11px] uppercase tracking-wide text-gray-500">NDVI</dt>
+                <dd id="referenceNdvi" class="mt-1 text-base font-semibold text-gray-900">--</dd>
+              </div>
+              <div class="rounded-lg bg-white px-2 py-2 shadow-sm">
+                <dt class="text-[11px] uppercase tracking-wide text-gray-500">VARI</dt>
+                <dd id="referenceVari" class="mt-1 text-base font-semibold text-gray-900">--</dd>
+              </div>
+              <div class="rounded-lg bg-white px-2 py-2 shadow-sm">
+                <dt class="text-[11px] uppercase tracking-wide text-gray-500">NBI</dt>
+                <dd id="referenceNbi" class="mt-1 text-base font-semibold text-gray-900">--</dd>
+              </div>
+            </div>
+            <p class="mt-1 text-[11px] text-gray-500">
+              Valores de referencia definidos para este objetivo de cultivo.
+            </p>
+          </div>
+        </div>
+      </article>
+
+      <aside class="lg:col-span-2 flex flex-col gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4 shadow-sm">
+        <h2 class="text-sm font-semibold text-emerald-900">Resumen de brechas</h2>
+        <dl class="space-y-1 text-xs">
+          <div class="flex justify-between">
+            <dt class="text-emerald-900">Nutriente limitante principal</dt>
+            <dd id="limitingNutrient" class="font-semibold text-red-600">--</dd>
+          </div>
+          <div class="flex justify-between">
+            <dt class="text-emerald-900">Nutrientes en rango óptimo</dt>
+            <dd id="optimalNutrients" class="text-emerald-800">--</dd>
+          </div>
+          <div class="flex justify-between">
+            <dt class="text-emerald-900">Nutrientes en exceso</dt>
+            <dd id="excessNutrients" class="text-orange-700">--</dd>
+          </div>
+        </dl>
+        <p class="mt-2 text-[11px] text-emerald-900">
+          La Ley de Mínimos se calcula con base en el nutriente más deficitario.
+          Revisa la tabla detallada para ver los porcentajes de brecha por cada nutriente.
+        </p>
+      </aside>
+    </section>
+
+    <section class="mb-6 space-y-4">
+      <article class="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+        <h2 class="mb-3 text-sm font-semibold text-gray-800">Información del Cultivo (objetivo ideal)</h2>
+        <div class="overflow-x-auto">
+          <table class="min-w-full divide-y divide-gray-200 text-xs">
+            <thead class="bg-gray-50">
+              <tr id="cropInfoHeader"></tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100 bg-white">
+              <tr id="cropInfoRow"></tr>
+            </tbody>
+          </table>
+        </div>
+      </article>
+
+      <article class="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+        <h2 class="mb-3 text-sm font-semibold text-gray-800">Información del Análisis</h2>
+        <p id="analysisMeta" class="mb-3 text-xs text-gray-500">--</p>
+        <div class="overflow-x-auto">
+          <table class="min-w-full divide-y divide-gray-200 text-xs">
+            <thead class="bg-gray-50">
+              <tr id="analysisInfoHeader"></tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100 bg-white">
+              <tr id="analysisInfoRow"></tr>
+            </tbody>
+          </table>
+        </div>
+      </article>
+
+      <article class="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+        <h2 class="mb-3 text-sm font-semibold text-gray-800">CV por nutriente</h2>
+        <div class="overflow-x-auto">
+          <table class="min-w-full divide-y divide-gray-200 text-xs">
+            <thead class="bg-gray-50">
+              <tr id="cvInfoHeader"></tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100 bg-white">
+              <tr id="cvInfoRow"></tr>
+            </tbody>
+          </table>
+        </div>
+      </article>
+    </section>
+
+    <section class="mb-8 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+      <div class="mb-3 flex items-center justify-between gap-2">
+        <h2 class="text-sm font-semibold text-gray-800">Tabla de Cálculos – Ley de Mínimos</h2>
+        <span class="rounded-full bg-gray-100 px-2.5 py-0.5 text-[11px] text-gray-600">
+          Valores expresados en % respecto al objetivo
+        </span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200 text-xs">
+          <thead class="bg-gray-50">
+            <tr id="lawTableHeader"></tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100 bg-white" id="lawTableBody"></tbody>
+        </table>
+      </div>
+      <p class="mt-3 text-[11px] text-gray-600">
+        El nutriente limitante principal es aquel con mayor déficit porcentual negativo.
+        La recomendación de formulación se calculará tomando como base dicho nutriente y
+        ajustando el resto de aportes para mantener los rangos óptimos.
+      </p>
+    </section>
+
+    <section class="flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 pt-4">
+      <div class="text-[11px] text-gray-500">
+        Revisa los resultados antes de generar el informe definitivo o guardar la formulación propuesta.
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <button id="exportPdfBtn"
+                type="button"
+                class="inline-flex items-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50">
+          Exportar PDF
+        </button>
+        <button id="previewReportBtn"
+                type="button"
+                class="inline-flex items-center rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-semibold text-emerald-700 shadow-sm hover:bg-emerald-100">
+          Vista previa de recomendación
+        </button>
+        <button id="saveReportBtn"
+                type="button"
+                class="inline-flex items-center rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700">
+          Guardar como informe
+        </button>
+      </div>
+    </section>
+  </div>
+</div>
+
+<!-- Modal de vista previa de recomendación (C4) -->
+<div id="previewModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center px-4 py-6">
+  <div class="w-full max-w-3xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl max-h-[90vh] overflow-y-auto">
+    <div class="flex items-start justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-700">
+      <div>
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Vista previa de recomendación</h2>
+        <p class="text-sm text-gray-500 dark:text-gray-400">Diagnóstico nutricional y productos recomendados antes de guardar.</p>
+      </div>
+      <button type="button" id="previewModalClose" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+      </button>
+    </div>
+    <div class="px-5 py-4 space-y-4">
+      <div id="previewDiagnosis" class="text-sm text-gray-700 dark:text-gray-300"></div>
+      <div id="previewTable" class="overflow-x-auto"></div>
+      <div id="previewProducts" class="text-sm text-gray-700 dark:text-gray-300"></div>
+      <div id="previewCost" class="text-sm font-semibold text-emerald-700 dark:text-emerald-400"></div>
+      <div id="previewWarnings" class="text-sm text-orange-600 dark:text-orange-400"></div>
+      <div class="flex justify-end gap-2 pt-2 border-t border-gray-200 dark:border-gray-700">
+        <button type="button" id="previewModalCloseBtn"
+                class="inline-flex items-center rounded-lg border border-gray-200 bg-white px-4 py-2 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50">
+          Cerrar
+        </button>
+        <button type="button" id="previewSaveBtn"
+                class="inline-flex items-center rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700">
+          Confirmar y guardar
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal de cambio de referencia (C-ref) -->
+<div id="referenceModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center px-4 py-6">
+  <div class="w-full max-w-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl max-h-[80vh] overflow-y-auto">
+    <div class="flex items-start justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-700">
+      <div>
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Cambiar referencia de comparación</h2>
+        <p class="text-sm text-gray-500 dark:text-gray-400">Selecciona un objetivo ideal o secundario para reformular los resultados.</p>
+      </div>
+      <button type="button" id="referenceModalClose" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+      </button>
+    </div>
+    <div class="px-5 py-4 space-y-4">
+      <div>
+        <label class="block text-sm font-medium mb-1 text-gray-900 dark:text-gray-100">Objetivos de cultivo</label>
+        <select id="refModalCropObjective"
+                class="w-full border p-2 rounded dark:bg-gray-700 dark:border-gray-600 text-sm">
+          <option value="">Selecciona un objetivo de cultivo...</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-medium mb-1 text-gray-900 dark:text-gray-100">Objetivos secundarios</label>
+        <select id="refModalSecondaryObjective"
+                class="w-full border p-2 rounded dark:bg-gray-700 dark:border-gray-600 text-sm">
+          <option value="">Selecciona un objetivo secundario...</option>
+        </select>
+      </div>
+      <div id="referenceModalError" class="hidden text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded p-2"></div>
+      <div class="flex justify-end gap-2 pt-2 border-t border-gray-200 dark:border-gray-700">
+        <button type="button" id="referenceModalCancel"
+                class="inline-flex items-center rounded-lg border border-gray-200 bg-white px-4 py-2 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50">
+          Cancelar
+        </button>
+        <button type="button" id="referenceModalApply"
+                class="inline-flex items-center rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700"
+                disabled>
+          Aplicar referencia
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/js/jspdf.umd.min.js"></script>
+<script>
+  (() => {
+    "use strict";
+
+    const el = {
+      error: document.getElementById("comparison-error"),
+      modeBadge: document.getElementById("modeBadge"),
+      analysisCardTitle: document.getElementById("analysisCardTitle"),
+      analysisCardBadge: document.getElementById("analysisCardBadge"),
+      analysisLotName: document.getElementById("analysisLotName"),
+      analysisLotArea: document.getElementById("analysisLotArea"),
+      analysisLotCrop: document.getElementById("analysisLotCrop"),
+      analysisLotDate: document.getElementById("analysisLotDate"),
+      analysisNdvi: document.getElementById("analysisNdvi"),
+      analysisVari: document.getElementById("analysisVari"),
+      analysisNbi: document.getElementById("analysisNbi"),
+      referenceCardBadge: document.getElementById("referenceCardBadge"),
+      referenceName: document.getElementById("referenceName"),
+      referenceSource: document.getElementById("referenceSource"),
+      referenceType: document.getElementById("referenceType"),
+      referenceNdvi: document.getElementById("referenceNdvi"),
+      referenceVari: document.getElementById("referenceVari"),
+      referenceNbi: document.getElementById("referenceNbi"),
+      limitingNutrient: document.getElementById("limitingNutrient"),
+      optimalNutrients: document.getElementById("optimalNutrients"),
+      excessNutrients: document.getElementById("excessNutrients"),
+      cropInfoHeader: document.getElementById("cropInfoHeader"),
+      cropInfoRow: document.getElementById("cropInfoRow"),
+      analysisMeta: document.getElementById("analysisMeta"),
+      analysisInfoHeader: document.getElementById("analysisInfoHeader"),
+      analysisInfoRow: document.getElementById("analysisInfoRow"),
+      cvInfoHeader: document.getElementById("cvInfoHeader"),
+      cvInfoRow: document.getElementById("cvInfoRow"),
+      lawTableHeader: document.getElementById("lawTableHeader"),
+      lawTableBody: document.getElementById("lawTableBody"),
+      exportPdfBtn: document.getElementById("exportPdfBtn"),
+      previewReportBtn: document.getElementById("previewReportBtn"),
+      saveReportBtn: document.getElementById("saveReportBtn"),
+      previewModal: document.getElementById("previewModal"),
+      previewModalClose: document.getElementById("previewModalClose"),
+      previewModalCloseBtn: document.getElementById("previewModalCloseBtn"),
+      previewSaveBtn: document.getElementById("previewSaveBtn"),
+      previewDiagnosis: document.getElementById("previewDiagnosis"),
+      previewTable: document.getElementById("previewTable"),
+      previewProducts: document.getElementById("previewProducts"),
+      previewCost: document.getElementById("previewCost"),
+      previewWarnings: document.getElementById("previewWarnings"),
+      changeReferenceBtn: document.getElementById("changeReferenceBtn"),
+      referenceModal: document.getElementById("referenceModal"),
+      referenceModalClose: document.getElementById("referenceModalClose"),
+      referenceModalCancel: document.getElementById("referenceModalCancel"),
+      referenceModalApply: document.getElementById("referenceModalApply"),
+      refModalCropObjective: document.getElementById("refModalCropObjective"),
+      refModalSecondaryObjective: document.getElementById("refModalSecondaryObjective"),
+      referenceModalError: document.getElementById("referenceModalError"),
+    };
+
+    const ENDPOINTS = {
+      analyses: "{{ url_for('foliage_report_api.get_analyses') }}",
+      cv: "{{ url_for('foliage_report_api.get_cv_nutrients') }}",
+      objectives: "{{ url_for('foliage_api.objectives', id=0) }}",
+      secondaryObjectives: "{{ url_for('agrovista_api.get_secondary_objective', objective_id=0) }}",
+      secondaryObjectivesList: "{{ url_for('agrovista_api.list_secondary_objectives') }}",
+      lots: "{{ url_for('foliage_api.lots_view', id=0) }}",
+      lotCrops: "{{ url_for('foliage_api.lot_crops') }}",
+      generateReport: "{{ url_for('foliage_report_api.generate_report') }}",
+      reportView: "{{ url_for('foliage_report.vista_reporte', report_id=0) }}",
+    };
+
+    let payload = null;
+    let analysisData = null;
+    let objectiveData = null;
+    let objectiveType = null;
+    let cvData = {};
+    let nutrientOrder = [];
+    let targetValues = {};
+    let actualValues = {};
+    let minimumLawPayload = {};
+    let lotCrops = [];
+    let currentAnalysisMeta = {
+      farmName: "",
+      lotName: "",
+      area: "",
+      cropName: "",
+      analysisDate: "",
+      username: "",
+      orgName: "",
+    };
+
+    function showError(message){
+      if(!el.error){
+        return;
+      }
+      el.error.textContent = message;
+      el.error.classList.remove("hidden");
+    }
+
+    function setText(node, value, fallback = "--"){
+      if(!node){
+        return;
+      }
+      const text = value == null || value === "" ? fallback : value;
+      node.textContent = text;
+    }
+
+    function formatNumber(value, decimals = 2){
+      if(typeof value === "number" && isFinite(value)){
+        return value.toFixed(decimals);
+      }
+      if(typeof value === "string" && value.trim() !== "" && !isNaN(value)){
+        return Number(value).toFixed(decimals);
+      }
+      return "--";
+    }
+
+    function getCsrfToken(){
+      const value = `; ${document.cookie}`;
+      const parts = value.split("; csrf_access_token=");
+      if(parts.length === 2){
+        return parts.pop().split(";").shift();
+      }
+      return "";
+    }
+
+    function parseUrlParams(){
+      const params = new URLSearchParams(window.location.search);
+      const mode = params.get("mode");
+      if(!mode){
+        return null;
+      }
+      if(mode === "lot_vs_objective"){
+        const lotId = params.get("lot_id");
+        const commonAnalysisId = params.get("common_analysis_id");
+        const objectiveId = params.get("objective_id");
+        const objectiveType = params.get("objective_type") || "crop";
+        const objectiveLabel = params.get("objective_label") || "";
+        const lotLabel = params.get("lot_label") || "";
+        if(!lotId || !objectiveId){
+          return null;
+        }
+        return {
+          mode: "lot_vs_objective",
+          lot_id: Number(lotId),
+          common_analysis_id: Number(commonAnalysisId || 0),
+          objective: {
+            type: objectiveType,
+            id: Number(objectiveId),
+            label: objectiveLabel,
+          },
+          lot_label: lotLabel,
+        };
+      }
+      if(mode === "lot_vs_lot"){
+        const token = params.get("token");
+        if(token){
+          const raw = sessionStorage.getItem(`agrovista_comparison_${token}`);
+          if(raw){
+            try{
+              return JSON.parse(raw);
+            }catch(err){
+              console.error(err);
+            }
+          }
+        }
+        // Fallback: build minimal payload from URL params
+        const lotAId = params.get("lot_a_id");
+        const lotBId = params.get("lot_b_id");
+        const linkedLotId = params.get("linked_lot_id");
+        const linkedCommonId = params.get("linked_common_analysis_id");
+        if(!lotAId || !linkedLotId){
+          return null;
+        }
+        return {
+          mode: "lot_vs_lot",
+          lot_a: {
+            id: Number(lotAId),
+            name: params.get("lot_a_name") || "",
+            area_ha: params.get("lot_a_area_ha") ? Number(params.get("lot_a_area_ha")) : null,
+            stats: {},
+            area_stats: { nutrients: [] },
+          },
+          lot_b: {
+            id: Number(lotBId),
+            name: params.get("lot_b_name") || "",
+            area_ha: params.get("lot_b_area_ha") ? Number(params.get("lot_b_area_ha")) : null,
+            stats: {},
+            area_stats: { nutrients: [] },
+            linked_lot_id: Number(linkedLotId),
+            linked_common_analysis_id: linkedCommonId ? Number(linkedCommonId) : null,
+            linked_lot_name: params.get("linked_lot_name") || "",
+          },
+        };
+      }
+      return null;
+    }
+
+    function parseTokenPayload(){
+      // Primary: read from URL params (C1 — reliable navigation)
+      const fromUrl = parseUrlParams();
+      if(fromUrl){
+        return fromUrl;
+      }
+      // Fallback: legacy sessionStorage method
+      const params = new URLSearchParams(window.location.search);
+      const token = params.get("token");
+      if(!token){
+        return null;
+      }
+      const raw = sessionStorage.getItem(`agrovista_comparison_${token}`);
+      if(!raw){
+        return null;
+      }
+      try{
+        return JSON.parse(raw);
+      }catch(err){
+        console.error(err);
+        return null;
+      }
+    }
+
+    async function fetchJson(url, options = {}){
+      const res = await fetch(url, { credentials: "include", ...options });
+      const data = await res.json().catch(() => ({}));
+      if(!res.ok){
+        const message = data?.description || data?.error || data?.message || "Solicitud fallida";
+        throw new Error(message);
+      }
+      return data;
+    }
+
+    async function fetchLotCrops(){
+      if(lotCrops.length){
+        return lotCrops;
+      }
+      try{
+        lotCrops = await fetchJson(ENDPOINTS.lotCrops);
+      }catch(err){
+        console.error("lot-crops", err);
+        lotCrops = [];
+      }
+      return lotCrops;
+    }
+
+    function resolveCropNameForLot(lotId){
+      const items = lotCrops.filter(item => Number(item?.lot_id) === Number(lotId));
+      if(!items.length){
+        return null;
+      }
+      const active = items.find(item => !item?.end_date);
+      if(active && active.crop_name){
+        return active.crop_name;
+      }
+      items.sort((a, b) => {
+        const dateA = Date.parse(a?.start_date || "") || 0;
+        const dateB = Date.parse(b?.start_date || "") || 0;
+        return dateB - dateA;
+      });
+      return items[0]?.crop_name || null;
+    }
+
+    function resolveCropIdForLot(lotId){
+      const items = lotCrops.filter(item => Number(item?.lot_id) === Number(lotId));
+      if(!items.length){
+        return null;
+      }
+      const active = items.find(item => !item?.end_date);
+      if(active && active.crop_id){
+        return active.crop_id;
+      }
+      items.sort((a, b) => {
+        const dateA = Date.parse(a?.start_date || "") || 0;
+        const dateB = Date.parse(b?.start_date || "") || 0;
+        return dateB - dateA;
+      });
+      return items[0]?.crop_id || null;
+    }
+
+    function pickAnalysis(list, preferredId){
+      if(!Array.isArray(list) || list.length === 0){
+        return null;
+      }
+      if(preferredId){
+        const found = list.find(item => Number(item?.id) === Number(preferredId));
+        if(found){
+          return found;
+        }
+      }
+      return list.slice().sort((a, b) => {
+        const aDate = Date.parse(a?.date || "") || 0;
+        const bDate = Date.parse(b?.date || "") || 0;
+        return bDate - aDate;
+      })[0];
+    }
+
+    function collectActualValues(analysis){
+      const values = {};
+      if(!analysis || !analysis.leaf_analysis || !Array.isArray(analysis.leaf_analysis.nutrients)){
+        return values;
+      }
+      analysis.leaf_analysis.nutrients.forEach(item => {
+        if(!item){
+          return;
+        }
+        values[item.nutrient_name] = Number(item.value);
+      });
+      return values;
+    }
+
+    function collectTargetValuesFromObjective(objective){
+      const values = {};
+      if(!objective){
+        return values;
+      }
+      const targets = Array.isArray(objective.nutrient_targets) ? objective.nutrient_targets : [];
+      targets.forEach(item => {
+        if(!item){
+          return;
+        }
+        values[item.nutrient_name] = Number(item.target_value);
+      });
+      return values;
+    }
+
+    function collectTargetValuesFromSecondaryObjective(objective){
+      const values = {};
+      if(!objective){
+        return values;
+      }
+      const targets = Array.isArray(objective.nutrient_targets) ? objective.nutrient_targets : [];
+      targets.forEach(item => {
+        if(!item){
+          return;
+        }
+        values[item.nutrient_name || item.nutrient_symbol] = Number(item.target_value);
+      });
+      return values;
+    }
+
+    function collectTargetValuesFromStats(stats){
+      const values = {};
+      if(!stats || !Array.isArray(stats.nutrients)){
+        return values;
+      }
+      stats.nutrients.forEach(item => {
+        if(!item){
+          return;
+        }
+        values[item.nutrient_name || item.nutrient_symbol] = Number(item.target_value);
+      });
+      return values;
+    }
+
+    function buildNutrientOrder(){
+      const order = Object.keys(targetValues);
+      if(order.length){
+        return order;
+      }
+      return Object.keys(actualValues);
+    }
+
+    function renderHeaderRow(target, labels, prefix = ""){
+      if(!target){
+        return;
+      }
+      target.innerHTML = "";
+      labels.forEach(label => {
+        const th = document.createElement("th");
+        th.className = "px-3 py-2 text-left font-semibold text-gray-600";
+        th.textContent = `${prefix}${label}`.trim();
+        target.appendChild(th);
+      });
+    }
+
+    function renderRow(target, values, prefix = ""){
+      if(!target){
+        return;
+      }
+      target.innerHTML = "";
+      values.forEach(value => {
+        const td = document.createElement("td");
+        td.className = "px-3 py-2 text-gray-700";
+        td.textContent = `${prefix}${value}`.trim();
+        target.appendChild(td);
+      });
+    }
+
+    function renderCropInfo(cropId, cropName){
+      const order = nutrientOrder;
+      const headers = ["ID", "Cultivo", ...order];
+      const row = [
+        cropId ? String(cropId) : "--",
+        cropName || "--",
+        ...order.map(n => formatNumber(targetValues[n], 2)),
+      ];
+      renderHeaderRow(el.cropInfoHeader, headers);
+      renderRow(el.cropInfoRow, row);
+    }
+
+    function renderAnalysisInfo(analysis){
+      const order = nutrientOrder;
+      const headers = order;
+      const row = order.map(n => formatNumber(actualValues[n], 2));
+      renderHeaderRow(el.analysisInfoHeader, headers);
+      renderRow(el.analysisInfoRow, row);
+      if(analysis){
+        setText(el.analysisMeta, `Análisis N° ${analysis.id} — ${analysis.date}`);
+      }
+    }
+
+    function renderCvInfo(){
+      const order = nutrientOrder;
+      const headers = order;
+      const row = order.map(n => formatNumber(cvData[n], 2));
+      renderHeaderRow(el.cvInfoHeader, headers);
+      renderRow(el.cvInfoRow, row);
+    }
+
+    function computeMinimumLaw(){
+      const order = nutrientOrder;
+      minimumLawPayload = {};
+      const rows = [];
+
+      const buildRow = (label, values, className = "") => {
+        rows.push({ label, values, className });
+      };
+
+      // Row 1: %P — porcentaje de suficiencia
+      const pRow = order.map(n => {
+        const act = actualValues[n];
+        const targ = targetValues[n];
+        if(act == null || targ == null || targ === 0){
+          return null;
+        }
+        return (act / targ) * 100;
+      });
+      buildRow("%P", pRow);
+
+      // Row 2: I — índice de ajuste (todos los nutrientes)
+      const iRow = order.map(n => {
+        const act = actualValues[n];
+        const targ = targetValues[n];
+        const cv = cvData[n];
+        if(act == null || targ == null || targ === 0 || cv == null) return null;
+        const p = (act / targ) * 100;
+        return Math.abs(p - 100) * cv / 100;
+      });
+      buildRow("I", iRow, "bg-yellow-50");
+
+      // Row 3: R — nivel corregido (todos los nutrientes)
+      const rRow = order.map(n => {
+        const act = actualValues[n];
+        const targ = targetValues[n];
+        const cv = cvData[n];
+        if(act == null || targ == null || targ === 0 || cv == null) return null;
+        const p = (act / targ) * 100;
+        const i = Math.abs(p - 100) * cv / 100;
+        let r = p > 100 ? p - i : p + i;
+        if(r < 88) r = 88;
+        if(r > 108) r = 108;
+        return r;
+      });
+      buildRow("R", rRow, "bg-blue-50");
+
+      // Row 4: Diferencia
+      const diffRow = order.map(n => {
+        const act = actualValues[n];
+        const targ = targetValues[n];
+        if(act == null || targ == null || targ === 0){
+          return null;
+        }
+        const p = (act / targ) * 100;
+        return p - 100;
+      });
+      buildRow("Diferencia", diffRow, "bg-red-50");
+
+      // Build minimumLawPayload for backend
+      order.forEach(nutrient => {
+        const act = actualValues[nutrient];
+        const targ = targetValues[nutrient];
+        const cv = cvData[nutrient];
+        if(act == null || targ == null || targ === 0){
+          return;
+        }
+        const p = (act / targ) * 100;
+        const isLimiting = nutrient === limitingNutrient;
+        const i = (cv != null && isLimiting) ? Math.abs(p - 100) * cv / 100 : null;
+        let r = null;
+        if(i != null){
+          r = p > 100 ? p - i : p + i;
+          if(r < 88) r = 88;
+          if(r > 108) r = 108;
+        }
+        minimumLawPayload[nutrient] = {
+          "%P": p != null ? p.toFixed(2) : "-",
+          "I": i != null ? i.toFixed(2) : "-",
+          "R": r != null ? r.toFixed(2) : "-",
+          "Diferencia": (p - 100).toFixed(2),
+        };
+      });
+
+      renderMinimumLawTable(order, rows);
+      updateSummary(order);
+    }
+
+    function renderMinimumLawTable(order, rows){
+      if(!el.lawTableHeader || !el.lawTableBody){
+        return;
+      }
+      el.lawTableHeader.innerHTML = "";
+      const headLabel = document.createElement("th");
+      headLabel.className = "px-3 py-2 text-left font-semibold text-gray-600";
+      headLabel.textContent = "Fila";
+      el.lawTableHeader.appendChild(headLabel);
+
+      // Row descriptions for header
+      const rowDescriptions = ["% Suficiencia", "Índice de ajuste", "Nivel corregido", "Déficit/Exceso (%)"];
+      order.forEach(n => {
+        const th = document.createElement("th");
+        th.className = "px-3 py-2 text-left font-semibold text-gray-600";
+        th.textContent = n;
+        el.lawTableHeader.appendChild(th);
+      });
+
+      el.lawTableBody.innerHTML = "";
+      rows.forEach((row, idx) => {
+        const tr = document.createElement("tr");
+        if(row.className){
+          tr.className = row.className;
+        }
+        const th = document.createElement("td");
+        th.className = "whitespace-nowrap px-3 py-2 font-medium text-gray-800";
+        th.textContent = row.label;
+        tr.appendChild(th);
+        row.values.forEach(value => {
+          const td = document.createElement("td");
+          td.className = "px-3 py-2 text-gray-700";
+          if(value == null || Number.isNaN(value)){
+            td.textContent = "—";
+            td.classList.add("text-gray-400");
+          }else{
+            td.textContent = value.toFixed(2);
+            // Color coding
+            if(row.label === "%P"){
+              if(value < 88) td.classList.add("text-red-600", "font-semibold");
+              else if(value > 108) td.classList.add("text-orange-600");
+              else td.classList.add("text-green-600");
+            }else if(row.label === "Diferencia"){
+              if(value < 0) td.classList.add("text-red-600");
+              else if(value > 0) td.classList.add("text-orange-600");
+            }
+          }
+          tr.appendChild(td);
+        });
+        el.lawTableBody.appendChild(tr);
+      });
+    }
+
+    function updateSummary(order){
+      const entries = order.map(name => {
+        const act = actualValues[name];
+        const targ = targetValues[name];
+        if(act == null || targ == null){
+          return null;
+        }
+        const p = (act / targ) * 100;
+        return { name, p };
+      }).filter(Boolean);
+      if(entries.length === 0){
+        setText(el.limitingNutrient, "--");
+        setText(el.optimalNutrients, "--");
+        setText(el.excessNutrients, "--");
+        return;
+      }
+      entries.sort((a, b) => a.p - b.p);
+      const limiting = entries[0];
+      const optimal = entries.filter(item => item.p >= 88 && item.p <= 108).map(item => item.name);
+      const excess = entries.filter(item => item.p > 108).map(item => item.name);
+      setText(el.limitingNutrient, limiting ? limiting.name : "--");
+      setText(el.optimalNutrients, optimal.length ? optimal.join(", ") : "—");
+      setText(el.excessNutrients, excess.length ? excess.join(", ") : "—");
+    }
+
+    async function setupLotVsObjective(data){
+      const lotId = data.lot_id;
+      const objectiveId = data.objective?.id || data.objective_id;
+      const objectiveKind = data.objective?.type || "crop";
+      if(!lotId || !objectiveId){
+        throw new Error("No se encontraron los parámetros de comparación.");
+      }
+      const [analyses, lotInfo] = await Promise.all([
+        fetchJson(`${ENDPOINTS.analyses}?lot_id=${lotId}`),
+        fetchJson(ENDPOINTS.lots.replace("0", lotId)),
+      ]);
+      analysisData = pickAnalysis(analyses, data.common_analysis_id);
+      objectiveType = objectiveKind;
+      if(objectiveKind === "secondary"){
+        objectiveData = await fetchJson(ENDPOINTS.secondaryObjectives.replace("0", objectiveId));
+      }else{
+        objectiveData = await fetchJson(ENDPOINTS.objectives.replace("0", objectiveId));
+      }
+      await fetchLotCrops();
+
+      const secondaryCropName = objectiveData?.analysis_crop?.name || "--";
+      const cropName = objectiveKind === "secondary"
+        ? secondaryCropName
+        : (objectiveData?.crop_name || resolveCropNameForLot(lotId) || "--");
+      setText(el.analysisLotName, lotInfo?.name || data.lot_label);
+      setText(el.analysisLotArea, lotInfo?.area ? `${formatNumber(lotInfo.area, 2)} ha` : "--");
+      setText(el.analysisLotCrop, cropName);
+      setText(el.analysisLotDate, analysisData?.date || "--");
+
+      // Store analysis metadata for PDF export
+      const lotLabel = data.lot_label || "";
+      const parts = lotLabel.split(" · ");
+      currentAnalysisMeta.farmName = parts[0] ? parts[0].trim() : (lotInfo?.farm_name || "");
+      currentAnalysisMeta.lotName = parts.length > 1 ? parts.slice(1).join(" · ").trim() : (lotInfo?.name || "");
+      currentAnalysisMeta.area = lotInfo?.area ? `${formatNumber(lotInfo.area, 2)} ha` : "--";
+      currentAnalysisMeta.cropName = cropName;
+      currentAnalysisMeta.analysisDate = analysisData?.date || "--";
+      currentAnalysisMeta.username = document.getElementById("meta-username")?.textContent?.trim() || "Sistema";
+      currentAnalysisMeta.orgName = document.getElementById("meta-orgname")?.textContent?.trim() || "";
+
+      // Populate NDVI/VARI/NBI from payload stats if available (C2)
+      const payloadStats = payload?.stats || {};
+      if(payloadStats && payloadStats.ndvi != null){
+        setText(el.analysisNdvi, formatMetric(payloadStats.ndvi, 2));
+        setText(el.analysisVari, formatMetric(payloadStats.vari, 2));
+        setText(el.analysisNbi, formatMetric(payloadStats.nbi, 2));
+      }else{
+        setText(el.analysisNdvi, "--");
+        setText(el.analysisVari, "--");
+        setText(el.analysisNbi, "--");
+      }
+
+      setText(el.referenceName, data.objective?.label || `${cropName} · ID ${objectiveId}`);
+      setText(el.referenceSource, objectiveKind === "secondary" ? "Objetivo secundario" : "Tabla de objetivos");
+      setText(el.referenceType, objectiveKind === "secondary" ? "Objetivo secundario" : "Ideal de cultivo");
+      setText(el.referenceNdvi, "--");
+      setText(el.referenceVari, "--");
+      setText(el.referenceNbi, "--");
+
+      actualValues = collectActualValues(analysisData);
+      targetValues = objectiveKind === "secondary"
+        ? collectTargetValuesFromSecondaryObjective(objectiveData)
+        : collectTargetValuesFromObjective(objectiveData);
+      nutrientOrder = buildNutrientOrder();
+      const cropIdValue = objectiveKind === "secondary" ? objectiveData?.analysis_crop_id : objectiveData?.crop_id;
+      renderCropInfo(cropIdValue, cropName);
+    }
+
+    async function setupLotVsLot(data){
+      const lotA = data.lot_a;
+      const lotB = data.lot_b;
+      if(!lotA || !lotB){
+        throw new Error("No se encontró la comparación lote vs lote.");
+      }
+      if(!lotB.linked_lot_id){
+        throw new Error("El lote B no tiene un análisis foliar guardado. Guarde un análisis desde el NDVI Tool antes de comparar.");
+      }
+      await fetchLotCrops();
+      const analyses = await fetchJson(`${ENDPOINTS.analyses}?lot_id=${lotB.linked_lot_id}`);
+      analysisData = pickAnalysis(analyses, lotB.linked_common_analysis_id);
+      if(!analysisData){
+        throw new Error("No se encontró un análisis de follaje válido para el Lote B. Guarde un análisis desde el NDVI Tool antes de comparar.");
+      }
+
+      const lotInfo = await fetchJson(ENDPOINTS.lots.replace("0", lotB.linked_lot_id));
+      const cropName = resolveCropNameForLot(lotB.linked_lot_id) || "--";
+
+      el.analysisCardTitle.textContent = "Lote analizado";
+      el.analysisCardBadge.textContent = "Lote B";
+      setText(el.analysisLotName, lotB.linked_lot_name || lotInfo?.name || lotB.name);
+      setText(el.analysisLotArea, lotB.area_ha ? `${formatNumber(lotB.area_ha, 2)} ha` : (lotInfo?.area ? `${formatNumber(lotInfo.area, 2)} ha` : "--"));
+      setText(el.analysisLotCrop, cropName);
+      setText(el.analysisLotDate, analysisData?.date || "--");
+
+      // Store analysis metadata for PDF export (lot_vs_lot mode)
+      currentAnalysisMeta.farmName = lotInfo?.farm_name || "";
+      currentAnalysisMeta.lotName = lotB.linked_lot_name || lotInfo?.name || lotB.name || "";
+      currentAnalysisMeta.area = lotB.area_ha ? `${formatNumber(lotB.area_ha, 2)} ha` : (lotInfo?.area ? `${formatNumber(lotInfo.area, 2)} ha` : "--");
+      currentAnalysisMeta.cropName = cropName;
+      currentAnalysisMeta.analysisDate = analysisData?.date || "--";
+      currentAnalysisMeta.username = document.getElementById("meta-username")?.textContent?.trim() || "Sistema";
+      currentAnalysisMeta.orgName = document.getElementById("meta-orgname")?.textContent?.trim() || "";
+
+      // NDVI/VARI/NBI: prefer payload stats, fallback to fetched data
+      if(lotB.stats && lotB.stats.ndvi != null){
+        setText(el.analysisNdvi, formatNumber(lotB.stats.ndvi, 2));
+        setText(el.analysisVari, formatNumber(lotB.stats.vari, 2));
+        setText(el.analysisNbi, formatNumber(lotB.stats.nbi, 2));
+      }else{
+        setText(el.analysisNdvi, "--");
+        setText(el.analysisVari, "--");
+        setText(el.analysisNbi, "--");
+      }
+
+      el.referenceCardBadge.textContent = "Lote A";
+      setText(el.referenceName, lotA.name || "Lote A");
+      setText(el.referenceSource, "Lote comparativo");
+      setText(el.referenceType, "Ideal por lote");
+      if(lotA.stats && lotA.stats.ndvi != null){
+        setText(el.referenceNdvi, formatNumber(lotA.stats.ndvi, 2));
+        setText(el.referenceVari, formatNumber(lotA.stats.vari, 2));
+        setText(el.referenceNbi, formatNumber(lotA.stats.nbi, 2));
+      }else{
+        setText(el.referenceNdvi, "--");
+        setText(el.referenceVari, "--");
+        setText(el.referenceNbi, "--");
+      }
+
+      actualValues = collectActualValues(analysisData);
+      // If area_stats is missing or empty, use objective targets as fallback
+      if(lotA.area_stats && Array.isArray(lotA.area_stats.nutrients) && lotA.area_stats.nutrients.length > 0){
+        targetValues = collectTargetValuesFromStats(lotA.area_stats);
+      }else{
+        // Try to fetch crop objective for this lot
+        const cropId = resolveCropIdForLot(lotB.linked_lot_id);
+        if(cropId){
+          try{
+            objectiveData = await fetchJson(ENDPOINTS.objectives.replace("0", cropId));
+            targetValues = collectTargetValuesFromObjective(objectiveData);
+          }catch(err){
+            console.warn("No se pudo cargar objetivo del cultivo para comparación lot-vs-lot:", err);
+            targetValues = {};
+          }
+        }else{
+          targetValues = {};
+        }
+      }
+      nutrientOrder = buildNutrientOrder();
+      renderCropInfo(resolveCropIdForLot(lotB.linked_lot_id), cropName);
+    }
+
+    async function fetchCvValues(lotId){
+      try{
+        cvData = await fetchJson(`${ENDPOINTS.cv}?lot_id=${lotId}`);
+      }catch(err){
+        console.error("cv", err);
+        cvData = {};
+      }
+    }
+
+    async function handleSaveReport(){
+      if(!analysisData){
+        showError("No se pudo cargar la información del análisis.");
+        return;
+      }
+      if(!payload){
+        showError("No se encontró el contexto de la comparación.");
+        return;
+      }
+      let objectiveId = payload.objective?.id || payload.objective_id;
+      let lotId = payload.lot_id;
+      let title = "Comparación nutricional";
+      if(payload.mode === "lot_vs_lot"){
+        const lotB = payload.lot_b;
+        lotId = lotB?.linked_lot_id;
+        title = `Comparación nutricional · ${lotB?.linked_lot_name || lotB?.name || "Lote"}`;
+        const cropId = resolveCropIdForLot(lotId);
+        if(!cropId){
+          showError("No se encontró el cultivo asociado al lote B.");
+          return;
+        }
+        try{
+          objectiveId = await createObjectiveFromStats(payload.lot_a?.area_stats, cropId);
+        }catch(err){
+          showError(err?.message || "No se pudo crear el objetivo ideal.");
+          return;
+        }
+      }else if(payload.objective?.type === "secondary"){
+        await fetchLotCrops();
+        const cropId = resolveCropIdForLot(lotId);
+        if(!cropId){
+          showError("No se encontró el cultivo asociado al lote.");
+          return;
+        }
+        try{
+          objectiveId = await createObjectiveFromSecondary(objectiveData, cropId);
+        }catch(err){
+          showError(err?.message || "No se pudo crear el objetivo ideal.");
+          return;
+        }
+      }
+      if(!objectiveId){
+        showError("No se encontró el objetivo ideal para generar el informe.");
+        return;
+      }
+      const payloadReport = {
+        lot_id: Number(lotId),
+        common_analysis_id: Number(analysisData.id),
+        objective_id: Number(objectiveId),
+        title,
+        minimum_law_analyses: JSON.stringify(minimumLawPayload),
+      };
+      const csrf = getCsrfToken();
+      el.saveReportBtn.disabled = true;
+      el.saveReportBtn.textContent = "Generando...";
+      try{
+        const res = await fetch(ENDPOINTS.generateReport, {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRF-TOKEN": csrf || "",
+          },
+          body: JSON.stringify(payloadReport),
+        });
+        const body = await res.json().catch(() => ({}));
+        if(!res.ok || !body?.report_id){
+          const message = body?.error || body?.message || body?.description || "No se pudo generar el reporte.";
+          throw new Error(message);
+        }
+        window.location.href = ENDPOINTS.reportView.replace("0", body.report_id);
+      }catch(err){
+        showError(err?.message || "Error al generar el reporte.");
+      }finally{
+        el.saveReportBtn.disabled = false;
+        el.saveReportBtn.textContent = "Guardar como informe";
+      }
+    }
+
+    async function createObjectiveFromStats(areaStats, cropId){
+      if(!areaStats || !Array.isArray(areaStats.nutrients) || !cropId){
+        throw new Error("No se encontraron datos del lote A para crear el objetivo.");
+      }
+      const payloadObjective = {
+        crop_id: Number(cropId),
+        target_value: 0,
+      };
+      areaStats.nutrients.forEach(item => {
+        const nutrientId = item?.nutrient_id;
+        const value = parseFloat(item?.target_value);
+        if(!nutrientId || !Number.isFinite(value)){
+          return;
+        }
+        payloadObjective[`nutrient_${nutrientId}`] = value;
+      });
+      const csrf = getCsrfToken();
+      const res = await fetch("{{ url_for('foliage_api.objectives') }}", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-TOKEN": csrf || "",
+        },
+        body: JSON.stringify(payloadObjective),
+      });
+      const body = await res.json().catch(() => ({}));
+      if(!res.ok){
+        const message = body?.description || body?.error || "No se pudo crear el objetivo.";
+        throw new Error(message);
+      }
+      return body.id || body?.data?.id;
+    }
+
+    async function createObjectiveFromSecondary(secondaryObjective, cropId){
+      if(!secondaryObjective || !Array.isArray(secondaryObjective.nutrient_targets) || !cropId){
+        throw new Error("No se encontró el objetivo secundario para guardar.");
+      }
+      const payloadObjective = {
+        crop_id: Number(cropId),
+        target_value: 0,
+      };
+      secondaryObjective.nutrient_targets.forEach(item => {
+        const nutrientId = item?.nutrient_id;
+        const value = parseFloat(item?.target_value);
+        if(!nutrientId || !Number.isFinite(value)){
+          return;
+        }
+        payloadObjective[`nutrient_${nutrientId}`] = value;
+      });
+      const csrf = getCsrfToken();
+      const res = await fetch("{{ url_for('foliage_api.objectives') }}", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-TOKEN": csrf || "",
+        },
+        body: JSON.stringify(payloadObjective),
+      });
+      const body = await res.json().catch(() => ({}));
+      if(!res.ok){
+        const message = body?.description || body?.error || "No se pudo crear el objetivo.";
+        throw new Error(message);
+      }
+      return body.id || body?.data?.id;
+    }
+
+    function exportPdf(){
+      const { jsPDF } = window.jspdf || {};
+      if(!jsPDF){
+        showError("No se pudo cargar el exportador PDF.");
+        return;
+      }
+
+      const doc = new jsPDF("p", "mm", "a4");
+      const W = doc.internal.pageSize.getWidth();   // 210
+      const H = doc.internal.pageSize.getHeight();   // 297
+      const ML = 16;  // margin left
+      const MR = 16;  // margin right
+      const CW = W - ML - MR;  // content width
+      let y = 16;
+
+      // ---- helpers ----
+      const checkPage = (needed) => { if(y + needed > H - 20){ doc.addPage(); y = 20; } };
+      const drawLine = () => {
+        doc.setDrawColor(229, 231, 235);
+        doc.line(ML, y, W - MR, y);
+        y += 3;
+      };
+      const drawField = (label, value, indent = ML) => {
+        if(!value || value === "--" || value === "") return;
+        doc.setFontSize(8);
+        doc.setFont(undefined, "normal");
+        doc.setTextColor(107, 114, 128);  // gray-500
+        doc.text(`${label}:`, indent, y);
+        const labelW = doc.getTextWidth(`${label}:  `);
+        doc.setTextColor(17, 24, 39);  // gray-900
+        doc.setFont(undefined, "bold");
+        doc.text(String(value), indent + labelW, y);
+        doc.setTextColor(107, 114, 128);
+        doc.setFont(undefined, "normal");
+        y += 5;
+      };
+
+      // ---- header ----
+      doc.setFillColor(16, 185, 129);  // emerald-600
+      doc.rect(0, 0, W, 36, "F");
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(16);
+      doc.setFont(undefined, "bold");
+      doc.text("Comparación nutricional", ML, 18);
+      doc.setFontSize(8);
+      doc.setFont(undefined, "normal");
+      const now = new Date();
+      const fechaInforme = now.toLocaleDateString("es-CO", { day: "2-digit", month: "long", year: "numeric" });
+      const horaInforme = now.toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" });
+      doc.text(`Informe generado: ${fechaInforme} – ${horaInforme}`, W - MR, 18, { align: "right" });
+      // Subtitle
+      doc.setFontSize(9);
+      const modeText = payload?.mode === "lot_vs_lot" ? "Lote vs Lote" : "Lote vs Objetivo";
+      doc.text(modeText, ML, 30);
+      doc.setTextColor(200, 200, 200);
+      doc.text(`TecnoAgro · ${now.getFullYear()}`, W - MR, 30, { align: "right" });
+      doc.setTextColor(0, 0, 0);
+      y = 42;
+
+      // ---- Section: Identificación ----
+      checkPage(50);
+      doc.setFontSize(12);
+      doc.setFont(undefined, "bold");
+      doc.setTextColor(16, 185, 129);
+      doc.text("Identificación", ML, y);
+      y += 8;
+      doc.setTextColor(0, 0, 0);
+
+      // Use stored metadata (populated during page load)
+      const finca = currentAnalysisMeta.farmName || "--";
+      const loteNombre = currentAnalysisMeta.lotName || el.analysisLotName?.textContent?.trim() || "--";
+      const area = currentAnalysisMeta.area || el.analysisLotArea?.textContent?.trim() || "--";
+      const cultivo = currentAnalysisMeta.cropName || el.analysisLotCrop?.textContent?.trim() || "--";
+      const fechaAnalisis = currentAnalysisMeta.analysisDate || el.analysisLotDate?.textContent?.trim() || "--";
+      const refObjetivo = el.referenceName?.textContent?.trim() || "--";
+      const refFuente = el.referenceSource?.textContent?.trim() || "--";
+      const refTipo = el.referenceType?.textContent?.trim() || "--";
+      const autor = currentAnalysisMeta.username || "Sistema";
+
+      drawField("Finca", finca);
+      drawField("Lote", loteNombre);
+      drawField("Área", area);
+      drawField("Cultivo", cultivo);
+      drawField("Fecha de análisis", fechaAnalisis);
+      y += 2;
+      drawLine();
+      drawField("Referencia", refObjetivo);
+      drawField("Fuente", refFuente);
+      drawField("Tipo", refTipo);
+      y += 2;
+      drawLine();
+      drawField("Autor del informe", autor);
+      if(currentAnalysisMeta.orgName){
+        drawField("Organización", currentAnalysisMeta.orgName);
+      }
+      y += 4;
+
+      // ---- Section: Índices vegetacionales ----
+      checkPage(25);
+      doc.setFontSize(12);
+      doc.setFont(undefined, "bold");
+      doc.setTextColor(16, 185, 129);
+      doc.text("Índices vegetacionales", ML, y);
+      y += 8;
+      doc.setTextColor(0, 0, 0);
+
+      const ndvi = el.analysisNdvi?.textContent?.trim() || "--";
+      const vari = el.analysisVari?.textContent?.trim() || "--";
+      const nbi = el.analysisNbi?.textContent?.trim() || "--";
+      const refNdvi = el.referenceNdvi?.textContent?.trim() || "--";
+      const refVari = el.referenceVari?.textContent?.trim() || "--";
+      const refNbi = el.referenceNbi?.textContent?.trim() || "--";
+
+      // Two columns
+      const colMid = ML + CW / 2;
+      doc.setFontSize(8);
+      doc.setFont(undefined, "bold");
+      doc.text("Lote analizado", ML, y);
+      doc.text("Referencia", colMid, y);
+      y += 5;
+      doc.setFont(undefined, "normal");
+      drawField("NDVI", ndvi);
+      doc.setTextColor(17, 24, 39);
+      doc.text(String(refNdvi), colMid + 2, y - 5);
+      doc.setTextColor(107, 114, 128);
+      drawField("VARI", vari);
+      doc.setTextColor(17, 24, 39);
+      doc.text(String(refVari), colMid + 2, y - 5);
+      doc.setTextColor(107, 114, 128);
+      drawField("NBI", nbi);
+      doc.setTextColor(17, 24, 39);
+      doc.text(String(refNbi), colMid + 2, y - 5);
+      doc.setTextColor(107, 114, 128);
+      y += 2;
+      drawLine();
+
+      // ---- Section: Resumen de brechas ----
+      checkPage(20);
+      doc.setFontSize(12);
+      doc.setFont(undefined, "bold");
+      doc.setTextColor(16, 185, 129);
+      doc.text("Resumen de brechas", ML, y);
+      y += 8;
+      doc.setTextColor(0, 0, 0);
+
+      const limitante = el.limitingNutrient?.textContent?.trim() || "--";
+      const optimos = el.optimalNutrients?.textContent?.trim() || "--";
+      const exceso = el.excessNutrients?.textContent?.trim() || "--";
+
+      drawField("Nutriente limitante", limitante);
+      drawField("Nutrientes en rango óptimo", optimos);
+      drawField("Nutrientes en exceso", exceso);
+      y += 2;
+      drawLine();
+
+      // ---- Section: Ley de Mínimos ----
+      checkPage(30);
+      doc.setFontSize(12);
+      doc.setFont(undefined, "bold");
+      doc.setTextColor(16, 185, 129);
+      doc.text("Tabla de Cálculos – Ley de Mínimos", ML, y);
+      y += 3;
+      doc.setFontSize(7);
+      doc.setFont(undefined, "normal");
+      doc.setTextColor(107, 114, 128);
+      doc.text("Valores expresados en porcentaje respecto al objetivo ideal", ML, y);
+      y += 5;
+      doc.setTextColor(0, 0, 0);
+
+      const tableBody = el.lawTableBody;
+      const tableHeaders = el.lawTableHeader?.querySelectorAll("th");
+      if(!tableBody || !tableHeaders || tableHeaders.length < 2){
+        doc.setFontSize(9);
+        doc.text("Sin datos disponibles.", ML, y);
+        y += 6;
+      }else{
+        const colNames = [];
+        for(let i = 1; i < tableHeaders.length; i++){
+          colNames.push(tableHeaders[i].textContent.trim());
+        }
+        const rows = [];
+        tableBody.querySelectorAll("tr").forEach(tr => {
+          const cells = tr.querySelectorAll("td");
+          const rowData = [];
+          cells.forEach(td => rowData.push(td.textContent.trim()));
+          rows.push(rowData);
+        });
+
+        const nCols = colNames.length;
+        const colW = CW / (nCols + 1);
+        const rowH = 6;
+
+        // Header
+        doc.setFontSize(7);
+        doc.setFont(undefined, "bold");
+        doc.setFillColor(243, 244, 246);
+        doc.rect(ML, y, CW, rowH, "F");
+        doc.setTextColor(55, 65, 81);
+        doc.text("Fila", ML + 1, y + rowH - 2);
+        colNames.forEach((name, i) => {
+          doc.text(name, ML + colW * (i + 1) + 1, y + rowH - 2);
+        });
+        doc.setTextColor(0, 0, 0);
+        y += rowH;
+
+        // Rows
+        rows.forEach((rowData, ri) => {
+          checkPage(rowH + 4);
+          if(ri % 2 === 0){
+            doc.setFillColor(249, 250, 251);
+            doc.rect(ML, y, CW, rowH, "F");
+          }
+          const label = rowData[0] || "";
+          if(label.includes("Déficit") || label.includes("Diferencia")){
+            doc.setFont(undefined, "bold");
+          }else{
+            doc.setFont(undefined, "normal");
+          }
+          doc.text(label, ML + 1, y + rowH - 2);
+          rowData.slice(1).forEach((val, ci) => {
+            if(val === "—") return;
+            const num = parseFloat(val);
+            const display = isNaN(num) ? val : num.toFixed(2);
+            if(label === "%P"){
+              if(num < 88) doc.setTextColor(220, 38, 38);
+              else if(num > 108) doc.setTextColor(234, 88, 12);
+              else doc.setTextColor(22, 163, 74);
+            }else if(label === "Diferencia"){
+              if(num < 0) doc.setTextColor(220, 38, 38);
+              else if(num > 0) doc.setTextColor(234, 88, 12);
+              else doc.setTextColor(0, 0, 0);
+            }else{
+              doc.setTextColor(0, 0, 0);
+            }
+            doc.text(display, ML + colW * (ci + 1) + 1, y + rowH - 2);
+          });
+          doc.setTextColor(0, 0, 0);
+          y += rowH;
+        });
+      }
+      y += 4;
+
+      // ---- Note ----
+      checkPage(20);
+      doc.setFontSize(7);
+      doc.setFont(undefined, "italic");
+      doc.setTextColor(107, 114, 128);
+      const note = "El nutriente limitante principal es aquel con mayor déficit porcentual. " +
+                   "La recomendación de formulación se calculará tomando como base dicho nutriente y " +
+                   "ajustando el resto de aportes para mantener los rangos óptimos.";
+      const noteLines = doc.splitTextToSize(note, CW);
+      doc.text(noteLines, ML, y);
+      y += noteLines.length * 4 + 4;
+
+      // ---- Signature block ----
+      checkPage(30);
+      drawLine();
+      y += 10;
+      doc.setFontSize(8);
+      doc.setFont(undefined, "normal");
+      doc.setTextColor(55, 65, 81);
+      const sigY = y + 20;
+      doc.setDrawColor(107, 114, 128);
+      doc.line(ML, sigY, ML + 60, sigY);
+      doc.text("Firma del responsable", ML, sigY + 5);
+      doc.line(ML + 80, sigY, ML + 140, sigY);
+      doc.text("Vo.Bo. Agrónomo", ML + 80, sigY + 5);
+
+      // ---- Footer ----
+      const pageCount = doc.internal.getNumberOfPages();
+      for(let i = 1; i <= pageCount; i++){
+        doc.setPage(i);
+        doc.setFontSize(7);
+        doc.setTextColor(156, 163, 175);
+        doc.text(
+          `Comparación nutricional · Página ${i} de ${pageCount}`,
+          W / 2, H - 10, { align: "center" }
+        );
+        doc.setTextColor(0, 0, 0);
+      }
+
+      doc.save(`comparacion_nutricional_${loteNombre.replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ ]/g, "").trim()}_${now.toISOString().slice(0, 10)}.pdf`);
+    }
+
+    async function init(){
+      try{
+        payload = parseTokenPayload();
+        if(!payload){
+          throw new Error("No se encontró la comparación seleccionada. Vuelve al mapa y reintenta.");
+        }
+        if(payload.mode === "lot_vs_lot"){
+          el.modeBadge.textContent = "Modo: Lote vs lote";
+          el.referenceCardBadge.textContent = "Lote A";
+          await setupLotVsLot(payload);
+          await fetchCvValues(payload.lot_b?.linked_lot_id);
+        }else{
+          const objectiveKind = payload.objective?.type === "secondary" ? "secondary" : "crop";
+          el.modeBadge.textContent = objectiveKind === "secondary"
+            ? "Modo: Lote vs objetivo secundario"
+            : "Modo: Lote vs objetivo ideal";
+          el.referenceCardBadge.textContent = objectiveKind === "secondary" ? "Objetivo secundario" : "Objetivo ideal";
+          await setupLotVsObjective(payload);
+          await fetchCvValues(payload.lot_id);
+        }
+        renderAnalysisInfo(analysisData);
+        renderCvInfo();
+        computeMinimumLaw();
+      }catch(err){
+        console.error(err);
+        showError(err?.message || "No se pudo cargar la comparación.");
+      }
+    }
+
+    if(el.exportPdfBtn){
+      el.exportPdfBtn.addEventListener("click", exportPdf);
+    }
+    if(el.saveReportBtn){
+      el.saveReportBtn.addEventListener("click", handleSaveReport);
+    }
+
+    function showPreviewModal(){
+      if(!el.previewModal) return;
+      // Build diagnosis text
+      const entries = nutrientOrder.map(n => {
+        const act = actualValues[n];
+        const targ = targetValues[n];
+        if(act == null || targ == null) return null;
+        const p = (act / targ) * 100;
+        const deficit = targ - act;
+        return { name: n, act, targ, p, deficit };
+      }).filter(Boolean);
+
+      if(entries.length === 0){
+        el.previewDiagnosis.innerHTML = '<p class="text-gray-500">No hay datos suficientes para generar un diagnóstico.</p>';
+        el.previewTable.innerHTML = '';
+        el.previewProducts.innerHTML = '';
+        el.previewCost.innerHTML = '';
+        el.previewWarnings.innerHTML = '';
+        el.previewModal.classList.remove("hidden");
+        return;
+      }
+
+      entries.sort((a, b) => a.p - b.p);
+      const limiting = entries[0];
+      const deficient = entries.filter(e => e.p < 88);
+      const optimal = entries.filter(e => e.p >= 88 && e.p <= 108);
+      const excess = entries.filter(e => e.p > 108);
+
+      // Diagnosis summary
+      let diagnosisHtml = `
+        <p class="font-semibold mb-2">Nutriente limitante: <span class="text-red-600">${limiting.name}</span> (${limiting.p.toFixed(1)}% del nivel ideal)</p>
+        <div class="grid grid-cols-3 gap-2 text-xs mb-3">
+          <div class="rounded bg-red-50 dark:bg-red-900/20 p-2"><span class="font-medium text-red-700 dark:text-red-400">Deficientes:</span> ${deficient.length}</div>
+          <div class="rounded bg-green-50 dark:bg-green-900/20 p-2"><span class="font-medium text-green-700 dark:text-green-400">Óptimos:</span> ${optimal.length}</div>
+          <div class="rounded bg-orange-50 dark:bg-orange-900/20 p-2"><span class="font-medium text-orange-700 dark:text-orange-400">Exceso:</span> ${excess.length}</div>
+        </div>
+      `;
+      el.previewDiagnosis.innerHTML = diagnosisHtml;
+
+      // Deficit table
+      let tableHtml = '<table class="min-w-full divide-y divide-gray-200 text-xs"><thead class="bg-gray-50"><tr>';
+      tableHtml += '<th class="px-3 py-2 text-left font-semibold text-gray-600">Nutriente</th>';
+      tableHtml += '<th class="px-3 py-2 text-right font-semibold text-gray-600">Actual</th>';
+      tableHtml += '<th class="px-3 py-2 text-right font-semibold text-gray-600">Ideal</th>';
+      tableHtml += '<th class="px-3 py-2 text-right font-semibold text-gray-600">Déficit</th>';
+      tableHtml += '<th class="px-3 py-2 text-right font-semibold text-gray-600">% Suficiencia</th>';
+      tableHtml += '</tr></thead><tbody class="divide-y divide-gray-100 bg-white">';
+      entries.forEach(e => {
+        const rowClass = e.p < 88 ? 'bg-red-50' : (e.p > 108 ? 'bg-orange-50' : '');
+        tableHtml += `<tr class="${rowClass}">`;
+        tableHtml += `<td class="px-3 py-2 font-medium text-gray-800">${e.name}</td>`;
+        tableHtml += `<td class="px-3 py-2 text-right">${formatNumber(e.act, 2)}</td>`;
+        tableHtml += `<td class="px-3 py-2 text-right">${formatNumber(e.targ, 2)}</td>`;
+        tableHtml += `<td class="px-3 py-2 text-right ${e.deficit > 0 ? 'text-red-600' : 'text-green-600'}">${formatNumber(e.deficit, 2)}</td>`;
+        tableHtml += `<td class="px-3 py-2 text-right ${e.p < 88 ? 'text-red-600 font-semibold' : ''}">${e.p.toFixed(1)}%</td>`;
+        tableHtml += '</tr>';
+      });
+      tableHtml += '</tbody></table>';
+      el.previewTable.innerHTML = tableHtml;
+
+      // Products note
+      el.previewProducts.innerHTML = `
+        <p class="text-gray-500 dark:text-gray-400 italic">
+          Los productos recomendados se calcularán al guardar el informe usando el optimizador de costos.
+          El sistema seleccionará la combinación más económica que cubra los déficits mostrados arriba.
+        </p>
+      `;
+
+      // Warnings
+      const warnings = [];
+      if(deficient.length > 5) warnings.push(`Hay ${deficient.length} nutrientes deficientes — considere revisar el plan de fertilización completo.`);
+      if(limiting.p < 30) warnings.push(`El nutriente limitante (${limiting.name}) está muy por debajo del nivel ideal. Puede requerir aplicaciones escalonadas.`);
+      if(excess.length > 0) warnings.push(`Nutrientes en exceso: ${excess.map(e => e.name).join(", ")}. No aplicar adicionalmente.`);
+      el.previewWarnings.innerHTML = warnings.length > 0
+        ? '<div class="space-y-1">' + warnings.map(w => `<p>⚠ ${w}</p>`).join('') + '</div>'
+        : '';
+
+      el.previewCost.innerHTML = '';
+      el.previewModal.classList.remove("hidden");
+    }
+
+    function hidePreviewModal(){
+      if(el.previewModal) el.previewModal.classList.add("hidden");
+    }
+
+    if(el.previewReportBtn){
+      el.previewReportBtn.addEventListener("click", showPreviewModal);
+    }
+    if(el.previewModalClose){
+      el.previewModalClose.addEventListener("click", hidePreviewModal);
+    }
+    if(el.previewModalCloseBtn){
+      el.previewModalCloseBtn.addEventListener("click", hidePreviewModal);
+    }
+    if(el.previewSaveBtn){
+      el.previewSaveBtn.addEventListener("click", () => {
+        hidePreviewModal();
+        handleSaveReport();
+      });
+    }
+
+    // --- Reference change modal (C-ref) ---
+    let refCropObjectives = [];
+    let refSecondaryObjectives = [];
+
+    async function loadReferenceOptions(){
+      refCropObjectives = [];
+      refSecondaryObjectives = [];
+      // Load crop objectives
+      try{
+        const allObjectives = await fetchJson("{{ url_for('foliage_api.objectives') }}");
+        // Filter unique by crop_id
+        const seen = new Set();
+        for(const obj of allObjectives){
+          if(!obj || seen.has(obj.crop_id)) continue;
+          seen.add(obj.crop_id);
+          refCropObjectives.push(obj);
+        }
+      }catch(err){
+        console.error("Failed to load crop objectives:", err);
+      }
+      // Load secondary objectives
+      try{
+        refSecondaryObjectives = await fetchJson(ENDPOINTS.secondaryObjectivesList);
+        if(!Array.isArray(refSecondaryObjectives)) refSecondaryObjectives = [];
+      }catch(err){
+        console.error("Failed to load secondary objectives:", err);
+      }
+      // Populate selects
+      if(el.refModalCropObjective){
+        const opts = ['<option value="">Selecciona un objetivo de cultivo...</option>'];
+        refCropObjectives.forEach(obj => {
+          opts.push(`<option value="crop:${obj.id}">${obj.crop_name || "Cultivo"} · ID ${obj.id} · Target ${obj.target_value ?? "-"}</option>`);
+        });
+        el.refModalCropObjective.innerHTML = opts.join("");
+      }
+      if(el.refModalSecondaryObjective){
+        const opts = ['<option value="">Selecciona un objetivo secundario...</option>'];
+        refSecondaryObjectives.forEach(obj => {
+          const cropName = obj?.analysis_crop?.name || `Objetivo ${obj?.id}`;
+          opts.push(`<option value="secondary:${obj.id}">${cropName} · Secundario #${obj?.id ?? ""}</option>`);
+        });
+        el.refModalSecondaryObjective.innerHTML = opts.join("");
+      }
+      // If no objectives loaded, show a hint
+      if(refCropObjectives.length === 0 && refSecondaryObjectives.length === 0){
+        if(el.referenceModalError){
+          el.referenceModalError.textContent = "No se encontraron objetivos configurados. Configure objetivos de cultivo primero.";
+          el.referenceModalError.classList.remove("hidden");
+        }
+      }
+    }
+
+    function showReferenceModal(){
+      if(!el.referenceModal) return;
+      el.referenceModalError.classList.add("hidden");
+      if(el.refModalCropObjective) el.refModalCropObjective.value = "";
+      if(el.refModalSecondaryObjective) el.refModalSecondaryObjective.value = "";
+      if(el.referenceModalApply) el.referenceModalApply.disabled = true;
+      loadReferenceOptions();
+      el.referenceModal.classList.remove("hidden");
+    }
+
+    function hideReferenceModal(){
+      if(el.referenceModal) el.referenceModal.classList.add("hidden");
+    }
+
+    async function applyNewReference(valueStr){
+      if(!valueStr) return;
+      const [type, idStr] = valueStr.split(":");
+      const objectiveId = Number(idStr);
+      if(!objectiveId) return;
+
+      hideReferenceModal();
+      const kind = type === "secondary" ? "secondary" : "crop";
+
+      // Update payload
+      payload.objective = {
+        type: kind,
+        id: objectiveId,
+        label: kind === "secondary"
+          ? (el.refModalSecondaryObjective?.options[el.refModalSecondaryObjective.selectedIndex]?.textContent || "").trim()
+          : (el.refModalCropObjective?.options[el.refModalCropObjective.selectedIndex]?.textContent || "").trim(),
+      };
+
+      // Re-run setup
+      try{
+        await setupLotVsObjective(payload);
+        await fetchCvValues(payload.lot_id);
+        renderAnalysisInfo(analysisData);
+        renderCvInfo();
+        computeMinimumLaw();
+        // Update badge
+        el.modeBadge.textContent = kind === "secondary"
+          ? "Modo: Lote vs objetivo secundario"
+          : "Modo: Lote vs objetivo ideal";
+        el.referenceCardBadge.textContent = kind === "secondary" ? "Objetivo secundario" : "Objetivo ideal";
+      }catch(err){
+        console.error(err);
+        showError(err?.message || "No se pudo cargar la nueva referencia.");
+      }
+    }
+
+    if(el.changeReferenceBtn){
+      el.changeReferenceBtn.addEventListener("click", showReferenceModal);
+    }
+    if(el.referenceModalClose){
+      el.referenceModalClose.addEventListener("click", hideReferenceModal);
+    }
+    if(el.referenceModalCancel){
+      el.referenceModalCancel.addEventListener("click", hideReferenceModal);
+    }
+    // Enable apply button when a selection is made
+    function updateRefApplyState(){
+      const cropVal = el.refModalCropObjective?.value || "";
+      const secVal = el.refModalSecondaryObjective?.value || "";
+      if(el.referenceModalApply){
+        el.referenceModalApply.disabled = !(cropVal || secVal);
+      }
+      // Deselect the other when one is chosen
+      if(cropVal && el.refModalSecondaryObjective){
+        el.refModalSecondaryObjective.value = "";
+      }
+      if(secVal && el.refModalCropObjective){
+        el.refModalCropObjective.value = "";
+      }
+    }
+    if(el.refModalCropObjective){
+      el.refModalCropObjective.addEventListener("change", updateRefApplyState);
+    }
+    if(el.refModalSecondaryObjective){
+      el.refModalSecondaryObjective.addEventListener("change", updateRefApplyState);
+    }
+    if(el.referenceModalApply){
+      el.referenceModalApply.addEventListener("click", () => {
+        const cropVal = el.refModalCropObjective?.value || "";
+        const secVal = el.refModalSecondaryObjective?.value || "";
+        applyNewReference(cropVal || secVal);
+      });
+    }
+    // Close modal on backdrop click
+    if(el.referenceModal){
+      el.referenceModal.addEventListener("click", (e) => {
+        if(e.target === el.referenceModal) hideReferenceModal();
+      });
+    }
+
+    init();
+  })();
+</script>
+{% endblock %}

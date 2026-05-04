@@ -1,0 +1,440 @@
+{# layouts/crud_base.j2 #}
+{# base for developing CRUD forms
+Requires handling of GET, PUT, POST, DELETE methods from a single endpoint.
+receives item parameters and "items" a table with the get content,
+creates a modal type form for editing or adding
+creates a deletion confirmation modal
+allows bulk deletion
+
+example of use: users.j2
+#}
+{% extends "base.j2" %}
+
+{# declaracion de variables #}
+{% set dashboard = true %}
+{% from "settings/_ui_class.j2" import input_bg_color, 
+border_color, hover_bg_color, focus_ring_color, button_bg_color,
+delete_button_bg_color, input_focus_bg_color, base_button_classes, 
+base_input_classes, table_header_class, table_cell_class, card_base, card_header,
+text_color, bg_color, badge_neutral %}
+{% from "macros/breadcrumbs.j2" import render_breadcrumbs %}
+
+
+{# Macro - > dropdown de acciones #}
+{% macro action_dropdown(item_id) %}
+<div class="relative inline-block text-left">
+    <div>
+        <button type="button"
+                class="{{ base_button_classes }} border {{ border_color }} {{ bg_color }} {{ text_color }} {{ hover_bg_color }} {{ focus_ring_color }}"
+                id="options-menu-{{ item_id }}"
+                aria-haspopup="true"
+                aria-expanded="false"
+                onclick="toggleDropdown('{{ item_id }}')"
+                onkeydown="handleDropdownKey(event, '{{ item_id }}')">
+            ...
+        </button>
+    </div>
+    <div class="hidden origin-top-right absolute right-0 mt-2 w-56 rounded-md shadow-lg {{ bg_color }} ring-1 ring-black ring-opacity-5 divide-y divide-gray-100 z-[9999] dark:divide-gray-600"
+         role="menu"
+         aria-orientation="vertical"
+         aria-labelledby="options-menu-{{ item_id }}"
+         id="dropdown-{{ item_id }}">
+        <div class="py-1" role="none">
+            {% if show_view_button %}
+            <a href="#" class="{{ text_color }} block px-4 py-2 text-sm {{ hover_bg_color }}" role="menuitem" onclick="showModal('view', '{{ item_id }}')">Ver</a>
+            {% endif %}
+            <a href="#" class="{{ text_color }} block px-4 py-2 text-sm {{ hover_bg_color }}" role="menuitem" onclick="showModal('edit', '{{ item_id }}')">Editar</a>
+            <a href="#" class="{{ text_color }} block px-4 py-2 text-sm {{ hover_bg_color }}" role="menuitem" onclick="showModal('delete', '{{ item_id }}')">Borrar</a>
+        </div>
+    </div>
+</div>
+{% endmacro %}
+
+
+{################## INICIO  MODAL ##################}
+{# Macro - > Generador de modales #}
+{% macro modal(modal_id, modal_label, modal_content, modal_actions) %}
+<div id="{{ modal_id }}" class="fixed z-50 inset-0 overflow-y-auto hidden modal-container" aria-labelledby="{{ modal_id }}Label" role="dialog" aria-modal="true" data-modal-managed="true">
+    <div class="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+        <div class="fixed inset-0 bg-gray-900/60 dark:bg-gray-900/80 transition-opacity modal-backdrop backdrop-blur-sm" aria-hidden="true"></div>
+        <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+        <div class="inline-block align-bottom {{ bg_color }} rounded-2xl text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full modal-content border {{ border_color }}">
+            {# Header del modal - siempre presente para que JS pueda acceder al título #}
+            <div class="px-6 pt-6 pb-4 sm:px-8 sm:pt-6">
+                <div class="{% if modal_label %}border-b {{ border_color }} pb-4 mb-4{% else %}pb-2{% endif %}">
+                    <h3 class="text-xl leading-6 font-semibold {{ text_color }}" id="{{ modal_id }}Label">{{ modal_label }}</h3>
+                </div>
+                {# Contenido del modal #}
+                <div class="max-h-[70vh] overflow-y-auto">
+                    {{ modal_content }}
+                </div>
+            </div>
+            {# Footer del modal #}
+            <div class="px-6 py-4 sm:px-8 sm:flex sm:flex-row-reverse gap-3 {{ input_bg_color }} border-t {{ border_color }}">
+                {{ modal_actions }}
+            </div>
+        </div>
+    </div>
+</div>
+{% endmacro %}
+{################## FIN MODAL ##################}
+
+{% macro info_card(title, value, description) %}
+    <div class="{{ card_base }} text-center hover:shadow-md transition-shadow">
+        <p class="text-sm font-medium text-gray-600 dark:text-gray-300 uppercase tracking-wide">{{ title }}</p>
+        <p class="text-3xl font-bold {{ text_color }} mt-2">{{ value }}</p>
+        {% if description %}
+        <p class="text-sm text-gray-600 dark:text-gray-300 mt-1">{{ description }}</p>
+        {% endif %}
+    </div>
+{% endmacro %}
+
+{# Inicio de contenido para el formulario #}
+{################# Inicio block content #################}
+{% block content %}
+{# title #}
+<div class="sm:px-6 lg:px-8 flex justify-between items-center mb-0">
+    <h1 class="text-2xl mt-0 pt-0 pb-0 font-semibold">{{ title }}</h1>
+    {% if reports %}
+        <div>
+            <span class="{{ badge_neutral }} mr-2">Informes generados {{ total_informes }}</span>
+            <button class="bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-800 text-white px-4 py-2 rounded transition-colors">+ Crear Nuevo Informe</button>
+        </div>
+    {% endif %}
+</div>
+{% if description %}
+<div class="sm:px-6 lg:px-8">
+    <p class="text-gray-600 dark:text-gray-400 mt-1">{{ description }}</p>
+</div>
+{% endif %}
+{# Breadcrumbs #}
+{% if get_breadcrumbs is defined %}
+<div class="sm:px-6 lg:px-8">
+    {{ render_breadcrumbs(get_breadcrumbs(breadcrumbs if breadcrumbs is defined else none)) }}
+</div>
+{% endif %}
+<div id="message" class="max-w-sm mx-auto mt-10 text-red-500"></div>
+{# Contenido genérico de la página crud #}
+<div class="mx-auto max-w-8xl pt-0 pb-6 sm:px-6 lg:px-8">
+    <div class="px-4 py-2 sm:px-0">
+    {# Selector dinámico #}
+{% if filter_field %}
+<div class="px-0 py-4 bg-white dark:bg-gray-900 flex flex-col sm:flex-row sm:items-end gap-3 w-full max-w-md">
+<form action="{{ select_url }}" method="get" class="w-full flex flex-col sm:flex-row gap-3">
+        <select id="filter_{{ filter_field }}" name="filter_value" class="flex-grow w-full pl-4 pr-10 py-2.5 text-base sm:text-sm shadow-sm {{ base_input_classes }} {{ input_bg_color }} {{ border_color }} {{ text_color }} {{ focus_ring_color }}">
+            <option value="">Todos</option>
+            {% for option in filter_options %}
+                <option value="{{ option.id }}" {% if option.id == filter_value %}selected{% endif %}>{{ option.name }}</option>
+            {% endfor %}
+        </select>
+    <button type="submit" class="px-5 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 ease-in-out {{ base_button_classes }} border {{ border_color }} {{ bg_color }} {{ text_color }} {{ hover_bg_color }} {{ focus_ring_color }}">
+        Filtrar
+    </button>
+</form>
+</div>
+{% endif %}
+{# fin Selector dinámico #}
+
+    {# Buscador genérico #}
+    {% if search_url %}
+    <div class="px-0 py-4 bg-white dark:bg-gray-900 flex flex-col sm:flex-row sm:items-end gap-3 w-full max-w-md">
+    <form action="{{ search_url }}" method="get" class="w-full flex flex-col sm:flex-row gap-3">
+        {% if filter_value %}
+            <input type="hidden" name="filter_value" value="{{ filter_value }}">
+        {% endif %}
+        <input type="text" name="search" placeholder="Buscar" value="{{ search or '' }}"
+            class="flex-grow w-full pl-4 pr-10 py-2.5 text-base sm:text-sm shadow-sm {{ base_input_classes }} {{ input_bg_color }} {{ border_color }} {{ text_color }} {{ focus_ring_color }}">
+    <button type="submit" class="px-5 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 ease-in-out {{ base_button_classes }} border {{ border_color }} {{ bg_color }} {{ text_color }} {{ hover_bg_color }} {{ focus_ring_color }}">
+            Buscar
+        </button>
+    </form>
+    </div>
+    {% endif %}
+    {# fin buscador genérico #}
+
+        <div class="mb-4 flex flex-wrap gap-2 justify-between items-center">
+            <div class="flex gap-2">
+                <button onclick="showModal('create')" class="{{ base_button_classes }} {{ button_bg_color }} text-white {{ focus_ring_color }}">
+                    Crear Nuevo {{ entity_name }}
+                </button>
+                {% if show_select_box %}
+                <button onclick="handleBulkAction()" class="{{ base_button_classes }} border {{ border_color }} {{ delete_button_bg_color }} text-white {{ focus_ring_color }}">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
+                    </svg>
+                </button>
+                {% endif %}
+            </div>
+            <div class="flex gap-2 items-center">
+                {% if csv_download_url %}
+                <a href="{{ csv_download_url }}" class="{{ base_button_classes }} border {{ border_color }} {{ bg_color }} {{ text_color }} {{ hover_bg_color }} {{ focus_ring_color }}">Descargar CSV</a>
+                {% endif %}
+                {% if csv_upload_url %}
+                <form id="csv-upload-form" enctype="multipart/form-data" class="flex gap-2 items-center">
+                    <input type="file" id="csv-file-input" name="file" accept=".csv" class="{{ base_input_classes }}" aria-label="Seleccionar archivo CSV">
+                    <button type="button" onclick="uploadCsv()" class="{{ base_button_classes }} border {{ border_color }} {{ bg_color }} {{ text_color }} {{ hover_bg_color }} {{ focus_ring_color }}">Subir CSV</button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+        <div class="{{ card_base }} overflow-x-auto">
+            <div class="min-w-full inline-block align-middle">
+                <table class="w-full min-w-max divide-y divide-gray-200 dark:divide-gray-700">
+                <thead class="bg-gray-50 dark:bg-gray-800 hidden sm:table-header-group">
+                     <tr class="hidden sm:table-row">
+                        {% if show_select_box %}
+                        <th scope="col" class="{{ table_header_class }}">
+                            <input type="checkbox" id="select-all" onclick="toggleSelectAll()" aria-label="Seleccionar todos">
+                        </th>
+                        {% endif %}
+                        {% for header in table_headers %}
+                        <th scope="col" class="{{ table_header_class }} text-gray-800">
+                            {{ header }}
+                        </th>
+                        {% endfor %}
+                        <th scope="col" class="{{ table_header_class }} text-gray-600 dark:text-gray-400">
+                            Acciones
+                        </th>
+                    </tr>
+                </thead>
+                <tbody class="{{ bg_color }} divide-y divide-gray-200 dark:divide-gray-700"
+                    id="{{ entity_name_lower }}-table-body">
+                    {% for item in items %}
+                     <tr class="{{ hover_bg_color }} hidden sm:table-row transition-colors">
+                        {% if show_select_box %}
+                        <td class="{{ table_cell_class }} {{ text_color }}">
+                            <input type="checkbox" class="item-checkbox" value="{{ item.id }}" aria-label="Seleccionar item">
+                        </td>
+                        {% endif %}
+                        {% for field in item_fields %}
+                        <td class="{{ table_cell_class }} {{ text_color }}">
+                            {% if field == 'active' %}
+                                {{ "Activo" if item[field] else "Inactivo" }}
+                            {% else %}
+                                {{ item[field] }}
+                            {% endif %}
+                        </td>
+                        {% endfor %}
+                        <td class="{{ table_cell_class }} font-medium sm:table-cell">
+                            {{ action_dropdown(item.id) }}
+                        </td>
+                    </tr>
+    <!-- Vista móvil en formato de tarjeta -->
+                <tr class="block sm:hidden border-b p-4">
+                    <td class="px-4 py-3">
+                        {% if show_select_box %}
+                        <input type="checkbox" class="item-checkbox mb-2" value="{{ item.id }}" aria-label="Seleccionar item">
+                        {% endif %}
+                        {% for field in item_fields %}
+                        <div class="text-xs text-gray-600 dark:text-gray-400">
+                            <span class="font-semibold">{{ table_headers[loop.index0] }}:</span> 
+                            {% if field == 'active' %}
+                                {{ "Activo" if item[field] else "Inactivo" }}
+                            {% else %}
+                                {{ item[field] }}
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </td>
+                </tr>
+
+
+
+
+                    {% endfor %}
+                </tbody>
+            </table>
+            </div>
+        </div>
+
+        {% if pagination %}
+        <div class="flex justify-center items-center gap-4 my-4">
+            {% if pagination.page > 1 %}
+                {% set prev_args = request.args.to_dict() %}
+                {% set _ = prev_args.update({'page': pagination.page - 1, 'per_page': pagination.per_page}) %}
+                <a href="{{ url_for(request.endpoint, **prev_args) }}" class="{{ base_button_classes }} border {{ border_color }} {{ bg_color }} {{ text_color }} {{ hover_bg_color }}">Anterior</a>
+            {% endif %}
+            <span class="{{ text_color }}">Página {{ pagination.page }} de {{ pagination.pages }}</span>
+            {% if pagination.page < pagination.pages %}
+                {% set next_args = request.args.to_dict() %}
+                {% set _ = next_args.update({'page': pagination.page + 1, 'per_page': pagination.per_page}) %}
+                <a href="{{ url_for(request.endpoint, **next_args) }}" class="{{ base_button_classes }} border {{ border_color }} {{ bg_color }} {{ text_color }} {{ hover_bg_color }}">Siguiente</a>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{# Contenido del formulario dentro de un modal para crear/editar/ver elementos #}
+{################ Formulario que se presenta en los modales ################}
+{% set form_content %}
+<form id="{{ entity_name_lower }}Form" class="space-y-5">
+    <input type="hidden" id="{{ entity_name_lower }}Id">
+    {% for field_name, field_info in form_fields.items() %}
+    <div class="group">
+        {% if field_info.type not in ['radio', 'checkbox'] %}
+        <label for="{{ field_name }}" class="block text-sm font-semibold {{ text_color }} mb-1.5">
+            {{ field_info.label }}
+            {% if field_info.required %}
+            <span class="text-red-500 ml-0.5">*</span>
+            {% endif %}
+        </label>
+        {% endif %}
+        {% if field_info.type == 'select' %}
+{# selector variable #}
+{% set allowed_new_value = field_info.get('new_value', False) %}
+
+<div class="relative">
+    <select id="{{ field_name }}" name="{{ field_name }}"
+        class="{{ base_input_classes }} {{ input_bg_color }} {{ border_color }} {{ input_focus_bg_color }} {{ focus_ring_color }} {{ text_color }} appearance-none cursor-pointer pr-10 hover:border-emerald-400 dark:hover:border-emerald-500"
+        {% if field_info.required %}required{% endif %} {% if allowed_new_value %} onchange="handleSelectChange(this, '{{ field_name }}')" {% endif %} >
+        {% for display, value in field_info.options.items() %}
+        <option value="{{ value }}">{{ display }}</option>
+        {% endfor %}
+        {% if allowed_new_value %} 
+        <option value="other">Otro</option>
+        {% endif %}
+    </select>
+    {# Icono de flecha para el selector #}
+    <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-500 dark:text-gray-400">
+        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+        </svg>
+    </div>
+    {% if allowed_new_value %}
+    <input 
+        type="text" 
+        id="{{ field_name }}_custom" 
+        name="{{ field_name }}_custom" 
+        class="mt-2 hidden w-full rounded-lg border {{ border_color }} {{ input_bg_color }} {{ text_color }} focus:ring-2 {{ focus_ring_color }} focus:border-transparent py-2.5 px-3 shadow-sm disabled:bg-gray-100 disabled:cursor-not-allowed dark:disabled:bg-gray-800 transition" 
+        disabled
+        placeholder="Especifique otro valor"
+    >
+    {% endif %}
+</div>
+{# fin selector variable #}
+
+        {% elif field_info.type == 'radio' %}
+        <div class="mt-2 space-y-2">
+            {% for display, value in field_info.options.items() %}
+            <div class="flex items-center group">
+                <input type="radio" id="{{ field_name }}_{{ value }}" name="{{ field_name }}" value="{{ value }}"
+                    class="w-4 h-4 text-emerald-600 {{ border_color }} {{ focus_ring_color }} focus:ring-offset-0 cursor-pointer"
+                    {% if field_info.required %}required{% endif %}>
+                <label for="{{ field_name }}_{{ value }}" class="ml-3 text-sm {{ text_color }} cursor-pointer select-none">{{ display }}</label>
+            </div>
+            {% endfor %}
+        </div>
+        {% elif field_info.type == 'checkbox' %}
+        <div class="flex items-center mt-2">
+            <input type="checkbox" id="{{ field_name }}" name="{{ field_name }}" 
+                class="w-4 h-4 text-emerald-600 rounded {{ border_color }} {{ focus_ring_color }} focus:ring-offset-0 cursor-pointer">
+            <label for="{{ field_name }}" class="ml-3 text-sm {{ text_color }} cursor-pointer select-none">{{ field_info.label }}</label>
+        </div>
+        {% elif field_info.type in ['text', 'password', 'email', 'date', 'datetime-local', 'tel', 'url', 'number',
+        'color', 'month', 'week', 'time', 'search', 'range', 'file', 'image', 'hidden'] %}
+        <input type="{{ field_info.type }}" id="{{ field_name }}" name="{{ field_name }}"
+            class="{{ base_input_classes }} {{ input_bg_color }} {{ border_color }} {{ input_focus_bg_color }} {{ focus_ring_color }} {{ text_color }} hover:border-emerald-400 dark:hover:border-emerald-500"
+            {% if field_info.required %}required{% endif %} {% if field_info.placeholder
+            %}placeholder="{{ field_info.placeholder }}" {% endif %} {% if field_info.min is defined
+            %}min="{{ field_info.min }}" {% endif %} {% if field_info.max is defined %}max="{{ field_info.max }}" {%
+            endif %}>
+        {% elif field_info.type == 'textarea' %}
+        <textarea id="{{ field_name }}" name="{{ field_name }}" rows="3"
+            class="{{ base_input_classes }} {{ input_bg_color }} {{ border_color }} {{ input_focus_bg_color }} {{ focus_ring_color }} {{ text_color }} hover:border-emerald-400 dark:hover:border-emerald-500 resize-none"
+            {% if field_info.required %}required{% endif %} {% if field_info.placeholder
+            %}placeholder="{{ field_info.placeholder }}" {% endif %}></textarea>
+        {% endif %}
+    </div>
+    {% endfor %}
+</form>
+{% endset %}
+
+{# Acciones del formulario dentro del modal #}
+{% set form_actions %}
+<button type="button" id="saveButton" onclick="saveEntity()"
+    class="w-full sm:w-auto {{ base_button_classes }} {{ button_bg_color }} text-white {{ focus_ring_color }} shadow-sm hover:shadow-md">
+    <svg class="w-4 h-4 mr-2 -ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+    </svg>
+    Guardar
+</button>
+<button type="button" onclick="closeModal()"
+    class="mt-3 w-full sm:mt-0 sm:w-auto {{ base_button_classes }} border {{ border_color }} {{ bg_color }} {{ text_color }} {{ hover_bg_color }} {{ focus_ring_color }} shadow-sm">
+    Cancelar
+</button>
+{% endset %}
+
+{# Renderizado del modal para crear/editar/ver elementos #}
+{{ modal(entity_name_lower ~ 'Modal', '', form_content, form_actions) }}
+
+{# Contenido del modal para confirmar la eliminación #}
+{% set delete_content %}
+<div class="flex items-start">
+    <div class="flex-shrink-0 flex items-center justify-center w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 sm:mx-0 sm:h-10 sm:w-10">
+        <svg class="h-6 w-6 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+        </svg>
+    </div>
+    <div class="ml-4 text-left">
+        <p class="text-base font-medium {{ text_color }}">
+            ¿Está seguro de que desea eliminar este {{ entity_name_lower }}?
+        </p>
+        <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">
+            Esta acción no se puede deshacer. El elemento será eliminado permanentemente.
+        </p>
+    </div>
+</div>
+{% endset %}
+
+{# Acciones del modal de eliminación #}
+{% set delete_actions %}
+<button type="button" onclick="deleteEntity()"
+    class="w-full sm:w-auto {{ base_button_classes }} {{ delete_button_bg_color }} text-white {{ focus_ring_color }} shadow-sm hover:shadow-md">
+    <svg class="w-4 h-4 mr-2 -ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+    </svg>
+    Eliminar
+</button>
+<button type="button" onclick="closeDeleteModal()"
+    class="mt-3 w-full sm:mt-0 sm:w-auto {{ base_button_classes }} border {{ border_color }} {{ bg_color }} {{ text_color }} {{ hover_bg_color }} {{ focus_ring_color }} shadow-sm">
+    Cancelar
+</button>
+{% endset %}
+
+{# Renderizado del modal para confirmar la eliminación #}
+{{ modal('deleteModal', 'Confirmar Eliminación', delete_content, delete_actions) }}
+{% if DEBUG %}
+<pre class="w-[800px] max-w-4xl p-6 bg-gray-800 text-gray-200 rounded-lg shadow-lg font-mono text-sm leading-relaxed whitespace-pre-wrap break-words border border-gray-700 my-4 mx-auto">
+mensajes  de depuracion 
+{{ items }}
+</pre>
+{% endif %}
+
+{% endblock %}
+{################# Fin block content #################}
+
+{% block extra_js %}
+<script>
+    // Build formFields with per-field metadata
+    var _formFieldsDef = {};
+    {% for field_name, field_info in (form_fields | default({})).items() %}
+    _formFieldsDef['{{ field_name }}'] = {{ field_info | tojson }};
+    _formFieldsDef['{{ field_name }}'].allowedNewValue = {{ 'true' if field_info.get('new_value', False) else 'false' }};
+    _formFieldsDef['{{ field_name }}'].disabled_in_edit = {{ 'true' if field_info.disabled_in_edit else 'false' }};
+    {% endfor %}
+
+    window.CRUD_CONFIG = {
+        entityName: '{{ entity_name }}',
+        entityNameLower: '{{ entity_name_lower }}',
+        apiUrl: '{{ api_url }}',
+        items: {{ items | default([]) | tojson | safe }},
+        formFields: _formFieldsDef,
+        csvUploadUrl: {{ csv_upload_url | default(none) | tojson }} || null,
+        csvDownloadUrl: {{ csv_download_url | default(none) | tojson }} || null,
+        showSelectBox: {{ 'true' if (show_select_box | default(false)) else 'false' }},
+        showViewButton: {{ 'true' if (show_view_button | default(false)) else 'false' }}
+    };
+</script>
+<script src="/js/crud.js"></script>
+{% endblock %}

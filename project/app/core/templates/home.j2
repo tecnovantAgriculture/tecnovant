@@ -1,0 +1,40 @@
+{% extends "base.j2" %}
+{% set data_menu = { 
+"menu": [
+{"name": "Home", "url": url_for('core.index') },
+{"name": "Info", "url": url_for('info')},
+]
+} %}
+
+
+{% set app_home = "True" %}
+{% set css_code = "<style>
+body {
+    background: url('/img/bg_home.webp') no-repeat center center fixed !important;
+}
+main > div {
+    background: transparent !important;
+}
+</style>" %}
+
+{% block content %}
+<div class="flex justify-center items-center home p-4">
+    <div class="w-3/4 p-8 rounded-lg bg-white/20" style="background-color: #fff8f8cc;">
+        <img class="max-w-full h-auto block mx-auto" src="/img/logo.png" alt="TecnoAgro">
+        <h1 class="text-1xl p-4 text-center mb-4 font-semibold text-gray-800 dark:text-gray-200">by TecnoAgro</h1>
+        <p class="text-lg text-center text-gray-600 dark:text-gray-400 mb-8 max-w-2xl mx-auto leading-relaxed">
+            Nutrición inteligente para tus cultivos, optimizando recursos desde el aire hasta la raíz.
+        </p>
+        <div class="text-center">
+            <a href="{{ url_for('core.login') }}" class="inline-block bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-800 text-white px-6 py-3 rounded-md transition-colors duration-200 text-lg">
+                {% if is_user_authenticated %} Dashboard {% else %} Iniciar sesión {% endif %}
+            </a>
+            <a href="https://tecnovant.net/es/contacto/" class="inline-block bg-sky-600 hover:bg-sky-700 dark:bg-sky-700 dark:hover:bg-sky-600 text-white px-6 py-3 rounded-md transition-colors duration-200 text-lg" target="_blank">
+                Contacto
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+

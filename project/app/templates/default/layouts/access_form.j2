@@ -1,0 +1,43 @@
+{# layouts/access_form.j2 #}
+{# usaje example: login.j2 #}
+{% extends "base.j2" %}
+{% set basic_form_view = true %}
+{% block content %}
+<div class="home flex flex-col lg:flex-row">
+     <div class="hidden lg:flex lg:w-1/2 bg-emerald-800 justify-center items-center dark:bg-gray-900 ">
+        <h1 class="text-white text-5xl font-bold dark:text-white">{{ title }}</h1>
+    </div>
+    <div class="w-full lg:w-1/2 flex flex-col justify-center items-center p-6">
+         <form id="{{ form_id }}" class="w-full max-w-sm mx-auto mt-10 p-6 bg-white dark:bg-gray-800 rounded-2xl shadow-sm" autocomplete="on">
+            {% for field in fields %}
+            <div class="mb-4">
+                 <label for="{{ field.name }}" class="block text-gray-700 dark:text-gray-300 text-sm font-medium mb-1">{{ field.label }}</label>
+                <input type="{{ field.type }}"
+                       id="{{ field.name }}"
+                       name="{{ field.name }}"
+                       {% if field.name == 'username' %}autocomplete="username"{% elif field.name == 'password' %}autocomplete="current-password"{% elif field.name == 'email' %}autocomplete="email"{% elif field.name == 'new_password' %}autocomplete="new-password"{% elif field.name == 'current_password' %}autocomplete="current-password"{% elif field.name == 'confirm_password' %}autocomplete="new-password"{% endif %}
+                       required
+                     class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition dark:border-gray-600 dark:bg-gray-700 dark:text-white dark:focus:ring-emerald-500">
+            </div>
+            {% endfor %}
+            <div class="flex items-center justify-between mt-4">
+                 <button type="submit"
+                    class="bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-2 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 transition">
+                    {{ button_text }}
+                </button>
+            </div>
+        </form>
+         <div id="message" class="max-w-sm mx-auto mt-10 text-red-600 dark:text-red-400"></div>
+        {% if extra_links %}
+        <div class="mt-4">
+            {% for link in extra_links %}
+             <a href="{{ link.url }}" class="text-emerald-600 hover:text-emerald-800 hover:underline">{{ link.text }}</a>{% if not loop.last %} | {% endif %}
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{% endblock %}

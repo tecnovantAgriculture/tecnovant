@@ -1,0 +1,257 @@
+{% extends "base.j2" %}
+
+{% set bg_color = "bg-transparent" %}
+{% set rounded = "" %}
+{% set shadow = "" %}
+{% set padding = "" %}
+
+{% block content %}
+{% set greeting_name = user_full_name or username or "Usuario" %}
+
+ <div class="w-full bg-gray-50 dark:bg-gray-900 min-h-screen">
+    <div class="max-w-7xl mx-auto px-6 py-6 space-y-6">
+
+        <header class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+                 <h1 class="text-2xl md:text-3xl font-semibold text-gray-900 dark:text-gray-100">
+                     Hola, {{ greeting_name }}
+                 </h1>
+                 <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                     ¿Qué quieres hacer hoy? Selecciona una opción para empezar a trabajar con tus fincas y ortofotos.
+                 </p>
+            </div>
+
+            <div class="flex flex-wrap gap-3 md:justify-end">
+                 <div class="min-w-[150px] px-4 py-3 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
+                     <div class="flex items-center">
+                         <div class="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400">
+                             <i class="fas fa-chart-line text-base"></i>
+                         </div>
+                         <div class="ml-3 flex-1">
+                             <p class="text-[9px] text-gray-600 dark:text-gray-300 uppercase tracking-wide">Análisis este mes</p>
+                             <p class="text-lg font-semibold text-gray-900 dark:text-gray-100 text-right mt-1">
+                                 {{ kpis.analyses_month }}
+                             </p>
+                         </div>
+                     </div>
+                 </div>
+                 <div class="min-w-[150px] px-4 py-3 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
+                     <div class="flex items-center">
+                         <div class="p-2 rounded-lg bg-sky-100 dark:bg-sky-900/30 text-sky-600 dark:text-sky-400">
+                             <i class="fas fa-seedling text-base"></i>
+                         </div>
+                         <div class="ml-3 flex-1">
+                             <p class="text-[9px] text-gray-600 dark:text-gray-300 uppercase tracking-wide">Fincas activas</p>
+                             <p class="text-lg font-semibold text-gray-900 dark:text-gray-100 text-right mt-1">
+                                 {{ kpis.farms_active }}
+                             </p>
+                         </div>
+                     </div>
+                 </div>
+                 <div class="min-w-[150px] px-4 py-3 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
+                     <div class="flex items-center">
+                         <div class="p-2 rounded-lg bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400">
+                             <i class="fas fa-image text-base"></i>
+                         </div>
+                         <div class="ml-3 flex-1">
+                             <p class="text-[9px] text-gray-600 dark:text-gray-300 uppercase tracking-wide">Imágenes procesadas</p>
+                             <p class="text-lg font-semibold text-gray-900 dark:text-gray-100 text-right mt-1">
+                                 {{ kpis.images_processed }}
+                             </p>
+                         </div>
+                     </div>
+                 </div>
+            </div>
+        </header>
+
+        <section class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <a href="{{ url_for('agrovista.hello') }}"
+                class="group bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-5 border border-transparent hover:border-emerald-500 hover:shadow-md transition-all cursor-pointer flex flex-col justify-between min-h-[220px]">
+                <div>
+                    <p class="text-[11px] font-semibold text-emerald-600 uppercase tracking-wide">
+                        Flujo principal
+                    </p>
+                     <h2 class="mt-1 text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                         <i class="fas fa-satellite-dish text-base text-emerald-600"></i>
+                         Nuevo análisis desde ortofoto
+                     </h2>
+                     <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                         Sube una ortofoto TIFF/GeoTIFF, define la finca y los lotes y genera el mapa de índice de vegetación.
+                     </p>
+                </div>
+                <div class="mt-4 flex items-center justify-between">
+                    <span class="text-sm font-medium text-emerald-600 group-hover:underline">
+                        Ir a módulo NDVI / VARI
+                    </span>
+                    <span class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+                        →
+                    </span>
+                </div>
+            </a>
+
+            <a href="{{ url_for('foliage.amd_farms') }}"
+                class="group bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-5 border border-transparent hover:border-sky-500 hover:shadow-md transition-all cursor-pointer flex flex-col justify-between min-h-[220px]">
+                <div>
+                    <p class="text-[11px] font-semibold text-sky-600 uppercase tracking-wide">
+                        Navegación rápida
+                    </p>
+                     <h2 class="mt-1 text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                         <i class="fas fa-tractor text-base text-sky-600"></i>
+                         Fincas y lotes recientes
+                     </h2>
+                     <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                         Accede rápidamente a las últimas fincas y lotes donde estuviste trabajando.
+                     </p>
+                </div>
+                <div class="mt-4 flex items-center justify-between">
+                    <span class="text-sm font-medium text-sky-600 group-hover:underline">
+                        Ver fincas
+                    </span>
+                    <span class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-sky-50 text-sky-600">
+                        →
+                    </span>
+                </div>
+            </a>
+
+            <a href="{{ url_for('foliage_report.listar_reportes') }}"
+                class="group bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-5 border border-transparent hover:border-amber-500 hover:shadow-md transition-all cursor-pointer flex flex-col justify-between min-h-[220px]">
+                <div>
+                    <p class="text-[11px] font-semibold text-amber-600 uppercase tracking-wide">
+                        Continuar trabajo
+                    </p>
+                     <h2 class="mt-1 text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                         <i class="fas fa-play text-base text-amber-600"></i>
+                         Continuar último análisis
+                     </h2>
+                     <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                         Retoma el último análisis o reporte que estuviste generando sin perder el contexto.
+                     </p>
+                </div>
+                <div class="mt-4 flex items-center justify-between">
+                    <span class="text-xs text-gray-500">
+                        Último análisis:
+                        <span class="font-medium text-gray-800">
+                            {% if last_analysis_summary %}
+                                {{ last_analysis_summary.farm_name }} · {{ last_analysis_summary.lot_name }}
+                            {% else %}
+                                Sin análisis recientes
+                            {% endif %}
+                        </span>
+                    </span>
+                </div>
+            </a>
+        </section>
+
+        <section class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                 <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-5">
+                <div class="flex items-center justify-between mb-3">
+                     <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                         <i class="fas fa-tractor text-base text-emerald-600"></i>
+                         Fincas y lotes recientes
+                     </h3>
+                    <a href="{{ url_for('foliage.amd_farms') }}" class="text-xs text-emerald-600 hover:underline">
+                        Ver todas
+                    </a>
+                </div>
+                {% if recent_lot_crops %}
+                    <ul class="divide-y divide-gray-100">
+                        {% for item in recent_lot_crops %}
+                            <li class="py-2 flex items-center justify-between">
+                                <div>
+                                     <p class="text-sm font-medium text-gray-900 dark:text-gray-100">
+                                         {{ item.farm_name }}
+                                     </p>
+                                     <p class="text-xs text-gray-500 dark:text-gray-400">
+                                         Lote: {{ item.lot_name }} · Cultivo: {{ item.crop_name }}
+                                     </p>
+                                </div>
+                                <span class="text-xs text-gray-500">
+                                    {{ item.time_label }}
+                                </span>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <p class="text-sm text-gray-500">Aún no hay fincas o lotes recientes.</p>
+                {% endif %}
+            </div>
+
+                 <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-5">
+                <div class="flex items-center justify-between mb-3">
+                     <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                         <i class="fas fa-satellite-dish text-base text-sky-600"></i>
+                         Últimos análisis de imagen
+                     </h3>
+                    <a href="{{ url_for('agrovista.hello') }}" class="text-xs text-sky-600 hover:underline">
+                        Ir a NDVI / VARI
+                    </a>
+                </div>
+                {% if recent_image_analyses %}
+                    <ul class="divide-y divide-gray-100">
+                        {% for item in recent_image_analyses %}
+                            <li class="py-2 flex items-center justify-between">
+                                <div>
+                                     <p class="text-sm font-medium text-gray-900 dark:text-gray-100">
+                                         {{ item.filename }}
+                                     </p>
+                                     <p class="text-xs text-gray-500 dark:text-gray-400">
+                                         Dimensiones: {{ item.dimensions }}
+                                     </p>
+                                </div>
+                                <span class="text-xs text-gray-500">
+                                    {{ item.date }}
+                                </span>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <p class="text-sm text-gray-500">Aún no hay análisis de imagen registrados.</p>
+                {% endif %}
+            </div>
+        </section>
+
+         <section class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-5">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <div>
+                     <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                         Estado general de la operación
+                     </h3>
+                     <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                         Resumen rápido de cómo se está comportando tu operación agrícola según los análisis registrados.
+                     </p>
+                </div>
+                <div class="flex flex-wrap gap-3 md:justify-end">
+                    <div class="px-3 py-2 rounded-xl bg-emerald-50 min-w-[160px]">
+                        <p class="text-[11px] text-emerald-800 uppercase tracking-wide flex items-center gap-1">
+                            <i class="fas fa-seedling text-xs"></i>
+                            Lotes analizados
+                        </p>
+                        <p class="text-sm font-semibold text-emerald-900 text-right mt-1">
+                            {{ operation_stats.lots_analyzed }}
+                        </p>
+                    </div>
+                    <div class="px-3 py-2 rounded-xl bg-amber-50 min-w-[180px]">
+                        <p class="text-[11px] text-amber-800 uppercase tracking-wide flex items-center gap-1">
+                            <i class="fas fa-lightbulb text-xs"></i>
+                            Recomendaciones generadas
+                        </p>
+                        <p class="text-sm font-semibold text-amber-900 text-right mt-1">
+                            {{ operation_stats.recommendations_generated }}
+                        </p>
+                    </div>
+                    <div class="px-3 py-2 rounded-xl bg-sky-50 min-w-[160px]">
+                        <p class="text-[11px] text-sky-800 uppercase tracking-wide flex items-center gap-1">
+                            <i class="fas fa-file-export text-xs"></i>
+                            Reportes exportados
+                        </p>
+                        <p class="text-sm font-semibold text-sky-900 text-right mt-1">
+                            {{ operation_stats.reports_exported }}
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </div>
+</div>
+{% endblock %}

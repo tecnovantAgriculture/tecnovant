@@ -1,0 +1,125 @@
+{# partials/navigation.j2 #}
+{# top navigation menu #}
+{% from "settings/_ui_class.j2" import close_menu_button, menu_link_style, bg_color, menu_bg_color, shadow, rounded %}
+{% from "settings/_flowbite_solid_icons.j2" import icon_users %}
+
+<button id="mobile-menu-button" class="md:hidden {{ close_menu_button }}" aria-controls="menu" aria-expanded="false">
+    <span class="sr-only">Toggle menu</span>
+    <svg class="h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+    </svg>
+</button>
+
+<nav id="menu" class="hidden md:block {{ menu_bg_color }} {{ shadow }} {{ rounded }}">
+    <button id="close-menu-button" class="hidden absolute top-4 right-4 {{ close_menu_button }}">
+        <span class="sr-only">Close menu</span>
+        <svg class="h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+    </button>
+
+
+    {% if not dashboard %}
+        <!-- Home Menu (core.index) -->
+        <ul class="md:flex md:space-x-4">
+            <li><a href="{{ url_for('core.index') }}" class="{{ menu_link_style }}">Home</a></li>
+
+            {% if user_id %}
+            <li><a href="{{ url_for('core.dashboard') }}" class="{{ menu_link_style }}">Dashboard</a></li>
+            {% endif %}
+
+            {% if user_id and DEBUG %}
+            <li><a href="/info" class="{{ menu_link_style }}">Info</a></li>
+            {% endif %}
+
+            {% if user_id and (rol == "administrator" or rol == "reseller") %}
+            <li class="relative group">
+                <button class="{{ menu_link_style }} flex items-center" aria-expanded="false" aria-haspopup="true">
+                    {{ icon_users|safe }}
+                    <span class="ml-2">Administración</span>
+                    <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                    </svg>
+                </button>
+                <div class="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
+                    <div class="py-1">
+                        <a href="{{ url_for('core.amd_users') }}" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Usuarios</a>
+                        <a href="{{ url_for('foliage.nutrientes') }}" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Nutrientes</a>
+                        <a href="{{ url_for('foliage.amd_crops') }}" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Tipos de cultivos</a>
+                        <a href="{{ url_for('foliage.amd_objectives') }}" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Objetivos de cultivo</a>
+                        <a href="{{ url_for('foliage.amd_products') }}" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Productos</a>
+                        <a href="{{ url_for('foliage.amd_product_contributions') }}" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Aportes de productos</a>
+                        <a href="{{ url_for('foliage.amd_product_prices') }}" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Precios de productos</a>
+                    </div>
+                </div>
+            </li>
+            {% endif %}
+
+            {% if user_id %}
+            <li class="relative group">
+                <button class="{{ menu_link_style }} flex items-center" aria-expanded="false" aria-haspopup="true">
+                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4m0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"></path>
+                    </svg>
+                </button>
+                <div class="absolute right-0 mt-2 w-40 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
+                    <div class="py-1">
+                        <a href="{{ url_for('core.profile') }}" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Profile</a>
+                        <a href="{{ url_for('core.logout') }}" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Logout</a>
+                    </div>
+                </div>
+            </li>
+            {% endif %}
+        </ul>
+    {% else %}
+        <!-- Dashboard Menu (core.dashboard and protected routes) -->
+        {% if data_menu %}
+        <ul class="md:flex md:space-x-4">
+            {% for item in data_menu.menu %}
+            <li><a href="{{ item.url }}" class="{{ menu_link_style }}">{{ item.name }}</a></li>
+            {% endfor %}
+
+            <!-- Administración Dropdown (visible solo para admin/reseller) -->
+            {% if rol == "administrator" or rol == "reseller" %}
+            <li class="relative group">
+                <button class="{{ menu_link_style }} flex items-center" aria-expanded="false" aria-haspopup="true">
+                    {{ icon_users|safe }}
+                    <span class="ml-2">Administración</span>
+                    <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                    </svg>
+                </button>
+                <div class="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
+                    <div class="py-1">
+                        <a href="{{ url_for('core.amd_users') }}" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Usuarios</a>
+                        <a href="{{ url_for('foliage.nutrientes') }}" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Nutrientes</a>
+                        <a href="{{ url_for('foliage.amd_crops') }}" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Tipos de cultivos</a>
+                        <a href="{{ url_for('foliage.amd_objectives') }}" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Objetivos de cultivo</a>
+                        <a href="{{ url_for('foliage.amd_products') }}" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Productos</a>
+                        <a href="{{ url_for('foliage.amd_product_contributions') }}" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Aportes de productos</a>
+                        <a href="{{ url_for('foliage.amd_product_prices') }}" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Precios de productos</a>
+                    </div>
+                </div>
+            </li>
+            {% endif %}
+
+            <!-- User Dropdown (visible only in dashboard when authenticated) -->
+            {% if user_id %}
+            <li class="relative group">
+                <button class="{{ menu_link_style }} flex items-center" aria-expanded="false" aria-haspopup="true">
+                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4m0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"></path>
+                    </svg>
+                </button>
+                <div class="absolute right-0 mt-2 w-40 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
+                    <div class="py-1">
+                        <a href="{{ url_for('core.profile') }}" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Profile</a>
+                        <a href="{{ url_for('core.logout') }}" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Logout</a>
+                    </div>
+                </div>
+            </li>
+            {% endif %}
+        </ul>
+        {% endif %}
+    {% endif %}
+</nav>

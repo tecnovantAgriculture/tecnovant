@@ -1,0 +1,125 @@
+{% extends "layouts/crud_base.j2" %}
+{# identificadores de entidad #}
+{% set entity_name = "Lotes" %}
+{% set entity_name_lower = "lote" %}
+{% set show_select_box = True %}
+{# Mostrar la grid de ítems #}
+{% set table_headers = ["ID", "Finca", "Nombre del lote", "Área del lote",  "Fecha de creación", "Fecha de actualización"] %}
+{% set item_fields = ["id", "farm_name", "name", "area",  "created_at", "updated_at"] %}
+
+{# formulario de editar y add #}
+{% set form_fields = {
+    'farm_id': {'type': 'select', 'label': 'Finca', 'options': farms_dic, 'required': True, 'new_value': False},
+    'name': {'type': 'text', 'label': 'Nombre del lote', 'required': True},
+    'area': {'type': 'number', 'label': 'Área del lote', 'required': True},
+    'geometry': {'type': 'hidden', 'label': '', 'required': False},
+} %}
+{# entregado desde el endpoint #}
+{# api de consumo #}
+{% set api_url = url_for('foliage_api.lots_view') %}
+{% set search_url = url_for('foliage.amd_lots') %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/css/leaflet.css" />
+<link rel="stylesheet" href="/css/leaflet.draw.css" />
+{% endblock %}
+
+{% block extra_content %}
+<div id="lot-polygon-section" class="mt-6 p-6 bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700">
+    <h3 class="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">Polígono del lote (opcional)</h3>
+    <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">Dibuja o edita el polígono geográfico de tu lote en el mapa</p>
+    <div id="lot-map" style="height: 400px; border-radius: 8px;" class="border border-gray-300 dark:border-gray-600 mb-4"></div>
+    <div class="flex gap-2 flex-wrap">
+        <button type="button" id="draw-lot-polygon" class="px-4 py-2 text-sm bg-green-600 hover:bg-green-700 text-white rounded-lg transition">
+            Dibujar polígono
+        </button>
+        <button type="button" id="clear-lot-polygon" class="px-4 py-2 text-sm bg-red-500 hover:bg-red-600 text-white rounded-lg transition">
+            Limpiar
+        </button>
+        <span id="lot-polygon-status" class="text-sm text-gray-500 dark:text-gray-400 self-center ml-2"></span>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{{ super() }}
+<script src="/js/leaflet.js"></script>
+<script src="/js/leaflet.draw.js"></script>
+<script>
+(function() {
+    if (!document.getElementById('lot-map')) return;
+
+    var map = L.map('lot-map').setView([-34.6, -58.4], 12);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '© OpenStreetMap'
+    }).addTo(map);
+
+    var drawnItems = new L.FeatureGroup();
+    map.addLayer(drawnItems);
+
+    var drawControl = new L.Control.Draw({
+        draw: {
+            polygon: true,
+            rectangle: true,
+            polyline: false,
+            circle: false,
+            marker: false,
+            circlemarker: false
+        },
+        edit: { featureGroup: drawnItems }
+    });
+    map.addControl(drawControl);
+
+    var geometryInput = document.querySelector('[name="geometry"]');
+    var statusSpan = document.getElementById('lot-polygon-status');
+
+    function updateGeometry(layer) {
+        var geojson = layer.toGeoJSON();
+        if (geometryInput) {
+            geometryInput.value = JSON.stringify(geojson);
+            statusSpan.textContent = 'Polígono guardado ✓';
+        }
+    }
+
+    map.on(L.Draw.Event.CREATED, function(e) {
+        drawnItems.clearLayers();
+        drawnItems.addLayer(e.layer);
+        updateGeometry(e.layer);
+    });
+
+    map.on(L.Draw.Event.EDITED, function(e) {
+        e.layers.eachLayer(function(layer) {
+            updateGeometry(layer);
+        });
+    });
+
+    map.on(L.Draw.Event.DELETED, function() {
+        if (geometryInput) geometryInput.value = '';
+        statusSpan.textContent = 'Polígono eliminado';
+    });
+
+    // Cargar geometry existente (al editar lote)
+    if (geometryInput && geometryInput.value) {
+        try {
+            var geoJsonObj = JSON.parse(geometryInput.value);
+            var layer = L.geoJSON(geoJsonObj);
+            drawnItems.addLayer(layer);
+            if (layer.getBounds().isValid()) {
+                map.fitBounds(layer.getBounds(), { padding: [50, 50] });
+            }
+            statusSpan.textContent = 'Polígono cargado ✓';
+        } catch(e) {
+            statusSpan.textContent = 'Error al cargar polígono existente';
+            console.error('GeoJSON parsing error:', e);
+        }
+    }
+
+    document.getElementById('clear-lot-polygon').addEventListener('click', function() {
+        drawnItems.clearLayers();
+        if (geometryInput) geometryInput.value = '';
+        statusSpan.textContent = 'Polígono eliminado';
+    });
+})();
+</script>
+{% endblock %}

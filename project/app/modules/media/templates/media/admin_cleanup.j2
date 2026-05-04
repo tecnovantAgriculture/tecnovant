@@ -1,0 +1,277 @@
+{% extends "base.j2" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold text-gray-900 mb-2">{{ title }}</h1>
+        <p class="text-gray-600">Administración de cache de procesamiento de imágenes</p>
+    </div>
+
+    <!-- Cache Overview -->
+    <div class="bg-white rounded-lg shadow-md p-6 mb-8">
+        <h2 class="text-xl font-semibold text-gray-800 mb-4">Resumen del Cache</h2>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div class="text-sm font-medium text-blue-800">Estado del Cache</div>
+                <div class="text-2xl font-bold text-blue-900 mt-1">
+                    {% if cache_info.exists %}
+                        <span class="text-green-600">Activo</span>
+                    {% else %}
+                        <span class="text-red-600">No existe</span>
+                    {% endif %}
+                </div>
+                <div class="text-sm text-blue-700 mt-1">{{ cache_info.path }}</div>
+            </div>
+            
+            <div class="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                <div class="text-sm font-medium text-purple-800">Directorios</div>
+                <div class="text-2xl font-bold text-purple-900 mt-1">{{ cache_info.total_dirs }}</div>
+                <div class="text-sm text-purple-700 mt-1">assets en cache</div>
+            </div>
+            
+            <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <div class="text-sm font-medium text-yellow-800">Flags Huérfanos</div>
+                <div class="text-2xl font-bold text-yellow-900 mt-1">{{ cache_info.orphaned_processing }}</div>
+                <div class="text-sm text-yellow-700 mt-1">> 30 minutos</div>
+            </div>
+            
+            <div class="bg-red-50 border border-red-200 rounded-lg p-4">
+                <div class="text-sm font-medium text-red-800">Errores Recientes</div>
+                <div class="text-2xl font-bold text-red-900 mt-1">{{ cache_info.recent_errors }}</div>
+                <div class="text-sm text-red-700 mt-1">archivos .error</div>
+            </div>
+        </div>
+        
+        <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
+            <div class="flex justify-between items-center">
+                <div>
+                    <div class="text-sm font-medium text-gray-700">Tamaño Total del Cache</div>
+                    <div class="text-lg font-bold text-gray-900">{{ "%.1f"|format(cache_info.total_size_mb) }} MB</div>
+                </div>
+                <div class="space-x-2">
+                    <button onclick="cleanupOrphaned()" class="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors">
+                        Limpiar Huérfanos
+                    </button>
+                    <button onclick="refreshPage()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                        Actualizar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cache Directory List -->
+    <div class="bg-white rounded-lg shadow-md p-6">
+        <div class="flex justify-between items-center mb-6">
+            <h2 class="text-xl font-semibold text-gray-800">Directorios de Cache</h2>
+            <div class="text-sm text-gray-500">
+                Mostrando {{ cache_dirs|length }} directorios
+            </div>
+        </div>
+        
+        {% if cache_dirs %}
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead>
+                    <tr class="bg-gray-50">
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Asset UUID</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tamaño</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Edad</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Archivos</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for dir in cache_dirs %}
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="text-sm font-mono text-gray-900">{{ dir.name }}</div>
+                            <div class="text-xs text-gray-500">
+                                {% if dir.has_processing %}
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
+                                        .processing
+                                    </span>
+                                {% endif %}
+                                {% if dir.has_error %}
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
+                                        .error
+                                    </span>
+                                {% endif %}
+                                {% if dir.has_status %}
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                                        .status
+                                    </span>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            {% if dir.has_processing %}
+                                {% if dir.is_orphaned %}
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                        Huérfano
+                                    </span>
+                                {% else %}
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                        Procesando
+                                    </span>
+                                {% endif %}
+                            {% elif dir.has_error %}
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                    Error
+                                </span>
+                            {% elif dir.has_status %}
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                    {{ dir.status }}
+                                </span>
+                            {% else %}
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                    Cache
+                                </span>
+                            {% endif %}
+                            
+                            {% if dir.has_status and dir.progress is defined %}
+                            <div class="mt-1">
+                                <div class="w-full bg-gray-200 rounded-full h-1.5">
+                                    <div class="bg-blue-600 h-1.5 rounded-full" style="width: {{ dir.progress * 100 }}%"></div>
+                                </div>
+                            </div>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {{ "%.1f"|format(dir.size_mb) }} MB
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {{ "%.1f"|format(dir.age_hours) }} h
+                        </td>
+                        <td class="px-6 py-4">
+                            <div class="text-sm text-gray-900">
+                                {% for file in dir.files[:3] %}
+                                    <div class="flex justify-between">
+                                        <span class="text-gray-600">{{ file.name[:20] }}{% if file.name|length > 20 %}...{% endif %}</span>
+                                        <span class="text-gray-400 text-xs">{{ "%.1f"|format(file.size_mb) }} MB</span>
+                                    </div>
+                                {% endfor %}
+                                {% if dir.files|length > 3 %}
+                                    <div class="text-xs text-gray-500 mt-1">+ {{ dir.files|length - 3 }} más</div>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            <div class="space-x-2">
+                                <button onclick="cleanupAsset('{{ dir.name }}')" class="text-red-600 hover:text-red-900">
+                                    Limpiar
+                                </button>
+                                {% if dir.has_processing and dir.is_orphaned %}
+                                <button onclick="forceCleanup('{{ dir.name }}')" class="text-yellow-600 hover:text-yellow-900">
+                                    Forzar
+                                </button>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-12">
+            <div class="text-gray-400 mb-4">
+                <svg class="mx-auto h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                </svg>
+            </div>
+            <h3 class="text-lg font-medium text-gray-900 mb-2">No hay directorios de cache</h3>
+            <p class="text-gray-500">El directorio de cache está vacío o no existe.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+function refreshPage() {
+    window.location.reload();
+}
+
+function cleanupOrphaned() {
+    if (confirm('¿Limpiar todos los flags .processing huérfanos (> 30 minutos)?')) {
+        fetch('/api/media/cleanup/orphaned-processing', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(`Limpieza completada: ${data.cleaned} flags eliminados`);
+                refreshPage();
+            } else {
+                alert('Error en la limpieza: ' + (data.message || 'Error desconocido'));
+            }
+        })
+        .catch(error => {
+            alert('Error de red: ' + error.message);
+        });
+    }
+}
+
+function cleanupAsset(assetUuid) {
+    if (confirm(`¿Limpiar cache del asset ${assetUuid}?`)) {
+        fetch(`/api/media/cleanup/asset/${assetUuid}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Cache limpiado exitosamente');
+                refreshPage();
+            } else {
+                alert('Error: ' + (data.message || 'Error desconocido'));
+            }
+        })
+        .catch(error => {
+            alert('Error de red: ' + error.message);
+        });
+    }
+}
+
+function forceCleanup(assetUuid) {
+    if (confirm(`¿Forzar limpieza del asset ${assetUuid} (incluyendo flags huérfanos)?`)) {
+        // First cleanup orphaned processing, then asset cache
+        fetch('/api/media/cleanup/orphaned-processing', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(() => {
+            return fetch(`/api/media/cleanup/asset/${assetUuid}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            });
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Limpieza forzada completada');
+                refreshPage();
+            } else {
+                alert('Error: ' + (data.message || 'Error desconocido'));
+            }
+        })
+        .catch(error => {
+            alert('Error de red: ' + error.message);
+        });
+    }
+}
+</script>
+{% endblock %}

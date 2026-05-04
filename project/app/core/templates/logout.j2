@@ -1,0 +1,24 @@
+{% extends "base.j2" %}
+
+{% block title %}Logout{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        fetch('/api/core/logout', {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+            .then(response => {
+                if (response.ok) {
+                    window.location.href = '{{ url_for("core.index") }}';
+                } else {
+                    console.error('Error al cerrar sesión');
+                }
+            })
+            .catch(error => console.error('Error de red:', error));
+    });
+</script>
+{% endblock %}

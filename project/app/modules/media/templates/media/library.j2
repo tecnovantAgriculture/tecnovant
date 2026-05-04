@@ -1,0 +1,419 @@
+{% extends "base.j2" %}
+
+{% set dashboard = dashboard if dashboard is defined else true %}
+
+{% block header %}
+  {% if not picker_mode %}
+    {{ super() }}
+  {% endif %}
+{% endblock %}
+
+{% block footer %}
+  {% if not picker_mode %}
+    {{ super() }}
+  {% endif %}
+{% endblock %}
+
+{% block extra_css %}
+  {{ super() }}
+  {% if picker_mode %}
+  <style>
+    body { background-color: transparent; }
+  </style>
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+<div id="media-upload-overlay" class="fixed inset-0 z-40 hidden items-center justify-center bg-black/40 backdrop-blur-sm">
+  <div class="flex flex-col items-center gap-3 rounded-2xl border border-white/30 bg-white/90 px-6 py-5 shadow-xl dark:bg-gray-900/90">
+    <div class="relative h-12 w-12">
+       <div class="absolute inset-0 rounded-full border-4 border-emerald-500/40"></div>
+       <div class="absolute inset-0 rounded-full border-4 border-emerald-500 border-t-transparent animate-spin"></div>
+      <div class="absolute inset-2 rounded-full bg-white/95 dark:bg-gray-900/95"></div>
+    </div>
+    <p class="text-sm font-medium text-gray-700 dark:text-gray-200">Subiendo archivo…</p>
+    <p class="text-xs text-gray-500 dark:text-gray-400">Esto puede tardar unos segundos.</p>
+  </div>
+</div>
+<div class="flex items-center justify-between mb-6">
+  <div>
+    <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">Biblioteca de Medios</h1>
+    <p class="text-sm text-gray-500 dark:text-gray-300">Gestiona imágenes: TIFF, PNG, JPG, JPEG</p>
+  </div>
+  <div class="flex gap-2">
+     {% if picker_mode %}
+     <a href="{{ url_for('media.upload_s3', picker=1, event=picker_event_name, multi=1 if picker_multi else 0, allowed=picker_allowed_types | join(',') if picker_allowed_types else '') }}" class="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md bg-sky-100 text-sky-800 hover:bg-sky-200 dark:bg-sky-900 dark:text-sky-200">Importar desde S3</a>
+     <a href="{{ url_for('media.upload_local', picker=1, event=picker_event_name, multi=1 if picker_multi else 0, allowed=picker_allowed_types | join(',') if picker_allowed_types else '') }}" class="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md bg-emerald-600 text-white hover:bg-emerald-700">Subir desde el equipo</a>
+     {% else %}
+     <a href="{{ url_for('media.upload_s3') }}" class="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md bg-sky-100 text-sky-800 hover:bg-sky-200 dark:bg-sky-900 dark:text-sky-200">Importar desde S3</a>
+     <a href="{{ url_for('media.upload_local') }}" class="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md bg-emerald-600 text-white hover:bg-emerald-700">Subir desde el equipo</a>
+     {% endif %}
+  </div>
+  </div>
+
+  <form method="get" class="flex flex-wrap items-end gap-3 mb-4" data-media-filters>
+    {% if picker_mode %}
+      <input type="hidden" name="picker" value="1">
+      {% if picker_allowed_types %}
+        <input type="hidden" name="allowed" value="{{ picker_allowed_types | join(',') }}">
+      {% endif %}
+      <input type="hidden" name="event" value="{{ picker_event_name }}">
+      <input type="hidden" name="multi" value="{{ 1 if picker_multi else 0 }}">
+    {% endif %}
+    <div>
+      <label for="q" class="block text-xs text-gray-500 dark:text-gray-300 mb-1">Buscar</label>
+       <input id="q" name="q" type="text" placeholder="Nombre del archivo…" value="{{ q }}" class="w-64 px-3 py-2 rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+    </div>
+    <div>
+      <label for="type" class="block text-xs text-gray-500 dark:text-gray-300 mb-1">Tipo</label>
+      {% set type_options = [
+        ('all', 'Todos'),
+        ('image', 'Imágenes (PNG, JPG, JPEG)'),
+        ('geotiff', 'TIFF')
+      ] %}
+       <select id="type" name="type" class="px-3 py-2 rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+        {% for value, label in type_options %}
+          {% if value == 'all' or not picker_allowed_types or value in picker_allowed_types %}
+            <option value="{{ value }}" {% if type_filter == value %}selected{% endif %}>{{ label }}</option>
+          {% endif %}
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label for="per_page" class="block text-xs text-gray-500 dark:text-gray-300 mb-1">Por página</label>
+       <select id="per_page" name="per_page" class="px-3 py-2 rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+        {% for n in [12,24,48,96] %}
+          <option value="{{ n }}" {% if per_page == n %}selected{% endif %}>{{ n }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="ml-auto flex items-center gap-2">
+      <button type="submit" class="px-4 py-2 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200">Aplicar</button>
+      {% if q or (type_filter and type_filter != 'all') or per_page != 24 %}
+        {% set clean_args = request.args.to_dict() %}
+        {% set _ = clean_args.pop('q', None) %}
+        {% set _ = clean_args.pop('type', None) %}
+        {% set _ = clean_args.pop('per_page', None) %}
+        {% set _ = clean_args.pop('page', None) %}
+        <a href="{{ url_for('media.library', **clean_args) }}" class="px-4 py-2 rounded-md border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200">Limpiar</a>
+      {% endif %}
+    </div>
+  </form>
+
+  <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+    {% if items and items|length > 0 %}
+      {% for it in items %}
+      <div class="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 ">
+         <div class="aspect-video bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-400 relative">
+           {% set thumb = (it.variants | selectattr('kind', 'equalto', 'gallery') | list | first) %}
+           {% set asset_serve_url = url_for('media.serve_file', key=it.storage_key) %}
+           {% set asset_download_url = url_for('media.download_file', key=it.storage_key) %}
+           {% set is_allowed = (not picker_allowed_types) or (it.asset_type in picker_allowed_types) %}
+           {% if thumb %}
+             <img src="{{ url_for('media.serve_file', key=thumb.storage_key) }}" alt="{{ it.original_name }}" class="h-full w-full object-cover" loading="lazy" decoding="async"/>
+           {% elif it.asset_type in ['image', 'geotiff'] %}
+             <img src="{{ asset_serve_url }}" alt="{{ it.original_name }}" class="h-full w-full object-cover" loading="lazy" decoding="async"/>
+           {% else %}
+             <span class="text-xs px-2 py-1 rounded bg-gray-200 dark:bg-gray-700">{{ it.ext|upper }}</span>
+           {% endif %}
+           <div class="absolute top-2 right-2 bg-white/80 dark:bg-gray-900/80 rounded-full p-1.5 shadow-sm">
+             {% if it.asset_type in ['image', 'geotiff'] %}
+               <i class="fas fa-image text-xs text-gray-700 dark:text-gray-300"></i>
+             {% else %}
+               <i class="fas fa-file text-xs text-gray-700 dark:text-gray-300"></i>
+             {% endif %}
+           </div>
+         </div>
+        <div class="p-3">
+          <div class="flex items-start justify-between gap-2">
+            {% set size_bytes = it.size_bytes or 0 %}
+            {% set size_kb = size_bytes / 1024 %}
+            {% if size_kb < 1024 %}
+              {% set display_size = size_kb %}
+              {% set display_unit = 'KB' %}
+            {% elif size_kb < 1024 * 1024 %}
+              {% set display_size = size_kb / 1024 %}
+              {% set display_unit = 'MB' %}
+            {% else %}
+              {% set display_size = size_kb / (1024 * 1024) %}
+              {% set display_unit = 'GB' %}
+            {% endif %}
+            <div class="min-w-0">
+              <p class="truncate text-sm font-medium text-gray-900 dark:text-gray-100" title="{{ it.original_name }}">{{ it.original_name }}</p>
+              <p class="text-xs text-gray-500 dark:text-gray-400" title="{{ size_kb|round(1) }} KB">
+                {{ it.width or '?' }}×{{ it.height or '?' }} px • {{ display_size|round(1) }} {{ display_unit }}
+              </p>
+              <a
+                href="{{ url_for('media.element', objective_id=it.id) }}"
+                 class="mt-2 inline-flex items-center px-3 py-1 text-xs font-medium rounded-md bg-sky-100 text-sky-700 hover:bg-sky-200 dark:bg-sky-900 dark:text-sky-200"
+              >
+                Información
+              </a>
+            </div>
+            <div class="relative inline-block text-left">
+              <button type="button" class="px-2 py-1 text-xs rounded-md bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200" onclick="toggleMenu('{{ it.id }}')">⋯</button>
+              <div id="menu-{{ it.id }}" class="hidden absolute right-0 mt-2 w-36 rounded-md shadow-lg bg-white dark:bg-gray-900 ring-1 ring-black ring-opacity-5 z-20">
+                <div class="py-1">
+                  <a href="{{ asset_download_url }}" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800">Descargar</a>
+                  <button type="button" onclick="deleteAsset({{ it.id }})" class="w-full text-left block px-4 py-2 text-sm text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-gray-800">Eliminar</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          {% if picker_mode %}
+          <div class="mt-3 flex justify-end">
+            <button
+              type="button"
+               class="px-3 py-1 text-sm rounded-md font-medium {{ 'bg-emerald-600 text-white hover:bg-emerald-700' if is_allowed else 'bg-gray-200 text-gray-500 cursor-not-allowed' }}"
+              data-media-select
+              data-asset-id="{{ it.id }}"
+              data-storage-key="{{ it.storage_key }}"
+              data-original-name="{{ it.original_name }}"
+              data-asset-type="{{ it.asset_type }}"
+              data-mime="{{ it.mime }}"
+              data-width="{{ it.width or '' }}"
+              data-height="{{ it.height or '' }}"
+              data-size-bytes="{{ it.size_bytes or '' }}"
+              data-serve-url="{{ asset_serve_url }}"
+              data-download-url="{{ asset_download_url }}"
+              {% if not is_allowed %}disabled{% endif %}
+            >
+              Seleccionar
+            </button>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    {% else %}
+      {% for i in range(1,9) %}
+      <div class="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
+         <div class="aspect-video bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-400 relative">
+           Vista previa
+           <div class="absolute top-2 right-2 bg-white/80 dark:bg-gray-900/80 rounded-full p-1.5 shadow-sm">
+             <i class="fas fa-image text-xs text-gray-700 dark:text-gray-300"></i>
+           </div>
+         </div>
+        <div class="p-3">
+          <div class="flex items-start justify-between gap-2">
+            <div class="min-w-0">
+              <p class="truncate text-sm font-medium text-gray-900 dark:text-gray-100">archivo_{{ i }}.jpg</p>
+              <p class="text-xs text-gray-500 dark:text-gray-400">1200×800 • 256 KB</p>
+            </div>
+            <button class="px-2 py-1 text-xs rounded-md bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200" disabled>⋯</button>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    {% endif %}
+  </div>
+
+  <div class="mt-6 flex items-center justify-between text-sm">
+    {% if pagination %}
+      <span class="text-gray-500 dark:text-gray-300">Página {{ pagination.page }} de {{ pagination.pages }} — {{ pagination.total }} elementos</span>
+      <div class="flex gap-2">
+        {% set prev_args = request.args.to_dict() %}
+        {% set next_args = request.args.to_dict() %}
+        {% if pagination.has_prev %}
+          {% set _ = prev_args.update({'page': pagination.prev_num}) %}
+          <a href="{{ url_for('media.library', **prev_args) }}" class="px-3 py-1 rounded-md border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-900">Anterior</a>
+        {% else %}
+          <span class="px-3 py-1 rounded-md border border-gray-200 text-gray-400 dark:border-gray-700">Anterior</span>
+        {% endif %}
+        {% if pagination.has_next %}
+          {% set _ = next_args.update({'page': pagination.next_num}) %}
+          <a href="{{ url_for('media.library', **next_args) }}" class="px-3 py-1 rounded-md bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-100">Siguiente</a>
+        {% else %}
+          <span class="px-3 py-1 rounded-md border border-gray-200 text-gray-400 dark:border-gray-700">Siguiente</span>
+        {% endif %}
+      </div>
+    {% endif %}
+  </div>
+{% endblock %}
+{% block extra_js %}
+<script>
+function getCookie(name) {
+  const value = `; ${document.cookie}`;
+  const parts = value.split(`; ${name}=`);
+  if (parts.length === 2) return parts.pop().split(';').shift();
+}
+
+async function deleteAsset(id) {
+  if (!confirm('¿Eliminar este elemento?')) return;
+  const csrf = getCookie('csrf_access_token');
+  try {
+    const res = await fetch(`${window.location.origin}/api/media/assets/${id}`, {
+      method: 'DELETE',
+      credentials: 'include',
+      headers: { 'X-CSRF-TOKEN': csrf || '' },
+    });
+    if (res.ok) {
+      window.location.reload();
+    } else {
+      const data = await res.json().catch(() => ({}));
+      alert(data.message || 'No se pudo eliminar');
+    }
+  } catch (err) {
+    alert('Error de red al eliminar');
+  }
+}
+
+const uploadOverlay = document.getElementById('media-upload-overlay');
+let uploadOverlayCounter = 0;
+
+function toggleMenu(id) {
+  const el = document.getElementById(`menu-${id}`);
+  if (!el) return;
+  el.classList.toggle('hidden');
+}
+
+function showUploadOverlay() {
+  uploadOverlayCounter += 1;
+  if (!uploadOverlay) return;
+  uploadOverlay.classList.remove('hidden');
+  uploadOverlay.classList.add('flex');
+}
+
+function hideUploadOverlay() {
+  uploadOverlayCounter = Math.max(0, uploadOverlayCounter - 1);
+  if (!uploadOverlay || uploadOverlayCounter > 0) return;
+  uploadOverlay.classList.add('hidden');
+  uploadOverlay.classList.remove('flex');
+}
+
+document.addEventListener('click', (e) => {
+  // Close open menus when clicking outside
+  document.querySelectorAll('[id^="menu-"]').forEach(m => {
+    if (!m.contains(e.target) && !m.previousElementSibling?.contains(e.target)) {
+      m.classList.add('hidden');
+    }
+  });
+});
+
+const filtersForm = document.querySelector('form[data-media-filters]');
+if (filtersForm) {
+  const typeSelect = filtersForm.querySelector('#type');
+  const perPageSelect = filtersForm.querySelector('#per_page');
+  const submitForm = () => {
+    if (typeof filtersForm.requestSubmit === 'function') {
+      filtersForm.requestSubmit();
+    } else {
+      filtersForm.submit();
+    }
+  };
+  if (typeSelect) {
+    typeSelect.addEventListener('change', submitForm);
+  }
+  if (perPageSelect) {
+    perPageSelect.addEventListener('change', submitForm);
+  }
+}
+
+window.addEventListener('media:upload:start', showUploadOverlay);
+window.addEventListener('media:upload:end', hideUploadOverlay);
+window.addEventListener('message', (event) => {
+  if (!event || !event.data) return;
+  const { type } = event.data;
+  if (type === 'media-upload-start') {
+    showUploadOverlay();
+  } else if (type === 'media-upload-end') {
+    hideUploadOverlay();
+  }
+});
+
+if (!window.__mediaUploadFetchWrapped) {
+  window.__mediaUploadFetchWrapped = true;
+  const originalFetch = window.fetch.bind(window);
+  window.fetch = async (...args) => {
+    let url = args[0];
+    let method = 'GET';
+    let init = args[1];
+
+    if (url instanceof Request) {
+      method = url.method || 'GET';
+      url = url.url;
+    } else if (init && init.method) {
+      method = init.method;
+    }
+
+    const isUpload = typeof url === 'string' && url.includes('/api/media/upload') && String(method || '').toUpperCase() === 'POST';
+    if (isUpload) {
+      showUploadOverlay();
+    }
+
+    try {
+      const response = await originalFetch(...args);
+      if (isUpload) {
+        hideUploadOverlay();
+      }
+      return response;
+    } catch (error) {
+      if (isUpload) {
+        hideUploadOverlay();
+      }
+      throw error;
+    }
+  };
+}
+
+{% if picker_mode %}
+(function(){
+  const eventName = {{ picker_event_name|tojson }};
+  const allowMulti = {{ picker_multi | tojson }};
+  const buttons = document.querySelectorAll('[data-media-select]');
+
+  function postToParent(payload) {
+    try {
+      window.parent.postMessage(payload, '*');
+    } catch (err) {
+      console.error('No se pudo enviar el mensaje al padre', err);
+    }
+  }
+
+  function sendSelection(dataset) {
+    const payload = {
+      type: eventName,
+      payload: {
+        id: dataset.assetId ? Number(dataset.assetId) : null,
+        storage_key: dataset.storageKey || '',
+        original_name: dataset.originalName || '',
+        mime: dataset.mime || '',
+        asset_type: dataset.assetType || '',
+        width: dataset.width ? Number(dataset.width) : null,
+        height: dataset.height ? Number(dataset.height) : null,
+        size_bytes: dataset.sizeBytes ? Number(dataset.sizeBytes) : null,
+        serve_url: dataset.serveUrl || '',
+        download_url: dataset.downloadUrl || ''
+      }
+    };
+    postToParent(payload);
+  }
+
+  function sendLifecycle(kind) {
+    postToParent({ type: `${eventName}:${kind}` });
+  }
+
+  buttons.forEach((btn) => {
+    btn.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      if (btn.disabled) {
+        return;
+      }
+      sendSelection(btn.dataset);
+      if (!allowMulti) {
+        btn.blur();
+      }
+    });
+  });
+
+  window.addEventListener('keydown', (evt) => {
+    if (evt.key === 'Escape') {
+      sendLifecycle('cancel');
+    }
+  });
+
+  sendLifecycle('ready');
+})();
+{% endif %}
+</script>
+{% endblock %}

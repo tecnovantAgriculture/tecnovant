@@ -1,0 +1,70 @@
+{
+  "name": "core",
+  "version": "1.0.0",
+  "description": "Core module for user management, authentication, profile data, and avatar handling.",
+  "author": "Platform Team",
+  "dependencies": [
+    "flask",
+    "flask-sqlalchemy",
+    "flask-jwt-extended",
+    "marshmallow",
+    "pillow (optional)"
+  ],
+  "config": {
+    "avatar_upload_dir": "AVATAR_UPLOAD_DIR",
+    "avatar_max_size_mb": 5,
+    "avatar_allowed_extensions": ["jpg", "jpeg", "png", "webp"]
+  },
+  "blueprints": [
+    {
+      "name": "core",
+      "prefix": "/",
+      "type": "ui",
+      "description": "Web UI routes for core functionality."
+    },
+    {
+      "name": "core_api",
+      "prefix": "/api/core",
+      "type": "api",
+      "description": "Legacy unversioned API endpoints."
+    },
+    {
+      "name": "core_api_v1",
+      "prefix": "/api/v1/core",
+      "type": "api",
+      "description": "Versioned API endpoints for extended profile and avatar functionality."
+    }
+  ],
+  "services": [
+    "AvatarService",
+    "ProfileService"
+  ],
+  "models": [
+    "User",
+    "Organization",
+    "ResellerPackage"
+  ],
+  "schemas": [
+    "UserSchema",
+    "ExtendedUserSchema",
+    "OrganizationSchema",
+    "ResellerPackageSchema"
+  ],
+  "ui_templates": [
+    "dashboard/profile.j2",
+    "dashboard/users.j2",
+    "dashboard/clients.j2",
+    "home.j2",
+    "login.j2",
+    "logout.j2",
+    "forgot_password.j2",
+    "reset_password_form.j2",
+    "installer.j2"
+  ],
+  "migrations": [],
+  "tests": [
+    "tests/core/test_models.py",
+    "tests/core/test_services.py",
+    "tests/core/test_api_v1.py"
+  ]
+}
