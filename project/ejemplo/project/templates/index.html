@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Administrador de Ortofotos</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms"></script>
+    <style>
+        /* Estilo adicional para mensajes flash si es necesario */
+        .flash-success { background-color: #d1fae5; border-left: 4px solid #047857; color: #064e3b; }
+        .flash-error { background-color: #fee2e2; border-left: 4px solid #dc2626; color: #991b1b; }
+        .flash-warning { background-color: #fef3c7; border-left: 4px solid #f59e0b; color: #92400e; }
+        .flash-info { background-color: #dbeafe; border-left: 4px solid #2563eb; color: #1e40af; }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans">
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="text-3xl font-bold text-gray-800 mb-6 text-center">Administrador de Ortofotos Agrícolas</h1>
+
+        <!-- Mensajes Flash -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <div class="mb-4 space-y-2">
+            {% for category, message in messages %}
+              <div class="p-4 rounded-md flash-{{ category|default('info') }}" role="alert">
+                {{ message }}
+              </div>
+            {% endfor %}
+            </div>
+          {% endif %}
+        {% endwith %}
+
+        <!-- Formulario de subida -->
+        <div class="bg-white p-6 rounded-lg shadow-md mb-8">
+            <h2 class="text-xl font-semibold text-gray-700 mb-4">Subir Nueva Ortofoto</h2>
+            <form action="{{ url_for('upload_file') }}" method="post" enctype="multipart/form-data" class="space-y-4">
+                <div>
+                    <label for="file" class="block text-sm font-medium text-gray-700">Seleccionar archivo:</label>
+                    <input type="file" id="file" name="file"
+                           class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                           accept=".jpg,.jpeg,.png,.tiff,.tif"
+                           required>
+                    <p class="mt-1 text-xs text-gray-500">Formatos permitidos: JPG, PNG, TIFF. Tamaño máximo: {{ config.MAX_CONTENT_LENGTH // (1024*1024) }} MB.</p>
+                </div>
+                <div>
+                    <button type="submit" class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                        Subir Foto
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Galería de fotos -->
+        <h2 class="text-2xl font-semibold text-gray-800 mb-4">Galería de Fotos</h2>
+        {% if photos %}
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {% for photo in photos %}
+            <div class="bg-white rounded-lg shadow-md overflow-hidden flex flex-col">
+                <a href="{{ url_for('view_original_image', photo_id=photo.id) }}" target="_blank" class="block aspect-w-16 aspect-h-9">
+                    <img src="{{ url_for('view_original_image', photo_id=photo.id) }}"
+                         alt="Vista previa de {{ photo.filename }}"
+                         class="w-full h-full object-cover transition-transform duration-300 hover:scale-105">
+                </a>
+                <div class="p-4 flex flex-col flex-grow">
+                    <div class="mb-2 flex-grow">
+                        <p class="text-sm font-medium text-gray-900 truncate" title="{{ photo.filename }}">{{ photo.filename }}</p>
+                        <p class="text-xs text-gray-500">Subida: {{ photo.upload_date.strftime('%Y-%m-%d %H:%M') }}</p>
+                        {% if photo.is_processed and photo.processing_date %}
+                        <p class="text-xs text-green-600">Procesada: {{ photo.processing_date.strftime('%Y-%m-%d %H:%M') }}</p>
+                        {% elif not photo.is_processed %}
+                         <p class="text-xs text-amber-600">Pendiente de procesar</p>
+                        {% endif %}
+                    </div>
+                    <div class="mt-4 flex flex-wrap justify-center gap-2">
+                        <a href="{{ url_for('view_original_image', photo_id=photo.id) }}" target="_blank"
+                           class="text-xs py-1 px-2 rounded bg-blue-100 text-blue-700 hover:bg-blue-200">Ver</a>
+                        <a href="{{ url_for('download_image', photo_id=photo.id) }}"
+                           class="text-xs py-1 px-2 rounded bg-green-100 text-green-700 hover:bg-green-200">Descargar</a>
+
+                        <!-- Formulario para Procesar (POST) -->
+                        {% if not photo.is_processed %}
+                        <form action="{{ url_for('process_image', photo_id=photo.id) }}" method="post" class="inline">
+                             <button type="submit" class="text-xs py-1 px-2 rounded bg-yellow-100 text-yellow-700 hover:bg-yellow-200">Procesar</button>
+                        </form>
+                        {% else %}
+                         <a href="{{ url_for('show_processing_results', photo_id=photo.id) }}"
+                           class="text-xs py-1 px-2 rounded bg-purple-100 text-purple-700 hover:bg-purple-200">Resultados</a>
+                        {% endif %}
+
+                        <!-- Formulario para Eliminar (POST) -->
+                        <form action="{{ url_for('delete_image', photo_id=photo.id) }}" method="post" class="inline"
+                              onsubmit="return confirm('¿Estás seguro de eliminar \'{{ photo.filename }}\' y todos sus datos procesados? Esta acción no se puede deshacer.');">
+                            <button type="submit" class="text-xs py-1 px-2 rounded bg-red-100 text-red-700 hover:bg-red-200">Eliminar</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-center text-gray-600 py-10 bg-white rounded-lg shadow">No hay fotos subidas todavía.</p>
+        {% endif %}
+
+    </div>
+</body>
+</html>

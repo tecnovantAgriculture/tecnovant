@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resultados de Procesamiento - {{ photo.filename }}</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms"></script>
+    <style>
+        .flash-success { background-color: #d1fae5; border-left: 4px solid #047857; color: #064e3b; }
+        .flash-error { background-color: #fee2e2; border-left: 4px solid #dc2626; color: #991b1b; }
+        .flash-warning { background-color: #fef3c7; border-left: 4px solid #f59e0b; color: #92400e; }
+        .flash-info { background-color: #dbeafe; border-left: 4px solid #2563eb; color: #1e40af; }
+        /* Estilos para acordeón (opcional) */
+        details > summary { list-style: none; cursor: pointer; }
+        details > summary::-webkit-details-marker { display: none; } /* Chrome */
+        details > summary::marker { display: none; } /* Firefox */
+    </style>
+</head>
+<body class="bg-gray-100 font-sans">
+    <div class="container mx-auto px-4 py-8 max-w-7xl">
+
+         <!-- Mensajes Flash -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <div class="mb-4 space-y-2">
+            {% for category, message in messages %}
+              <div class="p-4 rounded-md shadow-sm flash-{{ category|default('info') }}" role="alert">
+                {{ message }}
+              </div>
+            {% endfor %}
+            </div>
+          {% endif %}
+        {% endwith %}
+
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-8">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 border-b pb-4">
+                 <h1 class="text-2xl font-bold text-gray-800 mb-2 md:mb-0">Resultados para: <span class="font-mono break-all">{{ photo.filename }}</span></h1>
+                 <a href="{{ url_for('home') }}" class="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 whitespace-nowrap">
+                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
+                       <path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd" />
+                     </svg>
+                     Volver
+                 </a>
+            </div>
+
+            <!-- Sección de Imágenes -->
+            <h2 class="text-xl font-semibold text-gray-700 mb-4">Visualización de Índices</h2>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <!-- Imagen Original -->
+                <div class="bg-gray-50 p-4 rounded-lg border text-center">
+                    <h3 class="font-semibold text-gray-700 mb-2">Original</h3>
+                    <a href="{{ url_for('view_original_image', photo_id=photo.id) }}" target="_blank">
+                        <img src="{{ url_for('view_original_image', photo_id=photo.id) }}" alt="Imagen Original" class="w-full h-56 object-contain rounded-md bg-white mx-auto">
+                    </a>
+                </div>
+                <!-- Índice VI -->
+                <div class="bg-gray-50 p-4 rounded-lg border text-center">
+                    <h3 class="font-semibold text-gray-700 mb-2">VI (G/R)</h3>
+                    {% if image_urls.vi %}
+                    <a href="{{ image_urls.vi }}" target="_blank">
+                        <img src="{{ image_urls.vi }}" alt="Índice VI" class="w-full h-56 object-contain rounded-md bg-white mx-auto"></a>
+                    {% else %}<div class="w-full h-56 flex items-center justify-center bg-gray-200 rounded-md"><p class="text-gray-500 text-sm">No disponible</p></div>{% endif %}
+                </div>
+                <!-- Índice GLI -->
+                <div class="bg-gray-50 p-4 rounded-lg border text-center">
+                    <h3 class="font-semibold text-gray-700 mb-2">GLI</h3>
+                    {% if image_urls.gli %}
+                    <a href="{{ image_urls.gli }}" target="_blank">
+                        <img src="{{ image_urls.gli }}" alt="Índice GLI" class="w-full h-56 object-contain rounded-md bg-white mx-auto"></a>
+                    {% else %}<div class="w-full h-56 flex items-center justify-center bg-gray-200 rounded-md"><p class="text-gray-500 text-sm">No disponible</p></div>{% endif %}
+                </div>
+                <!-- Índice VARI -->
+                <div class="bg-gray-50 p-4 rounded-lg border text-center">
+                    <h3 class="font-semibold text-gray-700 mb-2">VARI</h3>
+                     {% if image_urls.vari %}
+                     <a href="{{ image_urls.vari }}" target="_blank">
+                        <img src="{{ image_urls.vari }}" alt="Índice VARI" class="w-full h-56 object-contain rounded-md bg-white mx-auto"></a>
+                     {% else %}<div class="w-full h-56 flex items-center justify-center bg-gray-200 rounded-md"><p class="text-gray-500 text-sm">No disponible</p></div>{% endif %}
+                </div>
+            </div>
+
+            <!-- ****** NUEVA SECCIÓN: Evaluación Cualitativa ****** -->
+            <div class="bg-blue-50 border border-blue-200 p-6 rounded-lg mb-8">
+                 <h2 class="text-xl font-semibold text-blue-800 mb-4">Evaluación Cualitativa del Estado Potencial</h2>
+
+                 <h3 class="text-md font-semibold text-gray-700 mt-6 mb-3">Estadísticas de los Índices Calculados:</h3>
+                 {% if assessment and assessment.statistics %}
+                 <div class="overflow-x-auto relative shadow-md sm:rounded-lg">
+                     <table class="w-full text-sm text-left text-gray-500">
+                         <thead class="text-xs text-gray-700 uppercase bg-gray-100">
+                             <tr>
+                                 <th scope="col" class="py-3 px-6">Índice</th>
+                                 <th scope="col" class="py-3 px-6">Mínimo</th>
+                                 <th scope="col" class="py-3 px-6">Máximo</th>
+                                 <th scope="col" class="py-3 px-6">Promedio (Media)</th>
+                                 <th scope="col" class="py-3 px-6">Desv. Estándar</th>
+                             </tr>
+                         </thead>
+                         <tbody>
+                             {% for index_name, stats in assessment.statistics.items() %}
+                             {% if index_name in ['VI', 'GLI', 'VARI'] %} {# O itera sobre todos los disponibles #}
+                             <tr class="bg-white border-b hover:bg-gray-50">
+                                 <th scope="row" class="py-4 px-6 font-medium text-gray-900 whitespace-nowrap">{{ index_name }}</th>
+                                 <td class="py-4 px-6">{{ "%.4f"|format(stats.min) if stats.min is not none else 'N/A' }}</td>
+                                 <td class="py-4 px-6">{{ "%.4f"|format(stats.max) if stats.max is not none else 'N/A' }}</td>
+                                 <td class="py-4 px-6">{{ "%.4f"|format(stats.mean) if stats.mean is not none else 'N/A' }}</td>
+                                 <td class="py-4 px-6">{{ "%.4f"|format(stats.std) if stats.std is not none else 'N/A' }}</td>
+                             </tr>
+                             {% endif %}
+                             {% endfor %}
+                         </tbody>
+                     </table>
+                 </div>
+                 {% else %}
+                 <p class="text-sm text-gray-500">Estadísticas detalladas no disponibles.</p>
+                 {% endif %}
+                 
+                 {% if assessment %}
+                 <div class="space-y-4">
+                     <div>
+                        <p class="text-sm"><strong>Evaluación General:</strong> <span class="font-semibold
+                            {% if assessment['overall'] == 'Normal' %}text-green-700{% elif 'Clorosis' in assessment['overall'] or 'Deficiente' in assessment['overall'] %}text-yellow-700{% else %}text-blue-700{% endif %}
+                            ">{{ assessment['overall'] }}</span>
+                        </p>
+                     </div>
+
+                     {% if assessment['potential_issues'] %}
+                     <div class="space-y-3">
+                          <h3 class="text-md font-semibold text-gray-700">Posibles Puntos de Atención:</h3>
+                          {% for issue in assessment.potential_issues %}
+                            <div class="border-l-4 pl-4 py-2
+                                {% if issue.confidence == 'Alta' %}border-red-500 bg-red-50
+                                {% elif issue.confidence == 'Media' %}border-yellow-500 bg-yellow-50
+                                {% else %}border-gray-400 bg-gray-50{% endif %}">
+                                <p class="font-semibold text-sm">{{ issue.concern }} (Confianza: {{ issue.confidence }})</p>
+                                <p class="text-xs text-gray-600">Posibles causas relacionadas: {{ issue.possible_causes | join(', ') }}</p>
+                                <p class="text-xs text-indigo-700 mt-1">Sugerencia: {{ issue.suggestion }}</p>
+                            </div>
+                          {% endfor %}
+                     </div>
+                     {% else %}
+                        <p class="text-sm text-green-700">No se detectaron indicadores claros de problemas nutricionales basados en esta imagen.</p>
+                     {% endif %}
+
+                     <!-- Métricas calculadas (opcional, para depuración o usuarios avanzados) -->
+                     <details class="text-xs">
+                        {% if assessment and 'metrics' in assessment %}
+                        <div class="space-y-3">
+                            <h3 class="text-md font-semibold text-gray-700">Métricas calculadas:</h3>
+                            <div class="mt-2 p-3 bg-white border rounded grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-1 font-mono">
+                                {% for key, value in assessment['metrics'].items() %}
+                                <span>{{ key }}: {{ value }}</span>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    {% endif %}
+                     </details>
+
+                     <!-- Disclaimer Crítico -->
+                     <div class="mt-6 pt-4 border-t border-blue-200">
+                         <p class="text-xs text-red-800 bg-red-100 p-3 rounded-md shadow-sm">
+                            <strong class="flex items-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8.257 3.099a.75.75 0 01.986 0l7.5 10.5a.75.75 0 01-.493 1.151H1.75a.75.75 0 01-.493-1.151l7.5-10.5zM9 7.5a.75.75 0 01.75.75v2.25a.75.75 0 01-1.5 0V8.25A.75.75 0 019 7.5zm0 6a.75.75 0 100-1.5.75.75 0 000 1.5z" clip-rule="evenodd" /></svg>
+                                ADVERTENCIA FUNDAMENTAL:
+                            </strong>
+                            <span class="block mt-1">{{ assessment['disclaimer'] }}</span>
+                         </p>
+                     </div>
+                 </div>
+                 {% else %}
+                    <p class="text-gray-600">La evaluación cualitativa no está disponible para esta imagen.</p>
+                 {% endif %}
+            </div> <!-- Fin sección evaluación -->
+
+            <!-- ****** NUEVA SECCIÓN: Información General de Nutrientes ****** -->
+             <div class="bg-gray-50 border border-gray-200 p-6 rounded-lg mb-8">
+                 <h2 class="text-xl font-semibold text-gray-700 mb-4">Información General sobre Nutrientes</h2>
+                 <p class="text-sm text-gray-600 mb-4">A continuación se describe la función general de los principales nutrientes. Esta aplicación NO mide estos nutrientes directamente.</p>
+
+                 <div class="space-y-4">
+                     <details class="border rounded-md overflow-hidden">
+                         <summary class="bg-gray-100 p-3 font-semibold flex justify-between items-center">
+                             Macronutrientes Esenciales
+                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 transform transition-transform duration-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"> <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" /> </svg>
+                         </summary>
+                         <div class="p-4 space-y-3 text-sm">
+                             {% for nutrient in all_nutrients_info if nutrient.category == NutrientCategory.MACRONUTRIENT %}
+                             <div>
+                                 <strong class="text-gray-800">{{ nutrient.name }} ({{ nutrient.symbol }})</strong>:
+                                 <span class="text-gray-600">{{ nutrient.description }}</span>
+                                 <!-- <span class="text-xs text-gray-500">(Unidad típica: {{ nutrient.unit }})</span> -->
+                             </div>
+                             {% endfor %}
+                         </div>
+                     </details>
+
+                     <details class="border rounded-md overflow-hidden">
+                         <summary class="bg-gray-100 p-3 font-semibold flex justify-between items-center">
+                             Micronutrientes Esenciales
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 transform transition-transform duration-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"> <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" /> </svg>
+                         </summary>
+                          <div class="p-4 space-y-3 text-sm">
+                             {% for nutrient in all_nutrients_info if nutrient.category == NutrientCategory.MICRONUTRIENT %}
+                             <div>
+                                 <strong class="text-gray-800">{{ nutrient.name }} ({{ nutrient.symbol }})</strong>:
+                                 <span class="text-gray-600">{{ nutrient.description }}</span>
+                                 <!-- <span class="text-xs text-gray-500">(Unidad típica: {{ nutrient.unit }})</span> -->
+                             </div>
+                             {% endfor %}
+                         </div>
+                     </details>
+                 </div>
+             </div> <!-- Fin sección info nutrientes -->
+
+
+            <!-- Botón para reprocesar -->
+             <div class="mt-6 text-center">
+                 <form action="{{ url_for('process_image', photo_id=photo.id) }}" method="post" class="inline">
+                    <button type="submit" class="text-sm py-2 px-4 rounded bg-yellow-500 text-white hover:bg-yellow-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-400"
+                             onclick="return confirm('¿Deseas volver a procesar y evaluar esta imagen? Esto reemplazará los resultados actuales.');">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 inline-block mr-1" viewBox="0 0 20 20" fill="currentColor"> <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 110 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.885-.666A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566z" clip-rule="evenodd" /></svg>
+                        Reprocesar y Evaluar
+                    </button>
+                 </form>
+             </div>
+
+        </div> <!-- Fin card principal -->
+    </div> <!-- Fin container -->
+
+    <script>
+        // Script simple para manejar la rotación del icono del acordeón
+        document.querySelectorAll('details summary').forEach(summary => {
+            const details = summary.parentElement;
+            const icon = summary.querySelector('svg');
+            summary.addEventListener('click', () => {
+                // El navegador maneja el atributo 'open', solo rotamos el icono
+                if (details.open) {
+                    // Se va a cerrar
+                    icon.style.transform = 'rotate(0deg)';
+                } else {
+                    // Se va a abrir
+                    icon.style.transform = 'rotate(-180deg)';
+                }
+            });
+            // Estado inicial
+             if (!details.open) {
+                 icon.style.transform = 'rotate(0deg)';
+             } else {
+                  icon.style.transform = 'rotate(-180deg)';
+             }
+        });
+    </script>
+</body>
+</html>

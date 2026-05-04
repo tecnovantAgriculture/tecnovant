@@ -1,0 +1,385 @@
+{# Importar macros al principio #}
+{% macro get_nutrient_status(actual, min, max) %}
+  {# Asegurarse de que los valores son números antes de comparar #}
+  {% set actual_num = actual|float(default=None) %}
+  {% set min_num = min|float(default=None) %}
+  {% set max_num = max|float(default=None) %}
+  {% if actual_num is none or min_num is none or max_num is none %}
+    indeterminado
+  {% elif actual_num < min_num %}
+    deficiente
+  {% elif actual_num > max_num %}
+    excesivo
+  {% else %}
+    óptimo
+  {% endif %}
+{% endmacro %}
+
+{% macro get_status_color(status) %}
+  {% if status == "deficiente" %} text-red-500
+  {% elif status == "excesivo" %} text-yellow-500
+  {% elif status == "óptimo" %} text-green-500
+  {% else %} text-gray-500 {% endif %}
+{% endmacro %}
+
+{% macro get_status_icon(status) %}
+  {# Mismos SVGs que antes #}
+   {% if status == "deficiente" %}
+    <svg class="h-4 w-4 text-red-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M10.29 3.86a2.82 2.82 0 013.42 0l7.46 5.7a2.82 2.82 0 011 2.24v6.27a2.82 2.82 0 01-1 2.24l-7.46 5.7a2.82 2.82 0 01-3.42 0l-7.46-5.7a2.82 2.82 0 01-1-2.24v-6.27a2.82 2.82 0 011-2.24z"></path>
+       <line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line>
+    </svg>
+  {% elif status == "excesivo" %}
+    <svg class="h-4 w-4 text-yellow-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M10.29 3.86a2.82 2.82 0 013.42 0l7.46 5.7a2.82 2.82 0 011 2.24v6.27a2.82 2.82 0 01-1 2.24l-7.46 5.7a2.82 2.82 0 01-3.42 0l-7.46-5.7a2.82 2.82 0 01-1-2.24v-6.27a2.82 2.82 0 011-2.24z"></path>
+       <line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line>
+    </svg>
+  {% elif status == "óptimo" %}
+    <svg class="h-4 w-4 text-green-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path>
+    </svg>
+  {% else %}
+     <svg class="h-4 w-4 text-gray-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line>
+     </svg>
+  {% endif %}
+{% endmacro %}
+
+{% set button_class_report = "inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm dark:text-black" %}
+
+{% extends "base.j2" %}
+
+{% block extra_css %}
+    {{ super() }}
+    {# ... (estilos CSS existentes) ... #}
+{% endblock %}
+
+{% block content %}
+<div class="container mx-auto p-6">
+    {# Verificar si hay datos válidos #}
+    {% if analysisData and optimalLevels %}
+        <div class="flex justify-between items-center mb-6">
+            <div>
+                <h1 class="text-3xl font-bold">Análisis y Recomendaciones</h1>
+                <p class="text-sm text-indigo-600">
+                    Finca: {{ analysisData.common.finca | default('N/A') }} | Lote: {{ analysisData.common.lote | default('N/A') }} | Fecha Análisis: {{ analysisData.common.fechaAnalisis | default('N/A') }}
+                </p>
+            </div>
+            {# ... (botones de acción) ... #}
+        </div>
+
+        {# Tabs #}
+        <div class="inline-flex h-10 items-center justify-center rounded-md bg-zinc-100 p-1 text-muted-foreground mb-4">
+             <button class="{{ button_class_report }} tabs-trigger active" data-target="#dashboard">Resumen</button>
+             <button class="{{ button_class_report }} tabs-trigger" data-target="#foliar">Análisis Foliar</button>
+             <button class="{{ button_class_report }} tabs-trigger" data-target="#soil">Análisis de Suelo</button>
+             <button class="{{ button_class_report }} tabs-trigger" data-target="#recommendations">Recomendaciones</button>
+             <button class="{{ button_class_report }} tabs-trigger" data-target="#history">Histórico</button>
+        </div>
+
+        {# Contenido de Tabs #}
+        <div id="dashboard" class="tabs-content">
+            {# --- Resumen --- #}
+            {# (Usar variables: limitingNutrient, recommendations) #}
+             <div class="mb-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+                 {# Tarjeta Estado General #}
+                 <div class="border p-4 rounded-lg">
+                     <h2 class="text-lg font-bold">Estado General</h2>
+                     <p class="text-muted-foreground">Basado en análisis foliar y de suelo</p>
+                      <div class="flex items-center justify-between mt-2">
+                          <div class="text-2xl font-bold">{% if limitingNutrient %}Requiere atención{% else %}Óptimo{% endif %}</div>
+                           <div>
+                               {% if limitingNutrient %}
+                                   <span class="inline-block rounded-full px-2.5 py-0.5 text-sm font-semibold text-red-800 bg-red-100">Nutriente limitante detectado</span>
+                               {% else %}
+                                   <span class="inline-block rounded-full px-2.5 py-0.5 text-sm font-semibold text-green-800 bg-green-100">Equilibrado</span>
+                               {% endif %}
+                           </div>
+                       </div>
+                 </div>
+                  {# Tarjeta Ley del Mínimo #}
+                  <div class="border p-4 rounded-lg">
+                      <h2 class="text-lg font-bold">Ley del Mínimo de Liebig</h2>
+                      <p class="text-muted-foreground">El factor más limitante</p>
+                      {% if limitingNutrient and limitingNutrient.name %}
+                           <div class="space-y-2 mt-2">
+                               <div class="text-sm text-muted-foreground">Nutriente limitante:</div>
+                               <div class="text-xl font-semibold">
+                                   {{ nutrientNames[limitingNutrient.name]|default(limitingNutrient.name) }}
+                               </div>
+                               {# Barra de progreso (si tienes el porcentaje) #}
+                               {% if limitingNutrient.percentage %}
+                                   <div class="w-full bg-gray-200 h-2 rounded-full">
+                                       <div class="h-2 rounded-full bg-red-500" style="width: {{ limitingNutrient.percentage }}%;"></div>
+                                   </div>
+                                   <div class="text-sm text-muted-foreground">
+                                       {{ limitingNutrient.percentage|round }}% del nivel óptimo
+                                   </div>
+                               {% endif %}
+                           </div>
+                       {% else %}
+                           <div class="flex items-center justify-center h-20 text-green-500">
+                               {{ get_status_icon('óptimo')|safe }}
+                               <span class="ml-2">No se detectaron limitantes críticos</span>
+                           </div>
+                       {% endif %}
+                  </div>
+                   {# Tarjeta Recomendaciones Principales #}
+                   <div class="border p-4 rounded-lg">
+                       <h2 class="text-lg font-bold">Recomendaciones Principales</h2>
+                       <p class="text-muted-foreground">Acciones prioritarias</p>
+                        {% if recommendations %}
+                           <ul class="space-y-2 mt-2">
+                               {% for rec in recommendations[:2] %} {# Mostrar solo las primeras 2 #}
+                                   <li class="flex items-start gap-2">
+                                       <div class="mt-0.5">
+                                           {# Icono basado en prioridad #}
+                                           {% if rec.priority == 'alta' %}{{ get_status_icon('deficiente')|safe }}{% else %}{{ get_status_icon('excesivo')|safe }}{% endif %}
+                                       </div>
+                                       <div class="text-sm">{{ rec.title }}</div>
+                                   </li>
+                               {% endfor %}
+                               {% if recommendations|length > 2 %}
+                                   <button class="{{ button_class_report }} bg-blue-500 text-white hover:bg-blue-600 text-xs mt-2" type="button" onclick="document.querySelector('[data-target=\"#recommendations\"]').click();">
+                                        Ver todas ({{ recommendations|length }})
+                                    </button>
+                               {% endif %}
+                           </ul>
+                       {% else %}
+                            <div class="flex items-center justify-center h-20 text-green-500">
+                               {{ get_status_icon('óptimo')|safe }}
+                                <span class="ml-2">No se requieren acciones inmediatas</span>
+                           </div>
+                       {% endif %}
+                   </div>
+             </div>
+              {# Gráficos y Barril de Liebig #}
+              <div class="mb-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                   <div class="border p-4 rounded-lg">
+                       <h2 class="text-lg font-bold">Análisis Foliar</h2>
+                       <p class="text-muted-foreground">Comparación con niveles óptimos</p>
+                       <canvas id="foliarChart" class="h-80"></canvas>
+                   </div>
+                   <div class="border p-4 rounded-lg">
+                       <h2 class="text-lg font-bold">Análisis de Suelo</h2>
+                       <p class="text-muted-foreground">Comparación con niveles óptimos</p>
+                       <canvas id="soilChart" class="h-80"></canvas>
+                   </div>
+             </div>
+              {# ... (Barril de Liebig y Explicación) ... #}
+
+        </div>
+
+        <div id="foliar" class="tabs-content hidden">
+            {# --- Análisis Foliar Detallado --- #}
+            {# (Usar variables: analysisData.foliar, optimalLevels.nutrientes, nutrientNames) #}
+            {% if analysisData.foliar %}
+                 <div class="mb-4 border p-4 rounded-lg">
+                      <h2 class="text-lg font-bold">Análisis Foliar Detallado</h2>
+                      <p class="text-muted-foreground">Resultados del {{ analysisData.common.fechaAnalisis }}</p>
+                      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+                           <div>
+                                <h3 class="text-lg font-semibold mb-4">Macronutrientes (%)</h3>
+                                <div class="space-y-4">
+                                     {% for key, value in analysisData.foliar.items() %}
+                                          {% if key in ['nitrogeno', 'fosforo', 'potasio', 'calcio', 'magnesio', 'azufre'] and key in optimalLevels.nutrientes %}
+                                               {% set levels = optimalLevels.nutrientes[key] %}
+                                               {% set status = get_nutrient_status(value, levels.min, levels.max) %}
+                                               {% set statusColor = get_status_color(status) %}
+                                               {% set optimalMid = (levels.min + levels.max) / 2 if levels.min is not none and levels.max is not none else value %}
+                                               {% set percentage = (value / optimalMid) * 100 if optimalMid != 0 else 0 %}
+                                               <div class="space-y-1">
+                                                    <div class="flex justify-between items-center">
+                                                        <div class="flex items-center">
+                                                             {{ get_status_icon(status)|safe }}
+                                                             <span class="ml-2">{{ nutrientNames[key]|default(key|capitalize) }}</span>
+                                                        </div>
+                                                        <div class="{{ statusColor }} font-semibold">
+                                                             {{ value }}%
+                                                             {% if levels.min is not none and levels.max is not none %}
+                                                             <span class="text-xs font-normal text-muted-foreground">({{ levels.min }}-{{ levels.max }}%)</span>
+                                                             {% endif %}
+                                                        </div>
+                                                    </div>
+                                                    <div class="w-full bg-gray-200 h-2 rounded-full">
+                                                         <div class="h-2 rounded-full bg-blue-500" style="width: {{ percentage }}%;"></div> {# Ajustar color si es necesario #}
+                                                    </div>
+                                               </div>
+                                          {% endif %}
+                                     {% endfor %}
+                                </div>
+                           </div>
+                            <div>
+                                <h3 class="text-lg font-semibold mb-4">Micronutrientes (ppm)</h3>
+                                <div class="space-y-4">
+                                      {% for key, value in analysisData.foliar.items() %}
+                                           {% if key in ['hierro', 'manganeso', 'zinc', 'cobre', 'boro'] and key in optimalLevels.nutrientes %}
+                                                {% set levels = optimalLevels.nutrientes[key] %}
+                                                {% set status = get_nutrient_status(value, levels.min, levels.max) %}
+                                                {% set statusColor = get_status_color(status) %}
+                                                {% set optimalMid = (levels.min + levels.max) / 2 if levels.min is not none and levels.max is not none else value %}
+                                                {% set percentage = (value / optimalMid) * 100 if optimalMid != 0 else 0 %}
+                                                {# ... (estructura similar a macronutrientes) ... #}
+                                           {% endif %}
+                                      {% endfor %}
+                                 </div>
+                            </div>
+                      </div>
+                 </div>
+                 {# ... (Interpretación del Análisis Foliar) ... #}
+             {% else %}
+                 <p>No hay datos de análisis foliar disponibles para este reporte.</p>
+             {% endif %}
+        </div>
+
+        <div id="soil" class="tabs-content hidden">
+            {# --- Análisis de Suelo Detallado --- #}
+            {# (Usar variables: analysisData.soil, optimalLevels.nutrientes, nutrientNames) #}
+            {% if analysisData.soil %}
+                {# ... (Estructura similar a Análisis Foliar, ajustando unidades y claves) ... #}
+            {% else %}
+                 <p>No hay datos de análisis de suelo disponibles para este reporte.</p>
+             {% endif %}
+        </div>
+
+        <div id="recommendations" class="tabs-content hidden">
+            {# --- Recomendaciones --- #}
+            {# (Usar variable: recommendations) #}
+             <div class="mb-4 border p-4 rounded-lg">
+                 <h2 class="text-lg font-bold">Recomendaciones Basadas en la Ley de Liebig</h2>
+                 <p class="text-muted-foreground">Acciones prioritarias</p>
+                  {% if recommendations %}
+                       {% for rec in recommendations %}
+                           <div class="border rounded-lg p-4 space-y-2 mb-4">
+                               {# ... (estructura de cada recomendación) ... #}
+                           </div>
+                       {% endfor %}
+                   {% else %}
+                       <p>No hay recomendaciones específicas generadas para este análisis.</p>
+                   {% endif %}
+             </div>
+             {# ... (Explicación Ley de Liebig) ... #}
+        </div>
+
+        <div id="history" class="tabs-content hidden">
+            {# --- Histórico --- #}
+            {# (Usar variable: historicalData) #}
+             <div class="mb-4 border p-4 rounded-lg">
+                 <h2 class="text-lg font-bold">Histórico de Análisis</h2>
+                 <p class="text-muted-foreground">Evolución de parámetros</p>
+                 <canvas id="historyChart" class="h-80"></canvas>
+                 {# ... (Tendencias Observadas) ... #}
+             </div>
+        </div>
+
+    {% else %}
+        {# Mensaje si no se pudieron cargar los datos #}
+        <div class="text-center p-10">
+            <h2 class="text-2xl font-semibold text-red-600">Error al cargar el reporte</h2>
+            <p class="text-gray-600 mt-2">No se pudieron obtener los datos para el reporte solicitado.</p>
+            <a href="{{ url_for('foliage_report.listar_reportes') }}" class="mt-4 inline-block bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">Volver al listado</a>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+    {{ super() }}
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Solo intentar crear gráficos si los datos están disponibles
+            const foliarChartData = {{ foliarChartData|tojson|safe or 'null' }};
+            const soilChartData = {{ soilChartData|tojson|safe or 'null' }};
+            const historicalData = {{ historicalData|tojson|safe or 'null' }};
+
+            // Configuración de gráficos (solo si hay datos)
+            if (foliarChartData && document.getElementById('foliarChart')) {
+                 const foliarChartCtx = document.getElementById('foliarChart').getContext('2d');
+                 new Chart(foliarChartCtx, {
+                     type: 'bar', // o 'radar'
+                     data: {
+                         labels: foliarChartData.map(d => d.name),
+                         datasets: [
+                             {
+                                 label: 'Nivel Actual',
+                                 data: foliarChartData.map(d => d.actual),
+                                 backgroundColor: 'rgba(54, 162, 235, 0.6)', // Azul
+                                 borderColor: 'rgba(54, 162, 235, 1)',
+                                 borderWidth: 1
+                             },
+                              {
+                                 label: 'Rango Óptimo',
+                                 data: foliarChartData.map(d => [d.min, d.max]), // Para mostrar rango
+                                 // Opciones para mostrar rango (puede requerir plugins o configuración específica)
+                                  type: 'line', // Podría ser una línea o área para el rango
+                                  fill: '+1', // Rellenar hasta el siguiente dataset (max)
+                                  backgroundColor: 'rgba(75, 192, 192, 0.2)', // Verde claro
+                                  borderColor: 'rgba(75, 192, 192, 0.5)',
+                                  pointRadius: 0,
+                                  data: foliarChartData.map(d => d.min), // Línea mínima
+                              },
+                               {
+                                  // Dataset para la línea máxima del rango
+                                  data: foliarChartData.map(d => d.max),
+                                  type: 'line',
+                                  fill: false,
+                                  borderColor: 'rgba(75, 192, 192, 0.5)',
+                                  pointRadius: 0,
+                                  showLine: false // Opcional: ocultar la línea si solo quieres el área
+                              }
+                         ]
+                     },
+                     options: { // Opciones básicas
+                         responsive: true,
+                         maintainAspectRatio: false,
+                          plugins: { legend: { display: true } }
+                     }
+                 });
+            }
+
+            if (soilChartData && document.getElementById('soilChart')) {
+                const soilChartCtx = document.getElementById('soilChart').getContext('2d');
+                 // ... (Configuración similar para soilChart) ...
+            }
+
+            if (historicalData && document.getElementById('historyChart')) {
+                const historyChartCtx = document.getElementById('historyChart').getContext('2d');
+                // ... (Configuración similar para historyChart) ...
+            }
+
+            // Manejo de tabs
+            const tabs = document.querySelectorAll('.tabs-trigger');
+            const contents = document.querySelectorAll('.tabs-content');
+
+            tabs.forEach(tab => {
+                tab.addEventListener('click', function() {
+                    // Desactivar todos los tabs y ocultar contenidos
+                    tabs.forEach(t => t.classList.remove('active', 'bg-white', 'text-gray-900'));
+                    tabs.forEach(t => t.classList.add('bg-zinc-100', 'text-muted-foreground')); // Reset styles
+                    contents.forEach(c => c.classList.add('hidden'));
+
+                    // Activar el tab clickeado y mostrar su contenido
+                    this.classList.add('active', 'bg-white', 'text-gray-900');
+                     this.classList.remove('bg-zinc-100', 'text-muted-foreground');
+                    const targetId = this.getAttribute('data-target');
+                    const targetContent = document.querySelector(targetId);
+                    if (targetContent) {
+                        targetContent.classList.remove('hidden');
+                    }
+                });
+            });
+
+             // Activar el primer tab por defecto si existe
+             if (tabs.length > 0) {
+                 tabs[0].classList.add('active', 'bg-white', 'text-gray-900');
+                 tabs[0].classList.remove('bg-zinc-100', 'text-muted-foreground');
+                 const firstTargetId = tabs[0].getAttribute('data-target');
+                 const firstTargetContent = document.querySelector(firstTargetId);
+                 if (firstTargetContent) {
+                     firstTargetContent.classList.remove('hidden');
+                 }
+             }
+        });
+    </script>
+{% endblock %}
