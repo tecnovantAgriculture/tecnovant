@@ -196,6 +196,24 @@
                                 <a class="variable" href="#Config.MEDIA_DISPLAY_MODE">MEDIA_DISPLAY_MODE</a>
                         </li>
                         <li>
+                                <a class="variable" href="#Config.AVATAR_UPLOAD_DIR">AVATAR_UPLOAD_DIR</a>
+                        </li>
+                        <li>
+                                <a class="variable" href="#Config.AVATAR_ALLOWED_EXTENSIONS">AVATAR_ALLOWED_EXTENSIONS</a>
+                        </li>
+                        <li>
+                                <a class="variable" href="#Config.AVATAR_MAX_SIZE">AVATAR_MAX_SIZE</a>
+                        </li>
+                        <li>
+                                <a class="variable" href="#Config.AVATAR_URL_PREFIX">AVATAR_URL_PREFIX</a>
+                        </li>
+                        <li>
+                                <a class="variable" href="#Config.AVATAR_DEFAULT">AVATAR_DEFAULT</a>
+                        </li>
+                        <li>
+                                <a class="variable" href="#Config.AVATAR_SERVE_STATIC">AVATAR_SERVE_STATIC</a>
+                        </li>
+                        <li>
                                 <a class="function" href="#Config.validate_config">validate_config</a>
                         </li>
                 </ul>
@@ -222,7 +240,7 @@
 <h6 id="author">Author:</h6>
 
 <blockquote>
-  <p>Johnny De Castro <a href="&#109;&#97;&#x69;&#108;&#116;&#111;&#x3a;&#106;&#64;&#106;&#100;&#99;&#x61;&#x73;&#116;&#114;&#x6f;&#46;&#99;&#x6f;">&#106;&#64;&#106;&#100;&#99;&#x61;&#x73;&#116;&#114;&#x6f;&#46;&#99;&#x6f;</a></p>
+  <p>Johnny De Castro <a href="&#109;&#x61;&#x69;&#x6c;&#x74;&#111;&#x3a;&#106;&#x40;&#x6a;&#x64;&#99;&#97;&#115;&#x74;&#x72;&#x6f;&#46;&#99;o">&#106;&#x40;&#x6a;&#x64;&#99;&#97;&#115;&#x74;&#x72;&#x6f;&#46;&#99;o</a></p>
 </blockquote>
 
 <h6 id="copyright">Copyright:</h6>
@@ -399,45 +417,57 @@
 </span><span id="L-155"><a href="#L-155"><span class="linenos">155</span></a>    <span class="c1"># Media storage</span>
 </span><span id="L-156"><a href="#L-156"><span class="linenos">156</span></a>    <span class="n">MEDIA_STORAGE_DIR</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;MEDIA_STORAGE_DIR&quot;</span><span class="p">)</span>
 </span><span id="L-157"><a href="#L-157"><span class="linenos">157</span></a>    <span class="n">MEDIA_MAX_UPLOAD_SIZE</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;MEDIA_MAX_UPLOAD_SIZE&quot;</span><span class="p">,</span> <span class="s2">&quot;2G&quot;</span><span class="p">)</span>
-</span><span id="L-158"><a href="#L-158"><span class="linenos">158</span></a>    <span class="n">MEDIA_MAX_UPLOAD_BYTES</span> <span class="o">=</span> <span class="n">_parse_size_bytes</span><span class="p">(</span><span class="n">MEDIA_MAX_UPLOAD_SIZE</span><span class="p">,</span> <span class="mi">2</span> <span class="o">*</span> <span class="mi">1024</span> <span class="o">*</span> <span class="mi">1024</span> <span class="o">*</span> <span class="mi">1024</span><span class="p">)</span>
-</span><span id="L-159"><a href="#L-159"><span class="linenos">159</span></a>    <span class="n">MEDIA_UPLOAD_TMP_DIR</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;MEDIA_UPLOAD_TMP_DIR&quot;</span><span class="p">)</span>
-</span><span id="L-160"><a href="#L-160"><span class="linenos">160</span></a>    <span class="n">MEDIA_UPLOAD_CHUNK_SIZE</span> <span class="o">=</span> <span class="n">_parse_size_bytes</span><span class="p">(</span>
-</span><span id="L-161"><a href="#L-161"><span class="linenos">161</span></a>        <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;MEDIA_UPLOAD_CHUNK_SIZE&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="mi">16</span> <span class="o">*</span> <span class="mi">1024</span> <span class="o">*</span> <span class="mi">1024</span><span class="p">)),</span>
-</span><span id="L-162"><a href="#L-162"><span class="linenos">162</span></a>        <span class="mi">16</span> <span class="o">*</span> <span class="mi">1024</span> <span class="o">*</span> <span class="mi">1024</span><span class="p">,</span>
-</span><span id="L-163"><a href="#L-163"><span class="linenos">163</span></a>    <span class="p">)</span>
-</span><span id="L-164"><a href="#L-164"><span class="linenos">164</span></a>    <span class="n">MAX_CONTENT_LENGTH</span> <span class="o">=</span> <span class="n">MEDIA_MAX_UPLOAD_BYTES</span>
-</span><span id="L-165"><a href="#L-165"><span class="linenos">165</span></a>    <span class="n">MEDIA_THUMBNAIL_SPECS</span> <span class="o">=</span> <span class="p">{</span>
-</span><span id="L-166"><a href="#L-166"><span class="linenos">166</span></a>        <span class="s2">&quot;gallery&quot;</span><span class="p">:</span> <span class="p">{</span>
-</span><span id="L-167"><a href="#L-167"><span class="linenos">167</span></a>            <span class="s2">&quot;max_width&quot;</span><span class="p">:</span> <span class="mi">512</span><span class="p">,</span>
-</span><span id="L-168"><a href="#L-168"><span class="linenos">168</span></a>            <span class="s2">&quot;max_height&quot;</span><span class="p">:</span> <span class="mi">512</span><span class="p">,</span>
-</span><span id="L-169"><a href="#L-169"><span class="linenos">169</span></a>            <span class="s2">&quot;quality&quot;</span><span class="p">:</span> <span class="mi">82</span><span class="p">,</span>
-</span><span id="L-170"><a href="#L-170"><span class="linenos">170</span></a>            <span class="s2">&quot;method&quot;</span><span class="p">:</span> <span class="mi">3</span><span class="p">,</span>
-</span><span id="L-171"><a href="#L-171"><span class="linenos">171</span></a>        <span class="p">}</span>
-</span><span id="L-172"><a href="#L-172"><span class="linenos">172</span></a>    <span class="p">}</span>
-</span><span id="L-173"><a href="#L-173"><span class="linenos">173</span></a>    <span class="n">MEDIA_PREPROCESS_CACHE_DIR</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;MEDIA_PREPROCESS_CACHE_DIR&quot;</span><span class="p">)</span>
-</span><span id="L-174"><a href="#L-174"><span class="linenos">174</span></a>    <span class="n">MEDIA_PREPROCESS_MAX_WORKERS</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;MEDIA_PREPROCESS_MAX_WORKERS&quot;</span><span class="p">,</span> <span class="s2">&quot;2&quot;</span><span class="p">))</span>
-</span><span id="L-175"><a href="#L-175"><span class="linenos">175</span></a>    <span class="n">MEDIA_PREVIEW_MAX_DIM</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;MEDIA_PREVIEW_MAX_DIM&quot;</span><span class="p">,</span> <span class="s2">&quot;2048&quot;</span><span class="p">))</span>
-</span><span id="L-176"><a href="#L-176"><span class="linenos">176</span></a>    <span class="n">MEDIA_DISPLAY_MAX_DIM</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;MEDIA_DISPLAY_MAX_DIM&quot;</span><span class="p">,</span> <span class="s2">&quot;4096&quot;</span><span class="p">))</span>
-</span><span id="L-177"><a href="#L-177"><span class="linenos">177</span></a>    <span class="n">MEDIA_DISPLAY_MODE</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;MEDIA_DISPLAY_MODE&quot;</span><span class="p">,</span> <span class="s2">&quot;auto&quot;</span><span class="p">)</span>
-</span><span id="L-178"><a href="#L-178"><span class="linenos">178</span></a>
-</span><span id="L-179"><a href="#L-179"><span class="linenos">179</span></a>    <span class="c1"># overwrite for testing development purposes</span>
-</span><span id="L-180"><a href="#L-180"><span class="linenos">180</span></a>    <span class="n">JWT_COOKIE_SECURE</span> <span class="o">=</span> <span class="kc">True</span>  <span class="c1"># development purposes</span>
-</span><span id="L-181"><a href="#L-181"><span class="linenos">181</span></a>    <span class="n">JWT_COOKIE_CSRF_PROTECT</span> <span class="o">=</span> <span class="kc">True</span>  <span class="c1"># development purposes</span>
-</span><span id="L-182"><a href="#L-182"><span class="linenos">182</span></a>
-</span><span id="L-183"><a href="#L-183"><span class="linenos">183</span></a>    <span class="nd">@classmethod</span>
-</span><span id="L-184"><a href="#L-184"><span class="linenos">184</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">validate_config</span><span class="p">(</span><span class="bp">cls</span><span class="p">):</span>
-</span><span id="L-185"><a href="#L-185"><span class="linenos">185</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate that all required environment variables are set.&quot;&quot;&quot;</span>
-</span><span id="L-186"><a href="#L-186"><span class="linenos">186</span></a>        <span class="n">required_vars</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;SECRET_KEY&quot;</span><span class="p">,</span> <span class="s2">&quot;SECURITY_SALT&quot;</span><span class="p">]</span>
-</span><span id="L-187"><a href="#L-187"><span class="linenos">187</span></a>        <span class="k">if</span> <span class="bp">cls</span><span class="o">.</span><span class="n">DB_TYPE</span> <span class="o">!=</span> <span class="s2">&quot;sqlite&quot;</span><span class="p">:</span>
-</span><span id="L-188"><a href="#L-188"><span class="linenos">188</span></a>            <span class="n">required_vars</span><span class="o">.</span><span class="n">extend</span><span class="p">([</span><span class="s2">&quot;DB_USER&quot;</span><span class="p">,</span> <span class="s2">&quot;DB_PASSWORD&quot;</span><span class="p">,</span> <span class="s2">&quot;DB_HOST&quot;</span><span class="p">,</span> <span class="s2">&quot;DB_NAME&quot;</span><span class="p">])</span>
-</span><span id="L-189"><a href="#L-189"><span class="linenos">189</span></a>
-</span><span id="L-190"><a href="#L-190"><span class="linenos">190</span></a>        <span class="k">for</span> <span class="n">var</span> <span class="ow">in</span> <span class="n">required_vars</span><span class="p">:</span>
-</span><span id="L-191"><a href="#L-191"><span class="linenos">191</span></a>            <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="n">var</span><span class="p">):</span>
-</span><span id="L-192"><a href="#L-192"><span class="linenos">192</span></a>                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Missing required environment variable: </span><span class="si">{</span><span class="n">var</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-</span><span id="L-193"><a href="#L-193"><span class="linenos">193</span></a>
+</span><span id="L-158"><a href="#L-158"><span class="linenos">158</span></a>    <span class="n">MEDIA_MAX_UPLOAD_BYTES</span> <span class="o">=</span> <span class="n">_parse_size_bytes</span><span class="p">(</span>
+</span><span id="L-159"><a href="#L-159"><span class="linenos">159</span></a>        <span class="n">MEDIA_MAX_UPLOAD_SIZE</span><span class="p">,</span> <span class="mi">2</span> <span class="o">*</span> <span class="mi">1024</span> <span class="o">*</span> <span class="mi">1024</span> <span class="o">*</span> <span class="mi">1024</span>
+</span><span id="L-160"><a href="#L-160"><span class="linenos">160</span></a>    <span class="p">)</span>
+</span><span id="L-161"><a href="#L-161"><span class="linenos">161</span></a>    <span class="n">MEDIA_UPLOAD_TMP_DIR</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;MEDIA_UPLOAD_TMP_DIR&quot;</span><span class="p">)</span>
+</span><span id="L-162"><a href="#L-162"><span class="linenos">162</span></a>    <span class="n">MEDIA_UPLOAD_CHUNK_SIZE</span> <span class="o">=</span> <span class="n">_parse_size_bytes</span><span class="p">(</span>
+</span><span id="L-163"><a href="#L-163"><span class="linenos">163</span></a>        <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;MEDIA_UPLOAD_CHUNK_SIZE&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="mi">16</span> <span class="o">*</span> <span class="mi">1024</span> <span class="o">*</span> <span class="mi">1024</span><span class="p">)),</span>
+</span><span id="L-164"><a href="#L-164"><span class="linenos">164</span></a>        <span class="mi">16</span> <span class="o">*</span> <span class="mi">1024</span> <span class="o">*</span> <span class="mi">1024</span><span class="p">,</span>
+</span><span id="L-165"><a href="#L-165"><span class="linenos">165</span></a>    <span class="p">)</span>
+</span><span id="L-166"><a href="#L-166"><span class="linenos">166</span></a>    <span class="n">MAX_CONTENT_LENGTH</span> <span class="o">=</span> <span class="n">MEDIA_MAX_UPLOAD_BYTES</span>
+</span><span id="L-167"><a href="#L-167"><span class="linenos">167</span></a>    <span class="n">MEDIA_THUMBNAIL_SPECS</span> <span class="o">=</span> <span class="p">{</span>
+</span><span id="L-168"><a href="#L-168"><span class="linenos">168</span></a>        <span class="s2">&quot;gallery&quot;</span><span class="p">:</span> <span class="p">{</span>
+</span><span id="L-169"><a href="#L-169"><span class="linenos">169</span></a>            <span class="s2">&quot;max_width&quot;</span><span class="p">:</span> <span class="mi">512</span><span class="p">,</span>
+</span><span id="L-170"><a href="#L-170"><span class="linenos">170</span></a>            <span class="s2">&quot;max_height&quot;</span><span class="p">:</span> <span class="mi">512</span><span class="p">,</span>
+</span><span id="L-171"><a href="#L-171"><span class="linenos">171</span></a>            <span class="s2">&quot;quality&quot;</span><span class="p">:</span> <span class="mi">82</span><span class="p">,</span>
+</span><span id="L-172"><a href="#L-172"><span class="linenos">172</span></a>            <span class="s2">&quot;method&quot;</span><span class="p">:</span> <span class="mi">3</span><span class="p">,</span>
+</span><span id="L-173"><a href="#L-173"><span class="linenos">173</span></a>        <span class="p">}</span>
+</span><span id="L-174"><a href="#L-174"><span class="linenos">174</span></a>    <span class="p">}</span>
+</span><span id="L-175"><a href="#L-175"><span class="linenos">175</span></a>    <span class="n">MEDIA_PREPROCESS_CACHE_DIR</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;MEDIA_PREPROCESS_CACHE_DIR&quot;</span><span class="p">)</span>
+</span><span id="L-176"><a href="#L-176"><span class="linenos">176</span></a>    <span class="n">MEDIA_PREPROCESS_MAX_WORKERS</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;MEDIA_PREPROCESS_MAX_WORKERS&quot;</span><span class="p">,</span> <span class="s2">&quot;2&quot;</span><span class="p">))</span>
+</span><span id="L-177"><a href="#L-177"><span class="linenos">177</span></a>    <span class="n">MEDIA_PREVIEW_MAX_DIM</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;MEDIA_PREVIEW_MAX_DIM&quot;</span><span class="p">,</span> <span class="s2">&quot;2048&quot;</span><span class="p">))</span>
+</span><span id="L-178"><a href="#L-178"><span class="linenos">178</span></a>    <span class="n">MEDIA_DISPLAY_MAX_DIM</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;MEDIA_DISPLAY_MAX_DIM&quot;</span><span class="p">,</span> <span class="s2">&quot;4096&quot;</span><span class="p">))</span>
+</span><span id="L-179"><a href="#L-179"><span class="linenos">179</span></a>    <span class="n">MEDIA_DISPLAY_MODE</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;MEDIA_DISPLAY_MODE&quot;</span><span class="p">,</span> <span class="s2">&quot;auto&quot;</span><span class="p">)</span>
+</span><span id="L-180"><a href="#L-180"><span class="linenos">180</span></a>
+</span><span id="L-181"><a href="#L-181"><span class="linenos">181</span></a>    <span class="c1"># Avatar upload settings</span>
+</span><span id="L-182"><a href="#L-182"><span class="linenos">182</span></a>    <span class="n">AVATAR_UPLOAD_DIR</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;AVATAR_UPLOAD_DIR&quot;</span><span class="p">,</span> <span class="s2">&quot;/var/www/avatars&quot;</span><span class="p">)</span>
+</span><span id="L-183"><a href="#L-183"><span class="linenos">183</span></a>    <span class="n">AVATAR_ALLOWED_EXTENSIONS</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;jpg&quot;</span><span class="p">,</span> <span class="s2">&quot;jpeg&quot;</span><span class="p">,</span> <span class="s2">&quot;png&quot;</span><span class="p">,</span> <span class="s2">&quot;webp&quot;</span><span class="p">}</span>
+</span><span id="L-184"><a href="#L-184"><span class="linenos">184</span></a>    <span class="n">AVATAR_MAX_SIZE</span> <span class="o">=</span> <span class="mi">5</span> <span class="o">*</span> <span class="mi">1024</span> <span class="o">*</span> <span class="mi">1024</span>  <span class="c1"># 5 MB</span>
+</span><span id="L-185"><a href="#L-185"><span class="linenos">185</span></a>    <span class="n">AVATAR_URL_PREFIX</span> <span class="o">=</span> <span class="s2">&quot;/avatars&quot;</span>
+</span><span id="L-186"><a href="#L-186"><span class="linenos">186</span></a>    <span class="n">AVATAR_DEFAULT</span> <span class="o">=</span> <span class="s2">&quot;/img/avatar.png&quot;</span>
+</span><span id="L-187"><a href="#L-187"><span class="linenos">187</span></a>    <span class="n">AVATAR_SERVE_STATIC</span> <span class="o">=</span> <span class="n">env_config</span><span class="p">[</span>
+</span><span id="L-188"><a href="#L-188"><span class="linenos">188</span></a>        <span class="s2">&quot;DEBUG&quot;</span>
+</span><span id="L-189"><a href="#L-189"><span class="linenos">189</span></a>    <span class="p">]</span>  <span class="c1"># Enable Flask static serving only in development</span>
+</span><span id="L-190"><a href="#L-190"><span class="linenos">190</span></a>
+</span><span id="L-191"><a href="#L-191"><span class="linenos">191</span></a>    <span class="c1"># overwrite for testing development purposes</span>
+</span><span id="L-192"><a href="#L-192"><span class="linenos">192</span></a>    <span class="n">JWT_COOKIE_SECURE</span> <span class="o">=</span> <span class="kc">True</span>  <span class="c1"># development purposes</span>
+</span><span id="L-193"><a href="#L-193"><span class="linenos">193</span></a>    <span class="n">JWT_COOKIE_CSRF_PROTECT</span> <span class="o">=</span> <span class="kc">True</span>  <span class="c1"># development purposes</span>
 </span><span id="L-194"><a href="#L-194"><span class="linenos">194</span></a>
-</span><span id="L-195"><a href="#L-195"><span class="linenos">195</span></a><span class="c1"># Validate configuration on class initialization</span>
-</span><span id="L-196"><a href="#L-196"><span class="linenos">196</span></a><span class="n">Config</span><span class="o">.</span><span class="n">validate_config</span><span class="p">()</span>
+</span><span id="L-195"><a href="#L-195"><span class="linenos">195</span></a>    <span class="nd">@classmethod</span>
+</span><span id="L-196"><a href="#L-196"><span class="linenos">196</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">validate_config</span><span class="p">(</span><span class="bp">cls</span><span class="p">):</span>
+</span><span id="L-197"><a href="#L-197"><span class="linenos">197</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate that all required environment variables are set.&quot;&quot;&quot;</span>
+</span><span id="L-198"><a href="#L-198"><span class="linenos">198</span></a>        <span class="n">required_vars</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;SECRET_KEY&quot;</span><span class="p">,</span> <span class="s2">&quot;SECURITY_SALT&quot;</span><span class="p">]</span>
+</span><span id="L-199"><a href="#L-199"><span class="linenos">199</span></a>        <span class="k">if</span> <span class="bp">cls</span><span class="o">.</span><span class="n">DB_TYPE</span> <span class="o">!=</span> <span class="s2">&quot;sqlite&quot;</span><span class="p">:</span>
+</span><span id="L-200"><a href="#L-200"><span class="linenos">200</span></a>            <span class="n">required_vars</span><span class="o">.</span><span class="n">extend</span><span class="p">([</span><span class="s2">&quot;DB_USER&quot;</span><span class="p">,</span> <span class="s2">&quot;DB_PASSWORD&quot;</span><span class="p">,</span> <span class="s2">&quot;DB_HOST&quot;</span><span class="p">,</span> <span class="s2">&quot;DB_NAME&quot;</span><span class="p">])</span>
+</span><span id="L-201"><a href="#L-201"><span class="linenos">201</span></a>
+</span><span id="L-202"><a href="#L-202"><span class="linenos">202</span></a>        <span class="k">for</span> <span class="n">var</span> <span class="ow">in</span> <span class="n">required_vars</span><span class="p">:</span>
+</span><span id="L-203"><a href="#L-203"><span class="linenos">203</span></a>            <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="n">var</span><span class="p">):</span>
+</span><span id="L-204"><a href="#L-204"><span class="linenos">204</span></a>                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Missing required environment variable: </span><span class="si">{</span><span class="n">var</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</span><span id="L-205"><a href="#L-205"><span class="linenos">205</span></a>
+</span><span id="L-206"><a href="#L-206"><span class="linenos">206</span></a>
+</span><span id="L-207"><a href="#L-207"><span class="linenos">207</span></a><span class="c1"># Validate configuration on class initialization</span>
+</span><span id="L-208"><a href="#L-208"><span class="linenos">208</span></a><span class="n">Config</span><span class="o">.</span><span class="n">validate_config</span><span class="p">()</span>
 </span></pre></div>
 
 
@@ -445,7 +475,7 @@
                 <section id="dotenv_path">
                     <div class="attr variable">
             <span class="name">dotenv_path</span>        =
-<span class="default_value">PosixPath(&#39;/home/j/dev/soportes/app-foliar/project_tecnoagro/tecnoagro-fase-dos/project/.env&#39;)</span>
+<span class="default_value">PosixPath(&#39;/home/j/dev/soportes/app-foliar/project_tecnoagro/tecnoagro-fase-cuatro/project/.env&#39;)</span>
 
         
     </div>
@@ -625,41 +655,53 @@
 </span><span id="Config-156"><a href="#Config-156"><span class="linenos">156</span></a>    <span class="c1"># Media storage</span>
 </span><span id="Config-157"><a href="#Config-157"><span class="linenos">157</span></a>    <span class="n">MEDIA_STORAGE_DIR</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;MEDIA_STORAGE_DIR&quot;</span><span class="p">)</span>
 </span><span id="Config-158"><a href="#Config-158"><span class="linenos">158</span></a>    <span class="n">MEDIA_MAX_UPLOAD_SIZE</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;MEDIA_MAX_UPLOAD_SIZE&quot;</span><span class="p">,</span> <span class="s2">&quot;2G&quot;</span><span class="p">)</span>
-</span><span id="Config-159"><a href="#Config-159"><span class="linenos">159</span></a>    <span class="n">MEDIA_MAX_UPLOAD_BYTES</span> <span class="o">=</span> <span class="n">_parse_size_bytes</span><span class="p">(</span><span class="n">MEDIA_MAX_UPLOAD_SIZE</span><span class="p">,</span> <span class="mi">2</span> <span class="o">*</span> <span class="mi">1024</span> <span class="o">*</span> <span class="mi">1024</span> <span class="o">*</span> <span class="mi">1024</span><span class="p">)</span>
-</span><span id="Config-160"><a href="#Config-160"><span class="linenos">160</span></a>    <span class="n">MEDIA_UPLOAD_TMP_DIR</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;MEDIA_UPLOAD_TMP_DIR&quot;</span><span class="p">)</span>
-</span><span id="Config-161"><a href="#Config-161"><span class="linenos">161</span></a>    <span class="n">MEDIA_UPLOAD_CHUNK_SIZE</span> <span class="o">=</span> <span class="n">_parse_size_bytes</span><span class="p">(</span>
-</span><span id="Config-162"><a href="#Config-162"><span class="linenos">162</span></a>        <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;MEDIA_UPLOAD_CHUNK_SIZE&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="mi">16</span> <span class="o">*</span> <span class="mi">1024</span> <span class="o">*</span> <span class="mi">1024</span><span class="p">)),</span>
-</span><span id="Config-163"><a href="#Config-163"><span class="linenos">163</span></a>        <span class="mi">16</span> <span class="o">*</span> <span class="mi">1024</span> <span class="o">*</span> <span class="mi">1024</span><span class="p">,</span>
-</span><span id="Config-164"><a href="#Config-164"><span class="linenos">164</span></a>    <span class="p">)</span>
-</span><span id="Config-165"><a href="#Config-165"><span class="linenos">165</span></a>    <span class="n">MAX_CONTENT_LENGTH</span> <span class="o">=</span> <span class="n">MEDIA_MAX_UPLOAD_BYTES</span>
-</span><span id="Config-166"><a href="#Config-166"><span class="linenos">166</span></a>    <span class="n">MEDIA_THUMBNAIL_SPECS</span> <span class="o">=</span> <span class="p">{</span>
-</span><span id="Config-167"><a href="#Config-167"><span class="linenos">167</span></a>        <span class="s2">&quot;gallery&quot;</span><span class="p">:</span> <span class="p">{</span>
-</span><span id="Config-168"><a href="#Config-168"><span class="linenos">168</span></a>            <span class="s2">&quot;max_width&quot;</span><span class="p">:</span> <span class="mi">512</span><span class="p">,</span>
-</span><span id="Config-169"><a href="#Config-169"><span class="linenos">169</span></a>            <span class="s2">&quot;max_height&quot;</span><span class="p">:</span> <span class="mi">512</span><span class="p">,</span>
-</span><span id="Config-170"><a href="#Config-170"><span class="linenos">170</span></a>            <span class="s2">&quot;quality&quot;</span><span class="p">:</span> <span class="mi">82</span><span class="p">,</span>
-</span><span id="Config-171"><a href="#Config-171"><span class="linenos">171</span></a>            <span class="s2">&quot;method&quot;</span><span class="p">:</span> <span class="mi">3</span><span class="p">,</span>
-</span><span id="Config-172"><a href="#Config-172"><span class="linenos">172</span></a>        <span class="p">}</span>
-</span><span id="Config-173"><a href="#Config-173"><span class="linenos">173</span></a>    <span class="p">}</span>
-</span><span id="Config-174"><a href="#Config-174"><span class="linenos">174</span></a>    <span class="n">MEDIA_PREPROCESS_CACHE_DIR</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;MEDIA_PREPROCESS_CACHE_DIR&quot;</span><span class="p">)</span>
-</span><span id="Config-175"><a href="#Config-175"><span class="linenos">175</span></a>    <span class="n">MEDIA_PREPROCESS_MAX_WORKERS</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;MEDIA_PREPROCESS_MAX_WORKERS&quot;</span><span class="p">,</span> <span class="s2">&quot;2&quot;</span><span class="p">))</span>
-</span><span id="Config-176"><a href="#Config-176"><span class="linenos">176</span></a>    <span class="n">MEDIA_PREVIEW_MAX_DIM</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;MEDIA_PREVIEW_MAX_DIM&quot;</span><span class="p">,</span> <span class="s2">&quot;2048&quot;</span><span class="p">))</span>
-</span><span id="Config-177"><a href="#Config-177"><span class="linenos">177</span></a>    <span class="n">MEDIA_DISPLAY_MAX_DIM</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;MEDIA_DISPLAY_MAX_DIM&quot;</span><span class="p">,</span> <span class="s2">&quot;4096&quot;</span><span class="p">))</span>
-</span><span id="Config-178"><a href="#Config-178"><span class="linenos">178</span></a>    <span class="n">MEDIA_DISPLAY_MODE</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;MEDIA_DISPLAY_MODE&quot;</span><span class="p">,</span> <span class="s2">&quot;auto&quot;</span><span class="p">)</span>
-</span><span id="Config-179"><a href="#Config-179"><span class="linenos">179</span></a>
-</span><span id="Config-180"><a href="#Config-180"><span class="linenos">180</span></a>    <span class="c1"># overwrite for testing development purposes</span>
-</span><span id="Config-181"><a href="#Config-181"><span class="linenos">181</span></a>    <span class="n">JWT_COOKIE_SECURE</span> <span class="o">=</span> <span class="kc">True</span>  <span class="c1"># development purposes</span>
-</span><span id="Config-182"><a href="#Config-182"><span class="linenos">182</span></a>    <span class="n">JWT_COOKIE_CSRF_PROTECT</span> <span class="o">=</span> <span class="kc">True</span>  <span class="c1"># development purposes</span>
-</span><span id="Config-183"><a href="#Config-183"><span class="linenos">183</span></a>
-</span><span id="Config-184"><a href="#Config-184"><span class="linenos">184</span></a>    <span class="nd">@classmethod</span>
-</span><span id="Config-185"><a href="#Config-185"><span class="linenos">185</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">validate_config</span><span class="p">(</span><span class="bp">cls</span><span class="p">):</span>
-</span><span id="Config-186"><a href="#Config-186"><span class="linenos">186</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate that all required environment variables are set.&quot;&quot;&quot;</span>
-</span><span id="Config-187"><a href="#Config-187"><span class="linenos">187</span></a>        <span class="n">required_vars</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;SECRET_KEY&quot;</span><span class="p">,</span> <span class="s2">&quot;SECURITY_SALT&quot;</span><span class="p">]</span>
-</span><span id="Config-188"><a href="#Config-188"><span class="linenos">188</span></a>        <span class="k">if</span> <span class="bp">cls</span><span class="o">.</span><span class="n">DB_TYPE</span> <span class="o">!=</span> <span class="s2">&quot;sqlite&quot;</span><span class="p">:</span>
-</span><span id="Config-189"><a href="#Config-189"><span class="linenos">189</span></a>            <span class="n">required_vars</span><span class="o">.</span><span class="n">extend</span><span class="p">([</span><span class="s2">&quot;DB_USER&quot;</span><span class="p">,</span> <span class="s2">&quot;DB_PASSWORD&quot;</span><span class="p">,</span> <span class="s2">&quot;DB_HOST&quot;</span><span class="p">,</span> <span class="s2">&quot;DB_NAME&quot;</span><span class="p">])</span>
-</span><span id="Config-190"><a href="#Config-190"><span class="linenos">190</span></a>
-</span><span id="Config-191"><a href="#Config-191"><span class="linenos">191</span></a>        <span class="k">for</span> <span class="n">var</span> <span class="ow">in</span> <span class="n">required_vars</span><span class="p">:</span>
-</span><span id="Config-192"><a href="#Config-192"><span class="linenos">192</span></a>            <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="n">var</span><span class="p">):</span>
-</span><span id="Config-193"><a href="#Config-193"><span class="linenos">193</span></a>                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Missing required environment variable: </span><span class="si">{</span><span class="n">var</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</span><span id="Config-159"><a href="#Config-159"><span class="linenos">159</span></a>    <span class="n">MEDIA_MAX_UPLOAD_BYTES</span> <span class="o">=</span> <span class="n">_parse_size_bytes</span><span class="p">(</span>
+</span><span id="Config-160"><a href="#Config-160"><span class="linenos">160</span></a>        <span class="n">MEDIA_MAX_UPLOAD_SIZE</span><span class="p">,</span> <span class="mi">2</span> <span class="o">*</span> <span class="mi">1024</span> <span class="o">*</span> <span class="mi">1024</span> <span class="o">*</span> <span class="mi">1024</span>
+</span><span id="Config-161"><a href="#Config-161"><span class="linenos">161</span></a>    <span class="p">)</span>
+</span><span id="Config-162"><a href="#Config-162"><span class="linenos">162</span></a>    <span class="n">MEDIA_UPLOAD_TMP_DIR</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;MEDIA_UPLOAD_TMP_DIR&quot;</span><span class="p">)</span>
+</span><span id="Config-163"><a href="#Config-163"><span class="linenos">163</span></a>    <span class="n">MEDIA_UPLOAD_CHUNK_SIZE</span> <span class="o">=</span> <span class="n">_parse_size_bytes</span><span class="p">(</span>
+</span><span id="Config-164"><a href="#Config-164"><span class="linenos">164</span></a>        <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;MEDIA_UPLOAD_CHUNK_SIZE&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="mi">16</span> <span class="o">*</span> <span class="mi">1024</span> <span class="o">*</span> <span class="mi">1024</span><span class="p">)),</span>
+</span><span id="Config-165"><a href="#Config-165"><span class="linenos">165</span></a>        <span class="mi">16</span> <span class="o">*</span> <span class="mi">1024</span> <span class="o">*</span> <span class="mi">1024</span><span class="p">,</span>
+</span><span id="Config-166"><a href="#Config-166"><span class="linenos">166</span></a>    <span class="p">)</span>
+</span><span id="Config-167"><a href="#Config-167"><span class="linenos">167</span></a>    <span class="n">MAX_CONTENT_LENGTH</span> <span class="o">=</span> <span class="n">MEDIA_MAX_UPLOAD_BYTES</span>
+</span><span id="Config-168"><a href="#Config-168"><span class="linenos">168</span></a>    <span class="n">MEDIA_THUMBNAIL_SPECS</span> <span class="o">=</span> <span class="p">{</span>
+</span><span id="Config-169"><a href="#Config-169"><span class="linenos">169</span></a>        <span class="s2">&quot;gallery&quot;</span><span class="p">:</span> <span class="p">{</span>
+</span><span id="Config-170"><a href="#Config-170"><span class="linenos">170</span></a>            <span class="s2">&quot;max_width&quot;</span><span class="p">:</span> <span class="mi">512</span><span class="p">,</span>
+</span><span id="Config-171"><a href="#Config-171"><span class="linenos">171</span></a>            <span class="s2">&quot;max_height&quot;</span><span class="p">:</span> <span class="mi">512</span><span class="p">,</span>
+</span><span id="Config-172"><a href="#Config-172"><span class="linenos">172</span></a>            <span class="s2">&quot;quality&quot;</span><span class="p">:</span> <span class="mi">82</span><span class="p">,</span>
+</span><span id="Config-173"><a href="#Config-173"><span class="linenos">173</span></a>            <span class="s2">&quot;method&quot;</span><span class="p">:</span> <span class="mi">3</span><span class="p">,</span>
+</span><span id="Config-174"><a href="#Config-174"><span class="linenos">174</span></a>        <span class="p">}</span>
+</span><span id="Config-175"><a href="#Config-175"><span class="linenos">175</span></a>    <span class="p">}</span>
+</span><span id="Config-176"><a href="#Config-176"><span class="linenos">176</span></a>    <span class="n">MEDIA_PREPROCESS_CACHE_DIR</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;MEDIA_PREPROCESS_CACHE_DIR&quot;</span><span class="p">)</span>
+</span><span id="Config-177"><a href="#Config-177"><span class="linenos">177</span></a>    <span class="n">MEDIA_PREPROCESS_MAX_WORKERS</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;MEDIA_PREPROCESS_MAX_WORKERS&quot;</span><span class="p">,</span> <span class="s2">&quot;2&quot;</span><span class="p">))</span>
+</span><span id="Config-178"><a href="#Config-178"><span class="linenos">178</span></a>    <span class="n">MEDIA_PREVIEW_MAX_DIM</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;MEDIA_PREVIEW_MAX_DIM&quot;</span><span class="p">,</span> <span class="s2">&quot;2048&quot;</span><span class="p">))</span>
+</span><span id="Config-179"><a href="#Config-179"><span class="linenos">179</span></a>    <span class="n">MEDIA_DISPLAY_MAX_DIM</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;MEDIA_DISPLAY_MAX_DIM&quot;</span><span class="p">,</span> <span class="s2">&quot;4096&quot;</span><span class="p">))</span>
+</span><span id="Config-180"><a href="#Config-180"><span class="linenos">180</span></a>    <span class="n">MEDIA_DISPLAY_MODE</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;MEDIA_DISPLAY_MODE&quot;</span><span class="p">,</span> <span class="s2">&quot;auto&quot;</span><span class="p">)</span>
+</span><span id="Config-181"><a href="#Config-181"><span class="linenos">181</span></a>
+</span><span id="Config-182"><a href="#Config-182"><span class="linenos">182</span></a>    <span class="c1"># Avatar upload settings</span>
+</span><span id="Config-183"><a href="#Config-183"><span class="linenos">183</span></a>    <span class="n">AVATAR_UPLOAD_DIR</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;AVATAR_UPLOAD_DIR&quot;</span><span class="p">,</span> <span class="s2">&quot;/var/www/avatars&quot;</span><span class="p">)</span>
+</span><span id="Config-184"><a href="#Config-184"><span class="linenos">184</span></a>    <span class="n">AVATAR_ALLOWED_EXTENSIONS</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;jpg&quot;</span><span class="p">,</span> <span class="s2">&quot;jpeg&quot;</span><span class="p">,</span> <span class="s2">&quot;png&quot;</span><span class="p">,</span> <span class="s2">&quot;webp&quot;</span><span class="p">}</span>
+</span><span id="Config-185"><a href="#Config-185"><span class="linenos">185</span></a>    <span class="n">AVATAR_MAX_SIZE</span> <span class="o">=</span> <span class="mi">5</span> <span class="o">*</span> <span class="mi">1024</span> <span class="o">*</span> <span class="mi">1024</span>  <span class="c1"># 5 MB</span>
+</span><span id="Config-186"><a href="#Config-186"><span class="linenos">186</span></a>    <span class="n">AVATAR_URL_PREFIX</span> <span class="o">=</span> <span class="s2">&quot;/avatars&quot;</span>
+</span><span id="Config-187"><a href="#Config-187"><span class="linenos">187</span></a>    <span class="n">AVATAR_DEFAULT</span> <span class="o">=</span> <span class="s2">&quot;/img/avatar.png&quot;</span>
+</span><span id="Config-188"><a href="#Config-188"><span class="linenos">188</span></a>    <span class="n">AVATAR_SERVE_STATIC</span> <span class="o">=</span> <span class="n">env_config</span><span class="p">[</span>
+</span><span id="Config-189"><a href="#Config-189"><span class="linenos">189</span></a>        <span class="s2">&quot;DEBUG&quot;</span>
+</span><span id="Config-190"><a href="#Config-190"><span class="linenos">190</span></a>    <span class="p">]</span>  <span class="c1"># Enable Flask static serving only in development</span>
+</span><span id="Config-191"><a href="#Config-191"><span class="linenos">191</span></a>
+</span><span id="Config-192"><a href="#Config-192"><span class="linenos">192</span></a>    <span class="c1"># overwrite for testing development purposes</span>
+</span><span id="Config-193"><a href="#Config-193"><span class="linenos">193</span></a>    <span class="n">JWT_COOKIE_SECURE</span> <span class="o">=</span> <span class="kc">True</span>  <span class="c1"># development purposes</span>
+</span><span id="Config-194"><a href="#Config-194"><span class="linenos">194</span></a>    <span class="n">JWT_COOKIE_CSRF_PROTECT</span> <span class="o">=</span> <span class="kc">True</span>  <span class="c1"># development purposes</span>
+</span><span id="Config-195"><a href="#Config-195"><span class="linenos">195</span></a>
+</span><span id="Config-196"><a href="#Config-196"><span class="linenos">196</span></a>    <span class="nd">@classmethod</span>
+</span><span id="Config-197"><a href="#Config-197"><span class="linenos">197</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">validate_config</span><span class="p">(</span><span class="bp">cls</span><span class="p">):</span>
+</span><span id="Config-198"><a href="#Config-198"><span class="linenos">198</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate that all required environment variables are set.&quot;&quot;&quot;</span>
+</span><span id="Config-199"><a href="#Config-199"><span class="linenos">199</span></a>        <span class="n">required_vars</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;SECRET_KEY&quot;</span><span class="p">,</span> <span class="s2">&quot;SECURITY_SALT&quot;</span><span class="p">]</span>
+</span><span id="Config-200"><a href="#Config-200"><span class="linenos">200</span></a>        <span class="k">if</span> <span class="bp">cls</span><span class="o">.</span><span class="n">DB_TYPE</span> <span class="o">!=</span> <span class="s2">&quot;sqlite&quot;</span><span class="p">:</span>
+</span><span id="Config-201"><a href="#Config-201"><span class="linenos">201</span></a>            <span class="n">required_vars</span><span class="o">.</span><span class="n">extend</span><span class="p">([</span><span class="s2">&quot;DB_USER&quot;</span><span class="p">,</span> <span class="s2">&quot;DB_PASSWORD&quot;</span><span class="p">,</span> <span class="s2">&quot;DB_HOST&quot;</span><span class="p">,</span> <span class="s2">&quot;DB_NAME&quot;</span><span class="p">])</span>
+</span><span id="Config-202"><a href="#Config-202"><span class="linenos">202</span></a>
+</span><span id="Config-203"><a href="#Config-203"><span class="linenos">203</span></a>        <span class="k">for</span> <span class="n">var</span> <span class="ow">in</span> <span class="n">required_vars</span><span class="p">:</span>
+</span><span id="Config-204"><a href="#Config-204"><span class="linenos">204</span></a>            <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="n">var</span><span class="p">):</span>
+</span><span id="Config-205"><a href="#Config-205"><span class="linenos">205</span></a>                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Missing required environment variable: </span><span class="si">{</span><span class="n">var</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 </span></pre></div>
 
 
@@ -1257,6 +1299,78 @@ Handles environment variables, database settings, mail configuration, and JWT se
     
 
                             </div>
+                            <div id="Config.AVATAR_UPLOAD_DIR" class="classattr">
+                                <div class="attr variable">
+            <span class="name">AVATAR_UPLOAD_DIR</span>        =
+<span class="default_value">&#39;/var/www/avatars&#39;</span>
+
+        
+    </div>
+    <a class="headerlink" href="#Config.AVATAR_UPLOAD_DIR"></a>
+    
+    
+
+                            </div>
+                            <div id="Config.AVATAR_ALLOWED_EXTENSIONS" class="classattr">
+                                <div class="attr variable">
+            <span class="name">AVATAR_ALLOWED_EXTENSIONS</span>        =
+<span class="default_value">{&#39;jpg&#39;, &#39;jpeg&#39;, &#39;png&#39;, &#39;webp&#39;}</span>
+
+        
+    </div>
+    <a class="headerlink" href="#Config.AVATAR_ALLOWED_EXTENSIONS"></a>
+    
+    
+
+                            </div>
+                            <div id="Config.AVATAR_MAX_SIZE" class="classattr">
+                                <div class="attr variable">
+            <span class="name">AVATAR_MAX_SIZE</span>        =
+<span class="default_value">5242880</span>
+
+        
+    </div>
+    <a class="headerlink" href="#Config.AVATAR_MAX_SIZE"></a>
+    
+    
+
+                            </div>
+                            <div id="Config.AVATAR_URL_PREFIX" class="classattr">
+                                <div class="attr variable">
+            <span class="name">AVATAR_URL_PREFIX</span>        =
+<span class="default_value">&#39;/avatars&#39;</span>
+
+        
+    </div>
+    <a class="headerlink" href="#Config.AVATAR_URL_PREFIX"></a>
+    
+    
+
+                            </div>
+                            <div id="Config.AVATAR_DEFAULT" class="classattr">
+                                <div class="attr variable">
+            <span class="name">AVATAR_DEFAULT</span>        =
+<span class="default_value">&#39;/img/avatar.png&#39;</span>
+
+        
+    </div>
+    <a class="headerlink" href="#Config.AVATAR_DEFAULT"></a>
+    
+    
+
+                            </div>
+                            <div id="Config.AVATAR_SERVE_STATIC" class="classattr">
+                                <div class="attr variable">
+            <span class="name">AVATAR_SERVE_STATIC</span>        =
+<span class="default_value">True</span>
+
+        
+    </div>
+    <a class="headerlink" href="#Config.AVATAR_SERVE_STATIC"></a>
+    
+    
+
+                            </div>
                             <div id="Config.validate_config" class="classattr">
                                         <input id="Config.validate_config-view-source" class="view-source-toggle-state" type="checkbox" aria-hidden="true" tabindex="-1">
 <div class="attr function">
@@ -1269,16 +1383,16 @@ Handles environment variables, database settings, mail configuration, and JWT se
 
     </div>
     <a class="headerlink" href="#Config.validate_config"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="Config.validate_config-184"><a href="#Config.validate_config-184"><span class="linenos">184</span></a>    <span class="nd">@classmethod</span>
-</span><span id="Config.validate_config-185"><a href="#Config.validate_config-185"><span class="linenos">185</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">validate_config</span><span class="p">(</span><span class="bp">cls</span><span class="p">):</span>
-</span><span id="Config.validate_config-186"><a href="#Config.validate_config-186"><span class="linenos">186</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate that all required environment variables are set.&quot;&quot;&quot;</span>
-</span><span id="Config.validate_config-187"><a href="#Config.validate_config-187"><span class="linenos">187</span></a>        <span class="n">required_vars</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;SECRET_KEY&quot;</span><span class="p">,</span> <span class="s2">&quot;SECURITY_SALT&quot;</span><span class="p">]</span>
-</span><span id="Config.validate_config-188"><a href="#Config.validate_config-188"><span class="linenos">188</span></a>        <span class="k">if</span> <span class="bp">cls</span><span class="o">.</span><span class="n">DB_TYPE</span> <span class="o">!=</span> <span class="s2">&quot;sqlite&quot;</span><span class="p">:</span>
-</span><span id="Config.validate_config-189"><a href="#Config.validate_config-189"><span class="linenos">189</span></a>            <span class="n">required_vars</span><span class="o">.</span><span class="n">extend</span><span class="p">([</span><span class="s2">&quot;DB_USER&quot;</span><span class="p">,</span> <span class="s2">&quot;DB_PASSWORD&quot;</span><span class="p">,</span> <span class="s2">&quot;DB_HOST&quot;</span><span class="p">,</span> <span class="s2">&quot;DB_NAME&quot;</span><span class="p">])</span>
-</span><span id="Config.validate_config-190"><a href="#Config.validate_config-190"><span class="linenos">190</span></a>
-</span><span id="Config.validate_config-191"><a href="#Config.validate_config-191"><span class="linenos">191</span></a>        <span class="k">for</span> <span class="n">var</span> <span class="ow">in</span> <span class="n">required_vars</span><span class="p">:</span>
-</span><span id="Config.validate_config-192"><a href="#Config.validate_config-192"><span class="linenos">192</span></a>            <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="n">var</span><span class="p">):</span>
-</span><span id="Config.validate_config-193"><a href="#Config.validate_config-193"><span class="linenos">193</span></a>                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Missing required environment variable: </span><span class="si">{</span><span class="n">var</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="Config.validate_config-196"><a href="#Config.validate_config-196"><span class="linenos">196</span></a>    <span class="nd">@classmethod</span>
+</span><span id="Config.validate_config-197"><a href="#Config.validate_config-197"><span class="linenos">197</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">validate_config</span><span class="p">(</span><span class="bp">cls</span><span class="p">):</span>
+</span><span id="Config.validate_config-198"><a href="#Config.validate_config-198"><span class="linenos">198</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate that all required environment variables are set.&quot;&quot;&quot;</span>
+</span><span id="Config.validate_config-199"><a href="#Config.validate_config-199"><span class="linenos">199</span></a>        <span class="n">required_vars</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;SECRET_KEY&quot;</span><span class="p">,</span> <span class="s2">&quot;SECURITY_SALT&quot;</span><span class="p">]</span>
+</span><span id="Config.validate_config-200"><a href="#Config.validate_config-200"><span class="linenos">200</span></a>        <span class="k">if</span> <span class="bp">cls</span><span class="o">.</span><span class="n">DB_TYPE</span> <span class="o">!=</span> <span class="s2">&quot;sqlite&quot;</span><span class="p">:</span>
+</span><span id="Config.validate_config-201"><a href="#Config.validate_config-201"><span class="linenos">201</span></a>            <span class="n">required_vars</span><span class="o">.</span><span class="n">extend</span><span class="p">([</span><span class="s2">&quot;DB_USER&quot;</span><span class="p">,</span> <span class="s2">&quot;DB_PASSWORD&quot;</span><span class="p">,</span> <span class="s2">&quot;DB_HOST&quot;</span><span class="p">,</span> <span class="s2">&quot;DB_NAME&quot;</span><span class="p">])</span>
+</span><span id="Config.validate_config-202"><a href="#Config.validate_config-202"><span class="linenos">202</span></a>
+</span><span id="Config.validate_config-203"><a href="#Config.validate_config-203"><span class="linenos">203</span></a>        <span class="k">for</span> <span class="n">var</span> <span class="ow">in</span> <span class="n">required_vars</span><span class="p">:</span>
+</span><span id="Config.validate_config-204"><a href="#Config.validate_config-204"><span class="linenos">204</span></a>            <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="n">var</span><span class="p">):</span>
+</span><span id="Config.validate_config-205"><a href="#Config.validate_config-205"><span class="linenos">205</span></a>                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Missing required environment variable: </span><span class="si">{</span><span class="n">var</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 </span></pre></div>
 
 

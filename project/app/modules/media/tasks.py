@@ -3,6 +3,7 @@ from __future__ import annotations
 """Background tasks for media preprocessing workflows."""
 
 import json
+import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
@@ -10,9 +11,14 @@ from typing import Optional
 
 from flask import current_app
 
-from .helpers import PreprocessConfig, _media_root, preprocess_rgb_once, generate_nd_index_rgba
-from .models import Asset, AssetType, StorageLocation
-from app.modules.agrovista.services import generate_display_assets
+from .helpers import (
+    PreprocessConfig,
+    _media_root,
+    generate_nd_index_rgba,
+    generate_webp_thumbnails,
+    preprocess_rgb_once,
+)
+from .models import Asset, AssetType, AssetVariant, StorageLocation
 
 _executor: Optional[ThreadPoolExecutor] = None
 
@@ -48,28 +54,49 @@ def _run_preprocess(app, asset_id: int) -> None:
     with app.app_context():
         asset = Asset.query.get(asset_id)
         if asset is None:
-            app.logger.warning("media: asset %s disappeared before preprocessing", asset_id)
+            app.logger.warning(
+                "media: asset %s disappeared before preprocessing", asset_id
+            )
             return
         if asset.storage != StorageLocation.LOCAL.value:
-            app.logger.info("media: skipping preprocessing for non-local asset %s", asset.uuid)
+            app.logger.info(
+                "media: skipping preprocessing for non-local asset %s", asset.uuid
+            )
             return
 
         try:
             source_path = Path(_media_root()) / asset.storage_key
         except RuntimeError:
-            app.logger.exception("media: unable to resolve media root for asset %s", asset.uuid)
+            app.logger.exception(
+                "media: unable to resolve media root for asset %s", asset.uuid
+            )
             return
 
         if not source_path.exists():
-            app.logger.warning("media: source file missing for asset %s (%s)", asset.uuid, source_path)
+            app.logger.warning(
+                "media: source file missing for asset %s (%s)", asset.uuid, source_path
+            )
             return
 
         cache_dir = _resolve_cache_dir(app, asset.uuid)
         processing_flag = cache_dir / ".processing"
         status_file = cache_dir / ".status.json"
         error_flag = cache_dir / ".error"
+        started_ts = time.monotonic()
 
-        def update_status(state: str, progress: float = 0.0, artifact: str = ""):
+        app.logger.info(
+            "media: worker_started asset_id=%s asset_uuid=%s cache_dir=%s",
+            asset_id,
+            asset.uuid,
+            cache_dir,
+        )
+
+        def update_status(
+            state: str,
+            progress: float = 0.0,
+            artifact: str = "",
+            error_message: str = "",
+        ):
             try:
                 status_data = {
                     "state": state,
@@ -79,12 +106,14 @@ def _run_preprocess(app, asset_id: int) -> None:
                     "updated_at": datetime.utcnow().isoformat() + "Z",
                     "asset_uuid": asset.uuid,
                 }
+                if error_message:
+                    status_data["error"] = error_message
                 status_file.write_text(json.dumps(status_data, indent=2))
             except Exception:
                 pass
 
         try:
-            update_status("starting", 0.0, "")
+            update_status("running", 0.0, "worker_started")
             processing_flag.write_text(f"{datetime.utcnow().isoformat()}Z")
         except Exception:
             try:
@@ -103,12 +132,71 @@ def _run_preprocess(app, asset_id: int) -> None:
             preview_max_dim=int(app.config.get("MEDIA_PREVIEW_MAX_DIM", 2048)),
         )
 
+        def progress_hook(state: str, progress: float, message: str) -> None:
+            update_status(state, progress, message)
+
         _had_error = False
         try:
+            t_stage = time.monotonic()
+            app.logger.info(
+                "media: preprocess_started asset_uuid=%s source=%s size=%sx%s",
+                asset.uuid,
+                source_path,
+                asset.width,
+                asset.height,
+            )
+
+            # Generate WebP thumbnails in background so the HTTP upload response
+            # is not blocked by Pillow loading the full raster into RAM.
+            update_status("thumbnails", 0.05, "Generando miniaturas")
+            try:
+                from app.extensions import db as _db
+
+                thumb_results = generate_webp_thumbnails(str(source_path), asset.uuid)
+                if thumb_results:
+                    existing_kinds = {v.kind for v in asset.variants}
+                    added = False
+                    for thumb in thumb_results:
+                        if thumb.kind in existing_kinds:
+                            continue
+                        asset.variants.append(
+                            AssetVariant(
+                                kind=thumb.kind,
+                                storage=StorageLocation.LOCAL.value,
+                                storage_key=thumb.storage_key,
+                                width=thumb.width,
+                                height=thumb.height,
+                            )
+                        )
+                        existing_kinds.add(thumb.kind)
+                        added = True
+                    if added:
+                        _db.session.add(asset)
+                        _db.session.commit()
+                    app.logger.info(
+                        "media: thumbnails_done asset_uuid=%s count=%d",
+                        asset.uuid,
+                        len(thumb_results),
+                    )
+            except Exception:
+                app.logger.exception(
+                    "media: thumbnail generation failed for asset %s (non-fatal)",
+                    asset.uuid,
+                )
+
             update_status("loading", 0.1, "Cargando imagen desde disco")
-            preprocess_rgb_once(source_path, cfg)
-            update_status("generating_previews", 0.85, "Generando visualizaciones")
-            app.logger.info("media: preprocessing finished for asset %s -> %s", asset.uuid, cache_dir)
+            preprocess_rgb_once(source_path, cfg, progress_cb=progress_hook)
+            app.logger.info(
+                "media: preprocess_done asset_uuid=%s elapsed_sec=%.3f",
+                asset.uuid,
+                time.monotonic() - t_stage,
+            )
+            update_status("generating_previews", 0.90, "Generando visualizaciones")
+            app.logger.info(
+                "media: preprocessing finished for asset %s -> %s",
+                asset.uuid,
+                cache_dir,
+            )
             try:
                 if error_flag.exists():
                     error_flag.unlink()
@@ -116,7 +204,7 @@ def _run_preprocess(app, asset_id: int) -> None:
                 pass
         except MemoryError as exc:
             _had_error = True
-            update_status("failed", 0.0, f"Error de memoria: {exc}")
+            update_status("failed", 0.0, "preprocess", f"Error de memoria: {exc}")
             app.logger.exception("media: preprocessing OOM for asset %s", asset.uuid)
             try:
                 error_flag.write_text(f"{datetime.utcnow().isoformat()}Z :: OOM: {exc}")
@@ -124,7 +212,7 @@ def _run_preprocess(app, asset_id: int) -> None:
                 pass
         except Exception as exc:
             _had_error = True
-            update_status("failed", 0.0, f"Error: {exc}")
+            update_status("failed", 0.0, "preprocess", f"Error: {exc}")
             app.logger.exception("media: preprocessing failed for asset %s", asset.uuid)
             try:
                 error_flag.write_text(f"{datetime.utcnow().isoformat()}Z :: {exc}")
@@ -140,23 +228,36 @@ def _run_preprocess(app, asset_id: int) -> None:
 
             # nd_index_rgba independiente — su fallo no bloquea otros artefactos
             try:
+                t_nd = time.monotonic()
+                app.logger.info("media: nd_index_started asset_uuid=%s", asset.uuid)
                 nd_path = generate_nd_index_rgba(
                     source_path=source_path,
                     cache_dir=cache_dir,
                     asset_uuid=asset.uuid,
                 )
                 if nd_path:
-                    app.logger.info("media: nd_index_rgba generated for asset %s -> %s", asset.uuid, nd_path)
+                    app.logger.info(
+                        "media: nd_index_done asset_uuid=%s path=%s elapsed_sec=%.3f",
+                        asset.uuid,
+                        nd_path,
+                        time.monotonic() - t_nd,
+                    )
                 else:
-                    app.logger.warning("media: nd_index_rgba returned None for asset %s", asset.uuid)
+                    app.logger.warning(
+                        "media: nd_index_rgba returned None for asset %s", asset.uuid
+                    )
             except Exception:
-                app.logger.exception("media: nd_index_rgba generation failed for asset %s", asset.uuid)
+                app.logger.exception(
+                    "media: nd_index_rgba generation failed for asset %s", asset.uuid
+                )
 
             if asset.asset_type == AssetType.GEOTIFF.value:
                 display_processing_flag = cache_dir / ".processing_display"
                 display_error_flag = cache_dir / ".error_display"
                 try:
-                    display_processing_flag.write_text(f"{datetime.utcnow().isoformat()}Z")
+                    display_processing_flag.write_text(
+                        f"{datetime.utcnow().isoformat()}Z"
+                    )
                 except Exception:
                     pass
                 try:
@@ -165,17 +266,33 @@ def _run_preprocess(app, asset_id: int) -> None:
                 except Exception:
                     pass
                 try:
+                    app.logger.info("media: display_started asset_uuid=%s", asset.uuid)
+                    t_display = time.monotonic()
+                    # Import local para evitar import circular al cargar módulos
+                    from app.modules.agrovista.services import generate_display_assets
+
                     generate_display_assets(
                         image_id=asset.uuid,
                         tiff_uri=str(source_path),
                         mode=app.config.get("MEDIA_DISPLAY_MODE", "auto"),
-                        max_display_px=int(app.config.get("MEDIA_DISPLAY_MAX_DIM", 4096)),
+                        max_display_px=int(
+                            app.config.get("MEDIA_DISPLAY_MAX_DIM", 4096)
+                        ),
                         force=False,
                     )
+                    app.logger.info(
+                        "media: display_done asset_uuid=%s elapsed_sec=%.3f",
+                        asset.uuid,
+                        time.monotonic() - t_display,
+                    )
                 except Exception as exc:
-                    app.logger.exception("media: display asset generation failed for %s", asset.uuid)
+                    app.logger.exception(
+                        "media: display asset generation failed for %s", asset.uuid
+                    )
                     try:
-                        display_error_flag.write_text(f"{datetime.utcnow().isoformat()}Z :: {exc}")
+                        display_error_flag.write_text(
+                            f"{datetime.utcnow().isoformat()}Z :: {exc}"
+                        )
                     except Exception:
                         pass
                 finally:
@@ -184,28 +301,59 @@ def _run_preprocess(app, asset_id: int) -> None:
                     except Exception:
                         pass
 
+            app.logger.info(
+                "media: worker_finished asset_id=%s asset_uuid=%s had_error=%s total_elapsed_sec=%.3f",
+                asset_id,
+                asset.uuid,
+                _had_error,
+                time.monotonic() - started_ts,
+            )
+
 
 def enqueue_preprocess_asset(asset_id: int) -> None:
     """Schedule preprocessing for the given asset ID in the background."""
     app = current_app._get_current_object()
     executor = _get_executor()
-    
+
     # Log para debug
     app.logger.info("media: enqueuing preprocessing for asset_id %s", asset_id)
-    
+
+    asset = Asset.query.get(asset_id)
+    if asset is not None:
+        cache_dir = _resolve_cache_dir(app, asset.uuid)
+        status_file = cache_dir / ".status.json"
+        processing_flag = cache_dir / ".processing"
+        try:
+            status_data = {
+                "state": "queued",
+                "progress": 0.0,
+                "current_artifact": "queued",
+                "started_at": datetime.utcnow().isoformat() + "Z",
+                "updated_at": datetime.utcnow().isoformat() + "Z",
+                "asset_uuid": asset.uuid,
+            }
+            status_file.write_text(json.dumps(status_data, indent=2))
+            processing_flag.touch(exist_ok=True)
+        except Exception:
+            pass
+
     try:
         future = executor.submit(_run_preprocess, app, asset_id)
         app.logger.info("media: task submitted to executor for asset_id %s", asset_id)
-        
+
         # Opcional: agregar callback para manejar excepciones
         def log_exception(f):
             try:
                 f.result()  # Esto lanzará la excepción si la hay
-            except Exception as e:
-                app.logger.exception("media: background task failed for asset_id %s", asset_id)
-        
+            except Exception:
+                app.logger.exception(
+                    "media: background task failed for asset_id %s", asset_id
+                )
+
         future.add_done_callback(log_exception)
-        
+
     except Exception as e:
-        app.logger.exception("media: failed to submit preprocessing task for asset_id %s", asset_id)
+        app.logger.exception(
+            "media: failed to submit preprocessing task for asset_id %s", asset_id
+        )
         raise

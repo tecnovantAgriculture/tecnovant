@@ -1,7 +1,21 @@
+# -*-coding:utf-8-*-
+"""Core module for Yet Another Flask Survival Kit (YAFSK)
+
+Author:
+    Johnny De Castro <j@jdcastro.co>
+
+Copyright:
+    (c) 2024 - 2025 Johnny De Castro. All rights reserved.
+
+License:
+    Apache License 2.0 - http://www.apache.org/licenses/LICENSE-2.0
+
+"""
 """Application core blueprints and route imports."""
 
 import os
-from flask import Blueprint, send_from_directory, current_app
+
+from flask import Blueprint, current_app, send_from_directory
 
 from .controller import login_required
 from .services.avatar_service import AvatarService
@@ -13,7 +27,7 @@ core_api_v1 = Blueprint("core_api_v1", __name__, url_prefix="/api/v1/core")
 
 
 # Avatar serving route
-@core.route('/avatars/<path:key>')
+@core.route("/avatars/<path:key>")
 @login_required
 def serve_avatar(key: str):
     """Serve avatar files from storage directory.
@@ -34,7 +48,7 @@ def serve_avatar(key: str):
     # send_from_directory handles path security validation
     response = send_from_directory(directory, filename)
     # Add cache headers (1 day for avatars)
-    response.headers['Cache-Control'] = 'public, max-age=86400'
+    response.headers["Cache-Control"] = "public, max-age=86400"
     return response
 
 

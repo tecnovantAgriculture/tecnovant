@@ -52,43 +52,76 @@
                     <h1 class="modulename">
 <a href="./../../app.html">app</a><wbr>.<a href="./../helpers.html">helpers</a><wbr>.helpers_functions    </h1>
 
-                
+                        <div class="docstring"><p>Custom helper functions for Yet Another Flask Survival Kit (YAFSK)</p>
+
+<h6 id="author">Author:</h6>
+
+<blockquote>
+  <p>Johnny De Castro <a href="&#109;&#97;&#105;&#x6c;&#116;&#x6f;&#58;&#106;&#64;&#x6a;&#100;&#99;&#97;&#x73;&#116;&#114;&#x6f;&#46;&#x63;&#x6f;">&#106;&#64;&#x6a;&#100;&#99;&#97;&#x73;&#116;&#114;&#x6f;&#46;&#x63;&#x6f;</a></p>
+</blockquote>
+
+<h6 id="copyright">Copyright:</h6>
+
+<blockquote>
+  <p>(c) 2024 - 2025 Johnny De Castro. All rights reserved.</p>
+</blockquote>
+
+<h6 id="license">License:</h6>
+
+<blockquote>
+  <p>Apache License 2.0 - <a href="http://www.apache.org/licenses/LICENSE-2.0">http://www.apache.org/licenses/LICENSE-2.0</a></p>
+</blockquote>
+</div>
+
                         <input id="mod-helpers_functions-view-source" class="view-source-toggle-state" type="checkbox" aria-hidden="true" tabindex="-1">
 
                         <label class="view-source-button" for="mod-helpers_functions-view-source"><span>View Source</span></label>
 
-                        <div class="pdoc-code codehilite"><pre><span></span><span id="L-1"><a href="#L-1"><span class="linenos"> 1</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">flask_jwt_extended</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_jwt_identity</span><span class="p">,</span> <span class="n">verify_jwt_in_request</span>
-</span><span id="L-2"><a href="#L-2"><span class="linenos"> 2</span></a>
-</span><span id="L-3"><a href="#L-3"><span class="linenos"> 3</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.core.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">User</span>
-</span><span id="L-4"><a href="#L-4"><span class="linenos"> 4</span></a>
-</span><span id="L-5"><a href="#L-5"><span class="linenos"> 5</span></a>
-</span><span id="L-6"><a href="#L-6"><span class="linenos"> 6</span></a><span class="k">def</span><span class="w"> </span><span class="nf">merge_dicts</span><span class="p">(</span><span class="n">original</span><span class="p">,</span> <span class="n">new_values</span><span class="p">):</span>
-</span><span id="L-7"><a href="#L-7"><span class="linenos"> 7</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Merge two dictionaries in Jinja2.&quot;&quot;&quot;</span>
-</span><span id="L-8"><a href="#L-8"><span class="linenos"> 8</span></a>    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">original</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">new_values</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
-</span><span id="L-9"><a href="#L-9"><span class="linenos"> 9</span></a>        <span class="k">return</span> <span class="n">original</span>
-</span><span id="L-10"><a href="#L-10"><span class="linenos">10</span></a>    <span class="n">merged</span> <span class="o">=</span> <span class="n">original</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>  <span class="c1"># Hacemos una copia para evitar modificar el original</span>
-</span><span id="L-11"><a href="#L-11"><span class="linenos">11</span></a>    <span class="n">merged</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">new_values</span><span class="p">)</span>
-</span><span id="L-12"><a href="#L-12"><span class="linenos">12</span></a>    <span class="k">return</span> <span class="n">merged</span>
-</span><span id="L-13"><a href="#L-13"><span class="linenos">13</span></a>
-</span><span id="L-14"><a href="#L-14"><span class="linenos">14</span></a>
-</span><span id="L-15"><a href="#L-15"><span class="linenos">15</span></a><span class="k">def</span><span class="w"> </span><span class="nf">inject_user</span><span class="p">():</span>
-</span><span id="L-16"><a href="#L-16"><span class="linenos">16</span></a>    <span class="n">user_id</span> <span class="o">=</span> <span class="kc">None</span>
-</span><span id="L-17"><a href="#L-17"><span class="linenos">17</span></a>    <span class="n">username</span> <span class="o">=</span> <span class="kc">None</span>
-</span><span id="L-18"><a href="#L-18"><span class="linenos">18</span></a>    <span class="n">rol</span> <span class="o">=</span> <span class="kc">None</span>
-</span><span id="L-19"><a href="#L-19"><span class="linenos">19</span></a>
-</span><span id="L-20"><a href="#L-20"><span class="linenos">20</span></a>    <span class="k">try</span><span class="p">:</span>
-</span><span id="L-21"><a href="#L-21"><span class="linenos">21</span></a>        <span class="c1"># Verifica si hay un token JWT en la solicitud</span>
-</span><span id="L-22"><a href="#L-22"><span class="linenos">22</span></a>        <span class="n">verify_jwt_in_request</span><span class="p">(</span><span class="n">optional</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-</span><span id="L-23"><a href="#L-23"><span class="linenos">23</span></a>        <span class="n">user_id</span> <span class="o">=</span> <span class="n">get_jwt_identity</span><span class="p">()</span>
-</span><span id="L-24"><a href="#L-24"><span class="linenos">24</span></a>        <span class="k">if</span> <span class="n">user_id</span><span class="p">:</span>
-</span><span id="L-25"><a href="#L-25"><span class="linenos">25</span></a>            <span class="n">user</span> <span class="o">=</span> <span class="n">User</span><span class="o">.</span><span class="n">query</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">user_id</span><span class="p">)</span>
-</span><span id="L-26"><a href="#L-26"><span class="linenos">26</span></a>            <span class="k">if</span> <span class="n">user</span><span class="p">:</span>
-</span><span id="L-27"><a href="#L-27"><span class="linenos">27</span></a>                <span class="n">username</span> <span class="o">=</span> <span class="n">user</span><span class="o">.</span><span class="n">username</span>
-</span><span id="L-28"><a href="#L-28"><span class="linenos">28</span></a>                <span class="n">rol</span> <span class="o">=</span> <span class="n">user</span><span class="o">.</span><span class="n">role</span><span class="o">.</span><span class="n">value</span>
-</span><span id="L-29"><a href="#L-29"><span class="linenos">29</span></a>    <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
-</span><span id="L-30"><a href="#L-30"><span class="linenos">30</span></a>        <span class="k">pass</span>  <span class="c1"># Si no hay token o hay un error, simplemente pasa</span>
-</span><span id="L-31"><a href="#L-31"><span class="linenos">31</span></a>
-</span><span id="L-32"><a href="#L-32"><span class="linenos">32</span></a>    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;user_id&quot;</span><span class="p">:</span> <span class="n">user_id</span><span class="p">,</span> <span class="s2">&quot;username&quot;</span><span class="p">:</span> <span class="n">username</span><span class="p">,</span> <span class="s2">&quot;rol&quot;</span><span class="p">:</span> <span class="n">rol</span><span class="p">}</span>
+                        <div class="pdoc-code codehilite"><pre><span></span><span id="L-1"><a href="#L-1"><span class="linenos"> 1</span></a><span class="c1"># -*-coding:utf-8-*-</span>
+</span><span id="L-2"><a href="#L-2"><span class="linenos"> 2</span></a><span class="sd">&quot;&quot;&quot;Custom helper functions for Yet Another Flask Survival Kit (YAFSK)</span>
+</span><span id="L-3"><a href="#L-3"><span class="linenos"> 3</span></a>
+</span><span id="L-4"><a href="#L-4"><span class="linenos"> 4</span></a><span class="sd">Author:</span>
+</span><span id="L-5"><a href="#L-5"><span class="linenos"> 5</span></a><span class="sd">    Johnny De Castro &lt;j@jdcastro.co&gt;</span>
+</span><span id="L-6"><a href="#L-6"><span class="linenos"> 6</span></a>
+</span><span id="L-7"><a href="#L-7"><span class="linenos"> 7</span></a><span class="sd">Copyright:</span>
+</span><span id="L-8"><a href="#L-8"><span class="linenos"> 8</span></a><span class="sd">    (c) 2024 - 2025 Johnny De Castro. All rights reserved.</span>
+</span><span id="L-9"><a href="#L-9"><span class="linenos"> 9</span></a>
+</span><span id="L-10"><a href="#L-10"><span class="linenos">10</span></a><span class="sd">License:</span>
+</span><span id="L-11"><a href="#L-11"><span class="linenos">11</span></a><span class="sd">    Apache License 2.0 - http://www.apache.org/licenses/LICENSE-2.0</span>
+</span><span id="L-12"><a href="#L-12"><span class="linenos">12</span></a>
+</span><span id="L-13"><a href="#L-13"><span class="linenos">13</span></a><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="L-14"><a href="#L-14"><span class="linenos">14</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">flask_jwt_extended</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_jwt_identity</span><span class="p">,</span> <span class="n">verify_jwt_in_request</span>
+</span><span id="L-15"><a href="#L-15"><span class="linenos">15</span></a>
+</span><span id="L-16"><a href="#L-16"><span class="linenos">16</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.core.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">User</span>
+</span><span id="L-17"><a href="#L-17"><span class="linenos">17</span></a>
+</span><span id="L-18"><a href="#L-18"><span class="linenos">18</span></a>
+</span><span id="L-19"><a href="#L-19"><span class="linenos">19</span></a><span class="k">def</span><span class="w"> </span><span class="nf">merge_dicts</span><span class="p">(</span><span class="n">original</span><span class="p">,</span> <span class="n">new_values</span><span class="p">):</span>
+</span><span id="L-20"><a href="#L-20"><span class="linenos">20</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Merge two dictionaries in Jinja2.&quot;&quot;&quot;</span>
+</span><span id="L-21"><a href="#L-21"><span class="linenos">21</span></a>    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">original</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">new_values</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+</span><span id="L-22"><a href="#L-22"><span class="linenos">22</span></a>        <span class="k">return</span> <span class="n">original</span>
+</span><span id="L-23"><a href="#L-23"><span class="linenos">23</span></a>    <span class="n">merged</span> <span class="o">=</span> <span class="n">original</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>  <span class="c1"># Hacemos una copia para evitar modificar el original</span>
+</span><span id="L-24"><a href="#L-24"><span class="linenos">24</span></a>    <span class="n">merged</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">new_values</span><span class="p">)</span>
+</span><span id="L-25"><a href="#L-25"><span class="linenos">25</span></a>    <span class="k">return</span> <span class="n">merged</span>
+</span><span id="L-26"><a href="#L-26"><span class="linenos">26</span></a>
+</span><span id="L-27"><a href="#L-27"><span class="linenos">27</span></a>
+</span><span id="L-28"><a href="#L-28"><span class="linenos">28</span></a><span class="k">def</span><span class="w"> </span><span class="nf">inject_user</span><span class="p">():</span>
+</span><span id="L-29"><a href="#L-29"><span class="linenos">29</span></a>    <span class="n">user_id</span> <span class="o">=</span> <span class="kc">None</span>
+</span><span id="L-30"><a href="#L-30"><span class="linenos">30</span></a>    <span class="n">username</span> <span class="o">=</span> <span class="kc">None</span>
+</span><span id="L-31"><a href="#L-31"><span class="linenos">31</span></a>    <span class="n">rol</span> <span class="o">=</span> <span class="kc">None</span>
+</span><span id="L-32"><a href="#L-32"><span class="linenos">32</span></a>
+</span><span id="L-33"><a href="#L-33"><span class="linenos">33</span></a>    <span class="k">try</span><span class="p">:</span>
+</span><span id="L-34"><a href="#L-34"><span class="linenos">34</span></a>        <span class="c1"># Verifica si hay un token JWT en la solicitud</span>
+</span><span id="L-35"><a href="#L-35"><span class="linenos">35</span></a>        <span class="n">verify_jwt_in_request</span><span class="p">(</span><span class="n">optional</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span><span id="L-36"><a href="#L-36"><span class="linenos">36</span></a>        <span class="n">user_id</span> <span class="o">=</span> <span class="n">get_jwt_identity</span><span class="p">()</span>
+</span><span id="L-37"><a href="#L-37"><span class="linenos">37</span></a>        <span class="k">if</span> <span class="n">user_id</span><span class="p">:</span>
+</span><span id="L-38"><a href="#L-38"><span class="linenos">38</span></a>            <span class="n">user</span> <span class="o">=</span> <span class="n">User</span><span class="o">.</span><span class="n">query</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">user_id</span><span class="p">)</span>
+</span><span id="L-39"><a href="#L-39"><span class="linenos">39</span></a>            <span class="k">if</span> <span class="n">user</span><span class="p">:</span>
+</span><span id="L-40"><a href="#L-40"><span class="linenos">40</span></a>                <span class="n">username</span> <span class="o">=</span> <span class="n">user</span><span class="o">.</span><span class="n">username</span>
+</span><span id="L-41"><a href="#L-41"><span class="linenos">41</span></a>                <span class="n">rol</span> <span class="o">=</span> <span class="n">user</span><span class="o">.</span><span class="n">role</span><span class="o">.</span><span class="n">value</span>
+</span><span id="L-42"><a href="#L-42"><span class="linenos">42</span></a>    <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+</span><span id="L-43"><a href="#L-43"><span class="linenos">43</span></a>        <span class="k">pass</span>  <span class="c1"># Si no hay token o hay un error, simplemente pasa</span>
+</span><span id="L-44"><a href="#L-44"><span class="linenos">44</span></a>
+</span><span id="L-45"><a href="#L-45"><span class="linenos">45</span></a>    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;user_id&quot;</span><span class="p">:</span> <span class="n">user_id</span><span class="p">,</span> <span class="s2">&quot;username&quot;</span><span class="p">:</span> <span class="n">username</span><span class="p">,</span> <span class="s2">&quot;rol&quot;</span><span class="p">:</span> <span class="n">rol</span><span class="p">}</span>
 </span></pre></div>
 
 
@@ -104,13 +137,13 @@
 
     </div>
     <a class="headerlink" href="#merge_dicts"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="merge_dicts-7"><a href="#merge_dicts-7"><span class="linenos"> 7</span></a><span class="k">def</span><span class="w"> </span><span class="nf">merge_dicts</span><span class="p">(</span><span class="n">original</span><span class="p">,</span> <span class="n">new_values</span><span class="p">):</span>
-</span><span id="merge_dicts-8"><a href="#merge_dicts-8"><span class="linenos"> 8</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Merge two dictionaries in Jinja2.&quot;&quot;&quot;</span>
-</span><span id="merge_dicts-9"><a href="#merge_dicts-9"><span class="linenos"> 9</span></a>    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">original</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">new_values</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
-</span><span id="merge_dicts-10"><a href="#merge_dicts-10"><span class="linenos">10</span></a>        <span class="k">return</span> <span class="n">original</span>
-</span><span id="merge_dicts-11"><a href="#merge_dicts-11"><span class="linenos">11</span></a>    <span class="n">merged</span> <span class="o">=</span> <span class="n">original</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>  <span class="c1"># Hacemos una copia para evitar modificar el original</span>
-</span><span id="merge_dicts-12"><a href="#merge_dicts-12"><span class="linenos">12</span></a>    <span class="n">merged</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">new_values</span><span class="p">)</span>
-</span><span id="merge_dicts-13"><a href="#merge_dicts-13"><span class="linenos">13</span></a>    <span class="k">return</span> <span class="n">merged</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="merge_dicts-20"><a href="#merge_dicts-20"><span class="linenos">20</span></a><span class="k">def</span><span class="w"> </span><span class="nf">merge_dicts</span><span class="p">(</span><span class="n">original</span><span class="p">,</span> <span class="n">new_values</span><span class="p">):</span>
+</span><span id="merge_dicts-21"><a href="#merge_dicts-21"><span class="linenos">21</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Merge two dictionaries in Jinja2.&quot;&quot;&quot;</span>
+</span><span id="merge_dicts-22"><a href="#merge_dicts-22"><span class="linenos">22</span></a>    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">original</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">new_values</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+</span><span id="merge_dicts-23"><a href="#merge_dicts-23"><span class="linenos">23</span></a>        <span class="k">return</span> <span class="n">original</span>
+</span><span id="merge_dicts-24"><a href="#merge_dicts-24"><span class="linenos">24</span></a>    <span class="n">merged</span> <span class="o">=</span> <span class="n">original</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>  <span class="c1"># Hacemos una copia para evitar modificar el original</span>
+</span><span id="merge_dicts-25"><a href="#merge_dicts-25"><span class="linenos">25</span></a>    <span class="n">merged</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">new_values</span><span class="p">)</span>
+</span><span id="merge_dicts-26"><a href="#merge_dicts-26"><span class="linenos">26</span></a>    <span class="k">return</span> <span class="n">merged</span>
 </span></pre></div>
 
 
@@ -130,24 +163,24 @@
 
     </div>
     <a class="headerlink" href="#inject_user"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="inject_user-16"><a href="#inject_user-16"><span class="linenos">16</span></a><span class="k">def</span><span class="w"> </span><span class="nf">inject_user</span><span class="p">():</span>
-</span><span id="inject_user-17"><a href="#inject_user-17"><span class="linenos">17</span></a>    <span class="n">user_id</span> <span class="o">=</span> <span class="kc">None</span>
-</span><span id="inject_user-18"><a href="#inject_user-18"><span class="linenos">18</span></a>    <span class="n">username</span> <span class="o">=</span> <span class="kc">None</span>
-</span><span id="inject_user-19"><a href="#inject_user-19"><span class="linenos">19</span></a>    <span class="n">rol</span> <span class="o">=</span> <span class="kc">None</span>
-</span><span id="inject_user-20"><a href="#inject_user-20"><span class="linenos">20</span></a>
-</span><span id="inject_user-21"><a href="#inject_user-21"><span class="linenos">21</span></a>    <span class="k">try</span><span class="p">:</span>
-</span><span id="inject_user-22"><a href="#inject_user-22"><span class="linenos">22</span></a>        <span class="c1"># Verifica si hay un token JWT en la solicitud</span>
-</span><span id="inject_user-23"><a href="#inject_user-23"><span class="linenos">23</span></a>        <span class="n">verify_jwt_in_request</span><span class="p">(</span><span class="n">optional</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-</span><span id="inject_user-24"><a href="#inject_user-24"><span class="linenos">24</span></a>        <span class="n">user_id</span> <span class="o">=</span> <span class="n">get_jwt_identity</span><span class="p">()</span>
-</span><span id="inject_user-25"><a href="#inject_user-25"><span class="linenos">25</span></a>        <span class="k">if</span> <span class="n">user_id</span><span class="p">:</span>
-</span><span id="inject_user-26"><a href="#inject_user-26"><span class="linenos">26</span></a>            <span class="n">user</span> <span class="o">=</span> <span class="n">User</span><span class="o">.</span><span class="n">query</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">user_id</span><span class="p">)</span>
-</span><span id="inject_user-27"><a href="#inject_user-27"><span class="linenos">27</span></a>            <span class="k">if</span> <span class="n">user</span><span class="p">:</span>
-</span><span id="inject_user-28"><a href="#inject_user-28"><span class="linenos">28</span></a>                <span class="n">username</span> <span class="o">=</span> <span class="n">user</span><span class="o">.</span><span class="n">username</span>
-</span><span id="inject_user-29"><a href="#inject_user-29"><span class="linenos">29</span></a>                <span class="n">rol</span> <span class="o">=</span> <span class="n">user</span><span class="o">.</span><span class="n">role</span><span class="o">.</span><span class="n">value</span>
-</span><span id="inject_user-30"><a href="#inject_user-30"><span class="linenos">30</span></a>    <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
-</span><span id="inject_user-31"><a href="#inject_user-31"><span class="linenos">31</span></a>        <span class="k">pass</span>  <span class="c1"># Si no hay token o hay un error, simplemente pasa</span>
-</span><span id="inject_user-32"><a href="#inject_user-32"><span class="linenos">32</span></a>
-</span><span id="inject_user-33"><a href="#inject_user-33"><span class="linenos">33</span></a>    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;user_id&quot;</span><span class="p">:</span> <span class="n">user_id</span><span class="p">,</span> <span class="s2">&quot;username&quot;</span><span class="p">:</span> <span class="n">username</span><span class="p">,</span> <span class="s2">&quot;rol&quot;</span><span class="p">:</span> <span class="n">rol</span><span class="p">}</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="inject_user-29"><a href="#inject_user-29"><span class="linenos">29</span></a><span class="k">def</span><span class="w"> </span><span class="nf">inject_user</span><span class="p">():</span>
+</span><span id="inject_user-30"><a href="#inject_user-30"><span class="linenos">30</span></a>    <span class="n">user_id</span> <span class="o">=</span> <span class="kc">None</span>
+</span><span id="inject_user-31"><a href="#inject_user-31"><span class="linenos">31</span></a>    <span class="n">username</span> <span class="o">=</span> <span class="kc">None</span>
+</span><span id="inject_user-32"><a href="#inject_user-32"><span class="linenos">32</span></a>    <span class="n">rol</span> <span class="o">=</span> <span class="kc">None</span>
+</span><span id="inject_user-33"><a href="#inject_user-33"><span class="linenos">33</span></a>
+</span><span id="inject_user-34"><a href="#inject_user-34"><span class="linenos">34</span></a>    <span class="k">try</span><span class="p">:</span>
+</span><span id="inject_user-35"><a href="#inject_user-35"><span class="linenos">35</span></a>        <span class="c1"># Verifica si hay un token JWT en la solicitud</span>
+</span><span id="inject_user-36"><a href="#inject_user-36"><span class="linenos">36</span></a>        <span class="n">verify_jwt_in_request</span><span class="p">(</span><span class="n">optional</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span><span id="inject_user-37"><a href="#inject_user-37"><span class="linenos">37</span></a>        <span class="n">user_id</span> <span class="o">=</span> <span class="n">get_jwt_identity</span><span class="p">()</span>
+</span><span id="inject_user-38"><a href="#inject_user-38"><span class="linenos">38</span></a>        <span class="k">if</span> <span class="n">user_id</span><span class="p">:</span>
+</span><span id="inject_user-39"><a href="#inject_user-39"><span class="linenos">39</span></a>            <span class="n">user</span> <span class="o">=</span> <span class="n">User</span><span class="o">.</span><span class="n">query</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">user_id</span><span class="p">)</span>
+</span><span id="inject_user-40"><a href="#inject_user-40"><span class="linenos">40</span></a>            <span class="k">if</span> <span class="n">user</span><span class="p">:</span>
+</span><span id="inject_user-41"><a href="#inject_user-41"><span class="linenos">41</span></a>                <span class="n">username</span> <span class="o">=</span> <span class="n">user</span><span class="o">.</span><span class="n">username</span>
+</span><span id="inject_user-42"><a href="#inject_user-42"><span class="linenos">42</span></a>                <span class="n">rol</span> <span class="o">=</span> <span class="n">user</span><span class="o">.</span><span class="n">role</span><span class="o">.</span><span class="n">value</span>
+</span><span id="inject_user-43"><a href="#inject_user-43"><span class="linenos">43</span></a>    <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+</span><span id="inject_user-44"><a href="#inject_user-44"><span class="linenos">44</span></a>        <span class="k">pass</span>  <span class="c1"># Si no hay token o hay un error, simplemente pasa</span>
+</span><span id="inject_user-45"><a href="#inject_user-45"><span class="linenos">45</span></a>
+</span><span id="inject_user-46"><a href="#inject_user-46"><span class="linenos">46</span></a>    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;user_id&quot;</span><span class="p">:</span> <span class="n">user_id</span><span class="p">,</span> <span class="s2">&quot;username&quot;</span><span class="p">:</span> <span class="n">username</span><span class="p">,</span> <span class="s2">&quot;rol&quot;</span><span class="p">:</span> <span class="n">rol</span><span class="p">}</span>
 </span></pre></div>
 
 

@@ -11,7 +11,7 @@ Regla general: usar @login_required para rutas web que renderizan templates.
 # Third party imports
 from datetime import date
 
-from flask import current_app, redirect, render_template, request, url_for, Response
+from flask import Response, current_app, redirect, render_template, request, url_for
 from flask_jwt_extended import (
     get_jwt,
     get_jwt_identity,
@@ -19,8 +19,15 @@ from flask_jwt_extended import (
     verify_jwt_in_request,
 )
 
+# from sqlalchemy.orm import joinedload
+from sqlalchemy import func
+from sqlalchemy.orm import joinedload
+
+from app.extensions import db
+
 # Local application imports
 from . import core as web
+from .config import CoreConfig
 from .controller import (
     InstallationView,
     OrgView,
@@ -28,15 +35,8 @@ from .controller import (
     UserView,
     login_required,
 )
-from app.extensions import db
 from .models import RoleEnum, User, get_clients_for_user
 from .services.profile_service import ProfileService
-from .config import CoreConfig
-
-# from sqlalchemy.orm import joinedload
-from sqlalchemy import func
-from sqlalchemy.orm import joinedload
-
 
 __doc__ = """
 paginas de bienvenida y contenido general
@@ -61,6 +61,7 @@ def get_dashboard_menu():
     if current_app.config.get("DEBUG", False):
         menu_items.append({"name": "Info", "url": "/info"})
     return {"menu": menu_items}
+
 
 # public endpoint
 @web.route("/.well-known/appspecific/com.chrome.devtools.json")
@@ -231,6 +232,7 @@ def dashboard():
 
     # Count only GEOTIFF assets that are available in the platform
     from app.modules.media.models import Asset, AssetType
+
     images_processed = Asset.query.filter(
         Asset.asset_type == AssetType.GEOTIFF.value
     ).count()
@@ -294,6 +296,7 @@ def dashboard():
 
     # Recent image analyses: use Asset table (source of truth), not orphaned NDVIImage
     from app.modules.media.models import Asset, AssetType
+
     recent_image_analyses = []
     recent_assets = (
         Asset.query.filter(Asset.asset_type == AssetType.GEOTIFF.value)
@@ -306,7 +309,11 @@ def dashboard():
             {
                 "filename": asset.original_name,
                 "dimensions": f"{asset.width or '?'} x {asset.height or '?'}",
-                "date": asset.created_at.strftime("%d/%m/%Y") if asset.created_at else "Sin fecha",
+                "date": (
+                    asset.created_at.strftime("%d/%m/%Y")
+                    if asset.created_at
+                    else "Sin fecha"
+                ),
             }
         )
 
@@ -455,18 +462,18 @@ def profile():
 
     # Get extended profile data
     extended = ProfileService.get_extended_profile(user)
-    
+
     # Format last_access timestamp
     last_access = extended.get("last_access")
     formatted_last_access = None
     if last_access:
         try:
             # Parse ISO format string (assuming UTC, no timezone)
-            dt = datetime.fromisoformat(last_access.replace('Z', ''))
+            dt = datetime.fromisoformat(last_access.replace("Z", ""))
             formatted_last_access = dt.strftime("%d/%m/%Y %H:%M")
         except (ValueError, AttributeError):
             formatted_last_access = last_access
-    
+
     # Prepare data for the template
     context = {
         "dashboard": True,

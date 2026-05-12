@@ -1,13 +1,17 @@
+import io
+import json
 import math
+import zipfile
 from pathlib import Path
 from typing import Dict, Optional
 
 import numpy as np
-from sqlalchemy import func
-from sqlalchemy.orm import joinedload, selectinload
-
 from flask import abort, current_app, jsonify, request, send_file
 from flask_jwt_extended import jwt_required
+from pyproj import Transformer
+from rasterio.transform import Affine, xy
+from sqlalchemy import func
+from sqlalchemy.orm import joinedload, selectinload
 
 from app.extensions import db
 from app.modules.foliage.models import Nutrient
@@ -15,25 +19,24 @@ from app.modules.media.helpers import (
     PreprocessConfig,
     _media_root,
     preprocess_rgb_once,
-    visible_indices,
-    combine_indices,
-    srgb_to_linear,
+    read_tif_window_as_linear_rgb,
 )
 from app.modules.media.models import Asset, StorageLocation
 from app.modules.media.tasks import _resolve_cache_dir
-from pyproj import Transformer
-import io
-import zipfile
-from rasterio.transform import Affine, xy
 
 from . import agrovista_api as api
+from .bromatologia import perfil_desde_ngrdi
 from .controller import ensure_processed, process_upload
 from .helpers import (
+    VisibleConfig,
     average_protein,
+    combine_indices,
     compute_secondary_objective_targets,
+    compute_visible_indices,
     polygon_mask,
     protein_to_nitrogen,
     secondary_target_map,
+    srgb_to_linear,
 )
 from .models import (
     AnalysisCrop,
@@ -71,14 +74,24 @@ def _round_metric(value: float | None) -> float | None:
     return round(value, 3)
 
 
-def _resolve_media_cache(asset: Asset) -> Optional[Path]:
-    """Garantiza la existencia del NPZ de caché para un asset de media."""
+def _resolve_wb_sidecar(asset: Asset) -> Optional[Dict[str, float]]:
+    """Load WB scale factors from .wb.json sidecar, computing on-the-fly if absent.
+
+    Returns {"scale_r", "scale_g", "scale_b"} or None when the source TIF cannot
+    be found.  A missing sidecar triggers an inline gray-world scan (~800 ms) and
+    the result is persisted for subsequent calls.
+    """
+    from app.modules.media.helpers import compute_wb_factors_from_tif
 
     app = current_app._get_current_object()
     cache_dir = _resolve_cache_dir(app, asset.uuid)
-    npz_path = cache_dir / f"{asset.uuid}__rgb_preproc_linear.npz"
-    if npz_path.exists():
-        return npz_path
+    wb_path = cache_dir / f"{asset.uuid}.wb.json"
+
+    if wb_path.exists():
+        try:
+            return json.loads(wb_path.read_text())
+        except Exception:
+            pass
 
     try:
         media_root = Path(_media_root())
@@ -88,17 +101,19 @@ def _resolve_media_cache(asset: Asset) -> Optional[Path]:
     if not source_path.exists():
         return None
 
-    cfg = PreprocessConfig(
-        cache_dir=cache_dir,
-        preview_max_dim=int(app.config.get("MEDIA_PREVIEW_MAX_DIM", 2048)),
-    )
     try:
-        preprocess_rgb_once(source_path, cfg)
+        factors = compute_wb_factors_from_tif(source_path)
+        try:
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            wb_path.write_text(json.dumps(factors))
+        except Exception:
+            pass
+        return factors
     except Exception:
-        current_app.logger.exception("agrovista: media cache warmup failed for %s", asset.uuid)
+        current_app.logger.exception(
+            "agrovista: wb factor computation failed for %s", asset.uuid
+        )
         return None
-
-    return npz_path if npz_path.exists() else None
 
 
 def _find_media_asset(media_asset_id: Optional[int], img_id: str) -> Optional[Asset]:
@@ -126,7 +141,7 @@ def _protein_from_media(
     scale_y_hint: Optional[float],
     coords_full_res: bool = False,
 ):
-    """Calcula proteína y variables usando la caché de Media (NPZ + preview)."""
+    """Calcula proteína y variables leyendo la ventana BBox directamente del TIF."""
 
     asset = _find_media_asset(media_asset_id, img_id)
     if asset is None:
@@ -136,33 +151,27 @@ def _protein_from_media(
     if not asset.crs or not asset.transform:
         abort(400, description="asset lacks georeference")
 
-    cache_dir = _resolve_cache_dir(current_app._get_current_object(), asset.uuid)
-    npz_path = _resolve_media_cache(asset)
-    rgb = None
+    try:
+        media_root = Path(_media_root())
+    except Exception:
+        abort(500, description="media storage unavailable")
+    source_path = media_root / asset.storage_key
+    if not source_path.exists():
+        abort(404, description="source TIF not found")
 
-    # Prefer el NPZ exacto (full res); si falta, usar preview PNG como respaldo.
-    if npz_path and npz_path.exists():
+    # WB factors from sidecar (computed on-the-fly if absent, ~800 ms first time).
+    wb_factors = _resolve_wb_sidecar(asset)
+
+    width_full = asset.width
+    height_full = asset.height
+    if width_full is None or height_full is None:
+        import rasterio as _rasterio
+
         try:
-            rgb = np.load(npz_path, mmap_mode="r", allow_pickle=False)["rgb"]
+            with _rasterio.open(str(source_path)) as ds:
+                width_full, height_full = ds.width, ds.height
         except Exception:
-            current_app.logger.exception("agrovista: unable to read media cache npz for %s", asset.uuid)
-            rgb = None
-
-    if rgb is None:
-        preview_path = cache_dir / f"{asset.uuid}__rgb_preproc_preview.png"
-        if not preview_path.exists():
-            abort(500, description="media cache unavailable")
-        try:
-            from PIL import Image
-
-            with Image.open(preview_path) as img:
-                rgb_srgb = np.array(img.convert("RGB"), dtype=np.float32) / 255.0
-            rgb = srgb_to_linear(rgb_srgb)
-        except Exception:
-            current_app.logger.exception("agrovista: failed to read preview for %s", asset.uuid)
-            abort(500, description="unable to read media cache")
-
-    height_full, width_full = rgb.shape[:2]
+            abort(500, description="unable to read image dimensions")
 
     # Si el frontend ya envía coordenadas en la resolución completa, úsalo sin reescalar
     if coords_full_res:
@@ -172,7 +181,9 @@ def _protein_from_media(
         pw = preview_width or width_full_hint or width_full
         ph = preview_height or height_full_hint or height_full
         sx = float(scale_x_hint) if scale_x_hint else ((width_full / pw) if pw else 1.0)
-        sy = float(scale_y_hint) if scale_y_hint else ((height_full / ph) if ph else 1.0)
+        sy = (
+            float(scale_y_hint) if scale_y_hint else ((height_full / ph) if ph else 1.0)
+        )
         scaled_vertices = [(float(x) * sx, float(y) * sy) for x, y in vertices]
 
     xs = [p[0] for p in scaled_vertices]
@@ -187,22 +198,36 @@ def _protein_from_media(
     crop_shape = (y1 - y0, x1 - x0)
     shifted_vertices = [(x - x0, y - y0) for x, y in scaled_vertices]
     mask = polygon_mask(crop_shape, shifted_vertices)
-    rgb = rgb[y0:y1, x0:x1, :]
 
-    idx = visible_indices(rgb)
+    try:
+        rgb = read_tif_window_as_linear_rgb(source_path, x0, y0, x1, y1, wb_factors)
+    except Exception:
+        current_app.logger.exception(
+            "agrovista: TIF window read failed for %s", asset.uuid
+        )
+        abort(500, description="unable to read image data")
+
+    vis_cfg = VisibleConfig(
+        do_linearize=False,
+        do_white_balance=wb_factors is None,  # local gray_world when no sidecar
+        shadow_mask=True,
+        median_size=0,
+    )
+    idx = compute_visible_indices(rgb, vis_cfg)
     vm_raw = (visible_method or "").strip().lower()
     vm = vm_raw if vm_raw in {"combined", "vari", "gli", "ngrdi", "exg"} else "combined"
     try:
         ndvi = combine_indices(idx, method=vm)
     except Exception:
-        current_app.logger.warning("agrovista: combine_indices fallback to combined for %s", asset.uuid)
+        current_app.logger.warning(
+            "agrovista: combine_indices fallback to combined for %s", asset.uuid
+        )
         ndvi = combine_indices(idx, method="combined")
         vm = "combined"
 
-    avg = average_protein(ndvi, mask, min_count=5)
+    avg = average_protein(ndvi, mask, min_count=5)  # solo verifica píxeles válidos
     if math.isnan(avg):
         abort(400, description="invalid area")
-    nitrogen = protein_to_nitrogen(avg)
 
     def _masked_mean(arr):
         if arr is None:
@@ -219,30 +244,54 @@ def _protein_from_media(
         "gli": _masked_mean(idx.get("GLI")),
         "ngrdi": _masked_mean(idx.get("NGRDI")),
         "exg": _masked_mean(idx.get("ExG") if "ExG" in idx else idx.get("EXG")),
+        "nbi": _masked_mean(idx.get("NBI")),
     }
+
+    ngrdi_val = stats.get("ngrdi") or 0.0
+    _broma = perfil_desde_ngrdi(ngrdi_val) if math.isfinite(ngrdi_val) else None
+
+    # Fuente única de verdad: bromatologia.py. Fallback a avg solo si NGRDI no disponible.
+    prot_val = _broma["proteina_pct"] if _broma else avg
+    nitrogen = protein_to_nitrogen(prot_val)
 
     nutrient_records = Nutrient.query.order_by(Nutrient.id.asc()).all()
     nutrient_payloads = compute_secondary_objective_targets(
-        avg,
+        prot_val,
         nitrogen,
         nutrient_records,
     )
 
     payload = {
-        "protein": round(avg, 2),
+        "protein": round(prot_val, 2),
         "nitrogen": round(nitrogen, 2) if math.isfinite(nitrogen) else None,
         "vi": _round_metric(stats.get("vi")),
         "vari": _round_metric(stats.get("vari")),
         "gli": _round_metric(stats.get("gli")),
         "ngrdi": _round_metric(stats.get("ngrdi")),
         "exg": _round_metric(stats.get("exg")),
+        "nbi": _round_metric(stats.get("nbi")),
         "variables": {
             "vi": _round_metric(stats.get("vi")),
             "vari": _round_metric(stats.get("vari")),
             "gli": _round_metric(stats.get("gli")),
             "ngrdi": _round_metric(stats.get("ngrdi")),
             "exg": _round_metric(stats.get("exg")),
+            "nbi": _round_metric(stats.get("nbi")),
         },
+        "bromatologia": (
+            {
+                "proteina_pct": _broma["proteina_pct"] if _broma else None,
+                "energia_mcal": _broma["energia_mcal"] if _broma else None,
+                "fda_pct": _broma["fda_pct"] if _broma else None,
+                "fdn_pct": _broma["fdn_pct"] if _broma else None,
+                "energia_mj": _broma["energia_mj"] if _broma else None,
+                "indice_vigor": _broma["indice_vigor"] if _broma else None,
+                "en_rango": _broma["en_rango_valido"] if _broma else None,
+                "minerales": _broma["minerales"] if _broma else None,
+            }
+            if _broma
+            else None
+        ),
         "ndvi_ready": True,
         "ndvi_stamp": int(asset.created_at.timestamp()) if asset.created_at else None,
         "method": "ndvi_approx",
@@ -400,9 +449,7 @@ def _serialize_secondary_objective(obj: SecondaryObjective) -> Dict[str, object]
         "nitrogen_estimated": obj.nitrogen_estimated,
         "created_at": _iso(obj.created_at),
         "updated_at": _iso(obj.updated_at),
-        "nutrient_targets": [
-            _serialize_nutrient_target(target) for target in targets
-        ],
+        "nutrient_targets": [_serialize_nutrient_target(target) for target in targets],
     }
 
 
@@ -486,10 +533,9 @@ def protein():
     meta = ensure_processed(img_id)
     ndvi = np.load(meta["npy_path"], allow_pickle=False)
     mask = polygon_mask(ndvi.shape, vertices)
-    avg = average_protein(ndvi, mask)
+    avg = average_protein(ndvi, mask)  # solo verifica píxeles válidos
     if math.isnan(avg):
         abort(400, description="invalid area")
-    nitrogen = protein_to_nitrogen(avg)
 
     def _masked_mean(arr):
         if arr is None:
@@ -505,7 +551,13 @@ def protein():
     }
 
     index_paths = meta.get("indices_paths", {})
-    for key, name in (("vari", "vari"), ("gli", "gli"), ("ngrdi", "ngrdi"), ("exg", "exg")):
+    for key, name in (
+        ("vari", "vari"),
+        ("gli", "gli"),
+        ("ngrdi", "ngrdi"),
+        ("exg", "exg"),
+        ("nbi", "nbi"),
+    ):
         path = index_paths.get(key)
         if not path:
             stats[name] = float("nan")
@@ -517,28 +569,51 @@ def protein():
             continue
         stats[name] = _masked_mean(arr)
 
+    ngrdi_val = stats.get("ngrdi") or 0.0
+    _broma = perfil_desde_ngrdi(ngrdi_val) if math.isfinite(ngrdi_val) else None
+
+    # Fuente única de verdad: bromatologia.py. Fallback a avg solo si NGRDI no disponible.
+    prot_val = _broma["proteina_pct"] if _broma else avg
+    nitrogen = protein_to_nitrogen(prot_val)
+
     nutrient_records = Nutrient.query.order_by(Nutrient.id.asc()).all()
     nutrient_payloads = compute_secondary_objective_targets(
-        avg,
+        prot_val,
         nitrogen,
         nutrient_records,
     )
 
     payload = {
-        "protein": round(avg, 2),
+        "protein": round(prot_val, 2),
         "nitrogen": round(nitrogen, 2) if math.isfinite(nitrogen) else None,
         "vi": _round_metric(stats.get("vi")),
         "vari": _round_metric(stats.get("vari")),
         "gli": _round_metric(stats.get("gli")),
         "ngrdi": _round_metric(stats.get("ngrdi")),
         "exg": _round_metric(stats.get("exg")),
+        "nbi": _round_metric(stats.get("nbi")),
         "variables": {
             "vi": _round_metric(stats.get("vi")),
             "vari": _round_metric(stats.get("vari")),
             "gli": _round_metric(stats.get("gli")),
             "ngrdi": _round_metric(stats.get("ngrdi")),
             "exg": _round_metric(stats.get("exg")),
+            "nbi": _round_metric(stats.get("nbi")),
         },
+        "bromatologia": (
+            {
+                "proteina_pct": _broma["proteina_pct"] if _broma else None,
+                "energia_mcal": _broma["energia_mcal"] if _broma else None,
+                "fda_pct": _broma["fda_pct"] if _broma else None,
+                "fdn_pct": _broma["fdn_pct"] if _broma else None,
+                "energia_mj": _broma["energia_mj"] if _broma else None,
+                "indice_vigor": _broma["indice_vigor"] if _broma else None,
+                "en_rango": _broma["en_rango_valido"] if _broma else None,
+                "minerales": _broma["minerales"] if _broma else None,
+            }
+            if _broma
+            else None
+        ),
         "ndvi_ready": bool(meta.get("processed")),
         "ndvi_stamp": meta.get("stamp"),
         "method": meta.get("method") or "ndvi_approx",
@@ -564,9 +639,7 @@ def create_analysis_crop():
     if not name:
         abort(400, description="name is required")
     description = data.get("description")
-    query = AnalysisCrop.query.filter(
-        func.lower(AnalysisCrop.name) == name.lower()
-    )
+    query = AnalysisCrop.query.filter(func.lower(AnalysisCrop.name) == name.lower())
     existing = query.first()
     if existing:
         if description and not existing.description:
@@ -601,7 +674,7 @@ def list_nutrients():
 @jwt_required()
 def list_secondary_objectives():
     """API GET para listar objetivos secundarios (CRUD completo).
-    
+
     NOTA: Este es el endpoint API principal para operaciones CRUD.
     Para la vista web que renderiza template, ver `agrovista/web_routes.py`.
     """
@@ -628,12 +701,9 @@ def _resolve_analysis_crop(analysis_crop_id, analysis_crop_name):
     if crop is None and analysis_crop_name:
         name = str(analysis_crop_name).strip()
         if name:
-            crop = (
-                AnalysisCrop.query.filter(
-                    func.lower(AnalysisCrop.name) == name.lower()
-                )
-                .first()
-            )
+            crop = AnalysisCrop.query.filter(
+                func.lower(AnalysisCrop.name) == name.lower()
+            ).first()
             if crop is None:
                 crop = AnalysisCrop(name=name)
                 db.session.add(crop)
@@ -754,9 +824,7 @@ def update_secondary_objective(objective_id: int):
         objective.analysis_crop = crop
 
     protein = _as_float(data.get("protein") or data.get("protein_average"))
-    nitrogen = _as_float(
-        data.get("nitrogen") or data.get("nitrogen_estimated")
-    )
+    nitrogen = _as_float(data.get("nitrogen") or data.get("nitrogen_estimated"))
     if protein is not None:
         objective.protein_average = protein
     if nitrogen is not None:
@@ -769,10 +837,7 @@ def update_secondary_objective(objective_id: int):
             protein_average=objective.protein_average,
             nitrogen_estimated=objective.nitrogen_estimated,
         )
-        existing = {
-            target.nutrient_id: target
-            for target in objective.nutrient_targets
-        }
+        existing = {target.nutrient_id: target for target in objective.nutrient_targets}
         for nutrient_id, value in nutrient_map.items():
             target = existing.get(nutrient_id)
             if target is None:

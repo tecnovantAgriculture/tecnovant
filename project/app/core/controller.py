@@ -1,4 +1,6 @@
 # Python standard library imports
+import hashlib
+import time
 from functools import wraps
 
 # Third party imports
@@ -26,6 +28,7 @@ from flask_jwt_extended import (
     unset_jwt_cookies,
     verify_jwt_in_request,
 )
+from flask_limiter.util import get_remote_address
 from itsdangerous import BadTimeSignature, SignatureExpired, URLSafeTimedSerializer
 from sqlalchemy import inspect
 from sqlalchemy.exc import IntegrityError
@@ -39,11 +42,13 @@ from werkzeug.exceptions import (
 from werkzeug.security import check_password_hash
 
 # Local application imports
-from app.extensions import db
+# Local application imports
+from app.extensions import cache, db, limiter
 from app.helpers.mail import send_email
 
-from .models import Organization  # PermissionEnum,; ActionEnum,
+from .config import CoreConfig
 from .models import (
+    Organization,
     ResellerPackage,
     RoleEnum,
     User,
@@ -189,8 +194,139 @@ def check_resource_access(resource, claims):
     return False
 
 
+def _login_limit_key():
+    """Build rate-limit key from request IP + optional username.
+
+    The key is ``ip:<ip_address>:user:<username>`` when a username is
+    provided in the JSON body, otherwise ``ip:<ip_address>``. This
+    covers both:
+
+    * brute-force against a single user from different IPs, and
+    * dictionary attacks using many usernames from the same IP.
+
+    Returns:
+        str: Limit key for Flask-Limiter.
+    """
+    ip = get_remote_address()
+    data = request.get_json(silent=True) or {}
+    username = (data.get("username") or "").strip().lower()
+    if username:
+        return f"ip:{ip}:user:{username}"
+    return f"ip:{ip}"
+
+
+def _is_account_locked(username: str) -> bool:
+    """Check whether a username is temporarily locked out.
+
+    Args:
+        username: The username to check (case-insensitive).
+
+    Returns:
+        bool: True if the account is currently locked out.
+    """
+    key = f"lockout:{username.lower()}"
+    return bool(cache.get(key))
+
+
+def _record_failed_login(username: str) -> None:
+    """Increment failed-login counter for a username and lock if threshold is reached.
+
+    Args:
+        username: The username that failed authentication.
+    """
+    key = f"failed_login:{username.lower()}"
+    attempts = (cache.get(key) or 0) + 1
+    cache.set(key, attempts, timeout=CoreConfig.RATE_LIMIT_LOCKOUT_DURATION)
+    if attempts >= CoreConfig.RATE_LIMIT_LOCKOUT_MAX_ATTEMPTS:
+        lockout_key = f"lockout:{username.lower()}"
+        cache.set(
+            lockout_key,
+            True,
+            timeout=CoreConfig.RATE_LIMIT_LOCKOUT_DURATION,
+        )
+
+
+def _clear_failed_logins(username: str) -> None:
+    """Clear failed-login counters after a successful authentication.
+
+    Args:
+        username: The username that authenticated successfully.
+    """
+    cache.delete(f"failed_login:{username.lower()}")
+    cache.delete(f"lockout:{username.lower()}")
+
+
+def _login_limit_key():
+    """Build rate-limit key from request IP + optional username.
+
+    The key is ``ip:<ip_address>:user:<username>`` when a username is
+    provided in the JSON body, otherwise ``ip:<ip_address>``. This
+    covers both:
+
+    * brute-force against a single user from different IPs, and
+    * dictionary attacks using many usernames from the same IP.
+
+    Returns:
+        str: Limit key for Flask-Limiter.
+    """
+    ip = get_remote_address()
+    data = request.get_json(silent=True) or {}
+    username = (data.get("username") or "").strip().lower()
+    if username:
+        return f"ip:{ip}:user:{username}"
+    return f"ip:{ip}"
+
+
+def _is_account_locked(username: str) -> bool:
+    """Check whether a username is temporarily locked out.
+
+    Args:
+        username: The username to check (case-insensitive).
+
+    Returns:
+        bool: True if the account is currently locked out.
+    """
+    key = f"lockout:{username.lower()}"
+    return bool(cache.get(key))
+
+
+def _record_failed_login(username: str) -> None:
+    """Increment failed-login counter for a username and lock if threshold is reached.
+
+    Args:
+        username: The username that failed authentication.
+    """
+    key = f"failed_login:{username.lower()}"
+    attempts = (cache.get(key) or 0) + 1
+    cache.set(key, attempts, timeout=CoreConfig.RATE_LIMIT_LOCKOUT_DURATION)
+    if attempts >= CoreConfig.RATE_LIMIT_LOCKOUT_MAX_ATTEMPTS:
+        lockout_key = f"lockout:{username.lower()}"
+        cache.set(
+            lockout_key,
+            True,
+            timeout=CoreConfig.RATE_LIMIT_LOCKOUT_DURATION,
+        )
+
+
+def _clear_failed_logins(username: str) -> None:
+    """Clear failed-login counters after a successful authentication.
+
+    Args:
+        username: The username that authenticated successfully.
+    """
+    cache.delete(f"failed_login:{username.lower()}")
+    cache.delete(f"lockout:{username.lower()}")
+
+
 class LoginView(MethodView):
     """Handle user authentication"""
+
+    decorators = [
+        limiter.limit(
+            f"{CoreConfig.RATE_LIMIT_LOGIN_PER_USER} per {CoreConfig.RATE_LIMIT_LOGIN_WINDOW} seconds",
+            key_func=_login_limit_key,
+        ),
+    ]
 
     def post(self):
         """User login endpoint
@@ -199,6 +335,7 @@ class LoginView(MethodView):
         :status 200: Successful login
         :status 400: Invalid request data
         :status 401: Authentication failure
+        :status 429: Rate limit exceeded
         """
         try:
             data = request.get_json()
@@ -211,9 +348,24 @@ class LoginView(MethodView):
             if not username or not password:
                 return jsonify({"msg": "Credentials required"}), 400
 
-            user = User.get_by_username(username)
+            normalized_username = username.lower()
+
+            if _is_account_locked(normalized_username):
+                return jsonify({"msg": "Account temporarily locked"}), 401
+
+            user = User.get_by_username(normalized_username)
             if self._invalid_credentials(user, password):
+                # Always perform a dummy hash when user is missing so that
+                # timing is indistinguishable from a failed password check.
+                if user is None:
+                    check_password_hash(
+                        "pbkdf2:sha256:600000$dummy$dummy",
+                        password,
+                    )
+                _record_failed_login(normalized_username)
                 return jsonify({"msg": "Invalid credentials"}), 401
+
+            _clear_failed_logins(normalized_username)
 
             claims = self._build_claims(user)
             tokens = self._generate_tokens(str(user.id), claims)

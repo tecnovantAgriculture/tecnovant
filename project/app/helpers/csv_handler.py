@@ -1,3 +1,16 @@
+# -*-coding:utf-8-*-
+"""CSV file handler for Yet Another Flask Survival Kit (YAFSK)
+
+Author:
+    Johnny De Castro <j@jdcastro.co>
+
+Copyright:
+    (c) 2024 - 2025 Johnny De Castro. All rights reserved.
+
+License:
+    Apache License 2.0 - http://www.apache.org/licenses/LICENSE-2.0
+
+"""
 """Utility class for CSV import and export operations."""
 
 import csv

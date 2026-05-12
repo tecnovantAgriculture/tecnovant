@@ -29,7 +29,9 @@ class AnalysisCrop(db.Model):
     name = db.Column(db.String(100), nullable=False, unique=True)
     description = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = db.Column(
+        db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
 
     secondary_objectives = db.relationship(
         "SecondaryObjective",
@@ -55,7 +57,9 @@ class SecondaryObjective(db.Model):
     protein_average = db.Column(db.Float, nullable=False)
     nitrogen_estimated = db.Column(db.Float, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = db.Column(
+        db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
 
     analysis_crop = db.relationship(
         "AnalysisCrop",
@@ -90,7 +94,9 @@ class SecondaryObjectiveNutrient(db.Model):
     )
     target_value = db.Column(db.Float, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = db.Column(
+        db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
 
     secondary_objective = db.relationship(
         "SecondaryObjective",

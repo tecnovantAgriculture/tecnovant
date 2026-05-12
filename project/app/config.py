@@ -155,7 +155,9 @@ class Config:
     # Media storage
     MEDIA_STORAGE_DIR = os.getenv("MEDIA_STORAGE_DIR")
     MEDIA_MAX_UPLOAD_SIZE = os.getenv("MEDIA_MAX_UPLOAD_SIZE", "2G")
-    MEDIA_MAX_UPLOAD_BYTES = _parse_size_bytes(MEDIA_MAX_UPLOAD_SIZE, 2 * 1024 * 1024 * 1024)
+    MEDIA_MAX_UPLOAD_BYTES = _parse_size_bytes(
+        MEDIA_MAX_UPLOAD_SIZE, 2 * 1024 * 1024 * 1024
+    )
     MEDIA_UPLOAD_TMP_DIR = os.getenv("MEDIA_UPLOAD_TMP_DIR")
     MEDIA_UPLOAD_CHUNK_SIZE = _parse_size_bytes(
         os.getenv("MEDIA_UPLOAD_CHUNK_SIZE", str(16 * 1024 * 1024)),
@@ -182,7 +184,9 @@ class Config:
     AVATAR_MAX_SIZE = 5 * 1024 * 1024  # 5 MB
     AVATAR_URL_PREFIX = "/avatars"
     AVATAR_DEFAULT = "/img/avatar.png"
-    AVATAR_SERVE_STATIC = env_config["DEBUG"]  # Enable Flask static serving only in development
+    AVATAR_SERVE_STATIC = env_config[
+        "DEBUG"
+    ]  # Enable Flask static serving only in development
 
     # overwrite for testing development purposes
     JWT_COOKIE_SECURE = True  # development purposes

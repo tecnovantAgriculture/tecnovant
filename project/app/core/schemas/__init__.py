@@ -1,9 +1,11 @@
-"""Extended schemas for core module.
+"""Core Marshmallow schemas."""
 
-This package contains Marshmallow schemas for extended profile data
-and API request/response validation.
-"""
-
+from .base import OrganizationSchema, ResellerPackageSchema, UserSchema
 from .extended_user_schema import ExtendedUserSchema
 
-__all__ = ["ExtendedUserSchema"]
+__all__ = [
+    "UserSchema",
+    "OrganizationSchema",
+    "ResellerPackageSchema",
+    "ExtendedUserSchema",
+]

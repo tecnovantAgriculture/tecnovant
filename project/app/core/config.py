@@ -31,6 +31,20 @@ class CoreConfig:
     RATE_LIMIT_AVATAR_UPLOAD = 5
     RATE_LIMIT_AVATAR_DELETE = 5
 
+    # Login rate limiting
+    RATE_LIMIT_LOGIN_PER_USER = 5
+    RATE_LIMIT_LOGIN_PER_IP = 20
+    RATE_LIMIT_LOGIN_WINDOW = 60  # segundos
+    RATE_LIMIT_LOCKOUT_MAX_ATTEMPTS = 5
+    RATE_LIMIT_LOCKOUT_DURATION = 300  # segundos (5 minutos)
+
+    # Login rate limiting
+    RATE_LIMIT_LOGIN_PER_USER = 5
+    RATE_LIMIT_LOGIN_PER_IP = 20
+    RATE_LIMIT_LOGIN_WINDOW = 60  # segundos
+    RATE_LIMIT_LOCKOUT_MAX_ATTEMPTS = 5
+    RATE_LIMIT_LOCKOUT_DURATION = 300  # segundos (5 minutos)
+
     # Security
     PROFILE_DATA_ALLOWED_KEYS = {"avatar_path", "birthday", "last_access"}
     PROFILE_UPDATE_ALLOWED_FIELDS = {"full_name", "email", "birthday"}

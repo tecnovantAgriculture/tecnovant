@@ -8,7 +8,9 @@ en lugar de duplicar lógica de negocio o plantillas.
 
 from flask import Blueprint
 
-media = Blueprint("media", __name__, url_prefix='/dashboard/media', template_folder='templates')
-media_api = Blueprint("media_api", __name__, url_prefix='/api/media')
+media = Blueprint(
+    "media", __name__, url_prefix="/dashboard/media", template_folder="templates"
+)
+media_api = Blueprint("media_api", __name__, url_prefix="/api/media")
 
-from . import web_routes, api_routes
+from . import api_routes, web_routes

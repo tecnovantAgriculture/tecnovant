@@ -29,10 +29,17 @@
 
             <h2>Submodules</h2>
             <ul>
+                    <li><a href="core/api.html">api</a></li>
                     <li><a href="core/api_routes.html">api_routes</a></li>
+                    <li><a href="core/config.html">config</a></li>
+                    <li><a href="core/constants.html">constants</a></li>
                     <li><a href="core/controller.html">controller</a></li>
+                    <li><a href="core/exceptions.html">exceptions</a></li>
                     <li><a href="core/models.html">models</a></li>
+                    <li><a href="core/navigation.html">navigation</a></li>
                     <li><a href="core/schemas.html">schemas</a></li>
+                    <li><a href="core/services.html">services</a></li>
+                    <li><a href="core/ui.html">ui</a></li>
                     <li><a href="core/web_routes.html">web_routes</a></li>
             </ul>
 
@@ -43,6 +50,12 @@
             </li>
             <li>
                     <a class="variable" href="#core_api">core_api</a>
+            </li>
+            <li>
+                    <a class="variable" href="#core_api_v1">core_api_v1</a>
+            </li>
+            <li>
+                    <a class="function" href="#serve_avatar">serve_avatar</a>
             </li>
     </ul>
 
@@ -60,22 +73,87 @@
                     <h1 class="modulename">
 <a href="./../app.html">app</a><wbr>.core    </h1>
 
-                        <div class="docstring"><p>Application core blueprints and route imports.</p>
+                        <div class="docstring"><p>Core module for Yet Another Flask Survival Kit (YAFSK)</p>
+
+<h6 id="author">Author:</h6>
+
+<blockquote>
+  <p>Johnny De Castro <a href="&#109;&#x61;&#105;&#108;to&#x3a;j&#64;&#106;dc&#x61;&#x73;&#x74;&#x72;&#x6f;&#x2e;&#99;&#111;">j&#64;&#106;dc&#x61;&#x73;&#x74;&#x72;&#x6f;&#x2e;&#99;&#111;</a></p>
+</blockquote>
+
+<h6 id="copyright">Copyright:</h6>
+
+<blockquote>
+  <p>(c) 2024 - 2025 Johnny De Castro. All rights reserved.</p>
+</blockquote>
+
+<h6 id="license">License:</h6>
+
+<blockquote>
+  <p>Apache License 2.0 - <a href="http://www.apache.org/licenses/LICENSE-2.0">http://www.apache.org/licenses/LICENSE-2.0</a></p>
+</blockquote>
 </div>
 
                         <input id="mod-core-view-source" class="view-source-toggle-state" type="checkbox" aria-hidden="true" tabindex="-1">
 
                         <label class="view-source-button" for="mod-core-view-source"><span>View Source</span></label>
 
-                        <div class="pdoc-code codehilite"><pre><span></span><span id="L-1"><a href="#L-1"><span class="linenos">1</span></a><span class="sd">&quot;&quot;&quot;Application core blueprints and route imports.&quot;&quot;&quot;</span>
-</span><span id="L-2"><a href="#L-2"><span class="linenos">2</span></a>
-</span><span id="L-3"><a href="#L-3"><span class="linenos">3</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">flask</span><span class="w"> </span><span class="kn">import</span> <span class="n">Blueprint</span>
-</span><span id="L-4"><a href="#L-4"><span class="linenos">4</span></a>
-</span><span id="L-5"><a href="#L-5"><span class="linenos">5</span></a><span class="n">core</span> <span class="o">=</span> <span class="n">Blueprint</span><span class="p">(</span><span class="s2">&quot;core&quot;</span><span class="p">,</span> <span class="vm">__name__</span><span class="p">,</span> <span class="n">url_prefix</span><span class="o">=</span><span class="s2">&quot;/&quot;</span><span class="p">,</span> <span class="n">template_folder</span><span class="o">=</span><span class="s2">&quot;templates&quot;</span><span class="p">)</span>
-</span><span id="L-6"><a href="#L-6"><span class="linenos">6</span></a>
-</span><span id="L-7"><a href="#L-7"><span class="linenos">7</span></a><span class="n">core_api</span> <span class="o">=</span> <span class="n">Blueprint</span><span class="p">(</span><span class="s2">&quot;core_api&quot;</span><span class="p">,</span> <span class="vm">__name__</span><span class="p">,</span> <span class="n">url_prefix</span><span class="o">=</span><span class="s2">&quot;/api/core&quot;</span><span class="p">)</span>
-</span><span id="L-8"><a href="#L-8"><span class="linenos">8</span></a>
-</span><span id="L-9"><a href="#L-9"><span class="linenos">9</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">.</span><span class="w"> </span><span class="kn">import</span> <span class="n">api_routes</span><span class="p">,</span> <span class="n">web_routes</span>
+                        <div class="pdoc-code codehilite"><pre><span></span><span id="L-1"><a href="#L-1"><span class="linenos"> 1</span></a><span class="c1"># -*-coding:utf-8-*-</span>
+</span><span id="L-2"><a href="#L-2"><span class="linenos"> 2</span></a><span class="sd">&quot;&quot;&quot;Core module for Yet Another Flask Survival Kit (YAFSK)</span>
+</span><span id="L-3"><a href="#L-3"><span class="linenos"> 3</span></a>
+</span><span id="L-4"><a href="#L-4"><span class="linenos"> 4</span></a><span class="sd">Author:</span>
+</span><span id="L-5"><a href="#L-5"><span class="linenos"> 5</span></a><span class="sd">    Johnny De Castro &lt;j@jdcastro.co&gt;</span>
+</span><span id="L-6"><a href="#L-6"><span class="linenos"> 6</span></a>
+</span><span id="L-7"><a href="#L-7"><span class="linenos"> 7</span></a><span class="sd">Copyright:</span>
+</span><span id="L-8"><a href="#L-8"><span class="linenos"> 8</span></a><span class="sd">    (c) 2024 - 2025 Johnny De Castro. All rights reserved.</span>
+</span><span id="L-9"><a href="#L-9"><span class="linenos"> 9</span></a>
+</span><span id="L-10"><a href="#L-10"><span class="linenos">10</span></a><span class="sd">License:</span>
+</span><span id="L-11"><a href="#L-11"><span class="linenos">11</span></a><span class="sd">    Apache License 2.0 - http://www.apache.org/licenses/LICENSE-2.0</span>
+</span><span id="L-12"><a href="#L-12"><span class="linenos">12</span></a>
+</span><span id="L-13"><a href="#L-13"><span class="linenos">13</span></a><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="L-14"><a href="#L-14"><span class="linenos">14</span></a><span class="sd">&quot;&quot;&quot;Application core blueprints and route imports.&quot;&quot;&quot;</span>
+</span><span id="L-15"><a href="#L-15"><span class="linenos">15</span></a>
+</span><span id="L-16"><a href="#L-16"><span class="linenos">16</span></a><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+</span><span id="L-17"><a href="#L-17"><span class="linenos">17</span></a>
+</span><span id="L-18"><a href="#L-18"><span class="linenos">18</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">flask</span><span class="w"> </span><span class="kn">import</span> <span class="n">Blueprint</span><span class="p">,</span> <span class="n">current_app</span><span class="p">,</span> <span class="n">send_from_directory</span>
+</span><span id="L-19"><a href="#L-19"><span class="linenos">19</span></a>
+</span><span id="L-20"><a href="#L-20"><span class="linenos">20</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">.controller</span><span class="w"> </span><span class="kn">import</span> <span class="n">login_required</span>
+</span><span id="L-21"><a href="#L-21"><span class="linenos">21</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">.services.avatar_service</span><span class="w"> </span><span class="kn">import</span> <span class="n">AvatarService</span>
+</span><span id="L-22"><a href="#L-22"><span class="linenos">22</span></a>
+</span><span id="L-23"><a href="#L-23"><span class="linenos">23</span></a><span class="n">core</span> <span class="o">=</span> <span class="n">Blueprint</span><span class="p">(</span><span class="s2">&quot;core&quot;</span><span class="p">,</span> <span class="vm">__name__</span><span class="p">,</span> <span class="n">url_prefix</span><span class="o">=</span><span class="s2">&quot;/&quot;</span><span class="p">,</span> <span class="n">template_folder</span><span class="o">=</span><span class="s2">&quot;templates&quot;</span><span class="p">)</span>
+</span><span id="L-24"><a href="#L-24"><span class="linenos">24</span></a>
+</span><span id="L-25"><a href="#L-25"><span class="linenos">25</span></a><span class="n">core_api</span> <span class="o">=</span> <span class="n">Blueprint</span><span class="p">(</span><span class="s2">&quot;core_api&quot;</span><span class="p">,</span> <span class="vm">__name__</span><span class="p">,</span> <span class="n">url_prefix</span><span class="o">=</span><span class="s2">&quot;/api/core&quot;</span><span class="p">)</span>
+</span><span id="L-26"><a href="#L-26"><span class="linenos">26</span></a><span class="n">core_api_v1</span> <span class="o">=</span> <span class="n">Blueprint</span><span class="p">(</span><span class="s2">&quot;core_api_v1&quot;</span><span class="p">,</span> <span class="vm">__name__</span><span class="p">,</span> <span class="n">url_prefix</span><span class="o">=</span><span class="s2">&quot;/api/v1/core&quot;</span><span class="p">)</span>
+</span><span id="L-27"><a href="#L-27"><span class="linenos">27</span></a>
+</span><span id="L-28"><a href="#L-28"><span class="linenos">28</span></a>
+</span><span id="L-29"><a href="#L-29"><span class="linenos">29</span></a><span class="c1"># Avatar serving route</span>
+</span><span id="L-30"><a href="#L-30"><span class="linenos">30</span></a><span class="nd">@core</span><span class="o">.</span><span class="n">route</span><span class="p">(</span><span class="s2">&quot;/avatars/&lt;path:key&gt;&quot;</span><span class="p">)</span>
+</span><span id="L-31"><a href="#L-31"><span class="linenos">31</span></a><span class="nd">@login_required</span>
+</span><span id="L-32"><a href="#L-32"><span class="linenos">32</span></a><span class="k">def</span><span class="w"> </span><span class="nf">serve_avatar</span><span class="p">(</span><span class="n">key</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+</span><span id="L-33"><a href="#L-33"><span class="linenos">33</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Serve avatar files from storage directory.</span>
+</span><span id="L-34"><a href="#L-34"><span class="linenos">34</span></a>
+</span><span id="L-35"><a href="#L-35"><span class="linenos">35</span></a><span class="sd">    Args:</span>
+</span><span id="L-36"><a href="#L-36"><span class="linenos">36</span></a><span class="sd">        key: Relative path to avatar file (e.g., user_id/filename)</span>
+</span><span id="L-37"><a href="#L-37"><span class="linenos">37</span></a>
+</span><span id="L-38"><a href="#L-38"><span class="linenos">38</span></a><span class="sd">    Returns:</span>
+</span><span id="L-39"><a href="#L-39"><span class="linenos">39</span></a><span class="sd">        The avatar image file with cache headers.</span>
+</span><span id="L-40"><a href="#L-40"><span class="linenos">40</span></a><span class="sd">    &quot;&quot;&quot;</span>
+</span><span id="L-41"><a href="#L-41"><span class="linenos">41</span></a>    <span class="c1"># Get base storage directory (handles Docker env properly)</span>
+</span><span id="L-42"><a href="#L-42"><span class="linenos">42</span></a>    <span class="n">base</span> <span class="o">=</span> <span class="n">AvatarService</span><span class="o">.</span><span class="n">ensure_storage_directory</span><span class="p">()</span>
+</span><span id="L-43"><a href="#L-43"><span class="linenos">43</span></a>
+</span><span id="L-44"><a href="#L-44"><span class="linenos">44</span></a>    <span class="c1"># Extract directory and filename from the key path</span>
+</span><span id="L-45"><a href="#L-45"><span class="linenos">45</span></a>    <span class="n">directory</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">base</span><span class="p">),</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="n">key</span><span class="p">))</span>
+</span><span id="L-46"><a href="#L-46"><span class="linenos">46</span></a>    <span class="n">filename</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+</span><span id="L-47"><a href="#L-47"><span class="linenos">47</span></a>
+</span><span id="L-48"><a href="#L-48"><span class="linenos">48</span></a>    <span class="c1"># send_from_directory handles path security validation</span>
+</span><span id="L-49"><a href="#L-49"><span class="linenos">49</span></a>    <span class="n">response</span> <span class="o">=</span> <span class="n">send_from_directory</span><span class="p">(</span><span class="n">directory</span><span class="p">,</span> <span class="n">filename</span><span class="p">)</span>
+</span><span id="L-50"><a href="#L-50"><span class="linenos">50</span></a>    <span class="c1"># Add cache headers (1 day for avatars)</span>
+</span><span id="L-51"><a href="#L-51"><span class="linenos">51</span></a>    <span class="n">response</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="s2">&quot;Cache-Control&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;public, max-age=86400&quot;</span>
+</span><span id="L-52"><a href="#L-52"><span class="linenos">52</span></a>    <span class="k">return</span> <span class="n">response</span>
+</span><span id="L-53"><a href="#L-53"><span class="linenos">53</span></a>
+</span><span id="L-54"><a href="#L-54"><span class="linenos">54</span></a>
+</span><span id="L-55"><a href="#L-55"><span class="linenos">55</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">.</span><span class="w"> </span><span class="kn">import</span> <span class="n">api_routes</span><span class="p">,</span> <span class="n">web_routes</span>
+</span><span id="L-56"><a href="#L-56"><span class="linenos">56</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">.api.v1</span><span class="w"> </span><span class="kn">import</span> <span class="n">routes</span> <span class="k">as</span> <span class="n">v1_routes</span>
 </span></pre></div>
 
 
@@ -102,6 +180,74 @@
     <a class="headerlink" href="#core_api"></a>
     
     
+
+                </section>
+                <section id="core_api_v1">
+                    <div class="attr variable">
+            <span class="name">core_api_v1</span>        =
+<span class="default_value">&lt;Blueprint &#39;core_api_v1&#39;&gt;</span>
+
+        
+    </div>
+    <a class="headerlink" href="#core_api_v1"></a>
+    
+    
+
+                </section>
+                <section id="serve_avatar">
+                            <input id="serve_avatar-view-source" class="view-source-toggle-state" type="checkbox" aria-hidden="true" tabindex="-1">
+<div class="attr function">
+                    <div class="decorator decorator-core.route">@core.route(&#39;/avatars/&lt;path:key&gt;&#39;)</div>
+        <div class="decorator decorator-login_required">@login_required</div>
+
+        <span class="def">def</span>
+        <span class="name">serve_avatar</span><span class="signature pdoc-code condensed">(<span class="param"><span class="n">key</span><span class="p">:</span> <span class="nb">str</span></span><span class="return-annotation">):</span></span>
+
+                <label class="view-source-button" for="serve_avatar-view-source"><span>View Source</span></label>
+
+    </div>
+    <a class="headerlink" href="#serve_avatar"></a>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="serve_avatar-31"><a href="#serve_avatar-31"><span class="linenos">31</span></a><span class="nd">@core</span><span class="o">.</span><span class="n">route</span><span class="p">(</span><span class="s2">&quot;/avatars/&lt;path:key&gt;&quot;</span><span class="p">)</span>
+</span><span id="serve_avatar-32"><a href="#serve_avatar-32"><span class="linenos">32</span></a><span class="nd">@login_required</span>
+</span><span id="serve_avatar-33"><a href="#serve_avatar-33"><span class="linenos">33</span></a><span class="k">def</span><span class="w"> </span><span class="nf">serve_avatar</span><span class="p">(</span><span class="n">key</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+</span><span id="serve_avatar-34"><a href="#serve_avatar-34"><span class="linenos">34</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Serve avatar files from storage directory.</span>
+</span><span id="serve_avatar-35"><a href="#serve_avatar-35"><span class="linenos">35</span></a>
+</span><span id="serve_avatar-36"><a href="#serve_avatar-36"><span class="linenos">36</span></a><span class="sd">    Args:</span>
+</span><span id="serve_avatar-37"><a href="#serve_avatar-37"><span class="linenos">37</span></a><span class="sd">        key: Relative path to avatar file (e.g., user_id/filename)</span>
+</span><span id="serve_avatar-38"><a href="#serve_avatar-38"><span class="linenos">38</span></a>
+</span><span id="serve_avatar-39"><a href="#serve_avatar-39"><span class="linenos">39</span></a><span class="sd">    Returns:</span>
+</span><span id="serve_avatar-40"><a href="#serve_avatar-40"><span class="linenos">40</span></a><span class="sd">        The avatar image file with cache headers.</span>
+</span><span id="serve_avatar-41"><a href="#serve_avatar-41"><span class="linenos">41</span></a><span class="sd">    &quot;&quot;&quot;</span>
+</span><span id="serve_avatar-42"><a href="#serve_avatar-42"><span class="linenos">42</span></a>    <span class="c1"># Get base storage directory (handles Docker env properly)</span>
+</span><span id="serve_avatar-43"><a href="#serve_avatar-43"><span class="linenos">43</span></a>    <span class="n">base</span> <span class="o">=</span> <span class="n">AvatarService</span><span class="o">.</span><span class="n">ensure_storage_directory</span><span class="p">()</span>
+</span><span id="serve_avatar-44"><a href="#serve_avatar-44"><span class="linenos">44</span></a>
+</span><span id="serve_avatar-45"><a href="#serve_avatar-45"><span class="linenos">45</span></a>    <span class="c1"># Extract directory and filename from the key path</span>
+</span><span id="serve_avatar-46"><a href="#serve_avatar-46"><span class="linenos">46</span></a>    <span class="n">directory</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">base</span><span class="p">),</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="n">key</span><span class="p">))</span>
+</span><span id="serve_avatar-47"><a href="#serve_avatar-47"><span class="linenos">47</span></a>    <span class="n">filename</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+</span><span id="serve_avatar-48"><a href="#serve_avatar-48"><span class="linenos">48</span></a>
+</span><span id="serve_avatar-49"><a href="#serve_avatar-49"><span class="linenos">49</span></a>    <span class="c1"># send_from_directory handles path security validation</span>
+</span><span id="serve_avatar-50"><a href="#serve_avatar-50"><span class="linenos">50</span></a>    <span class="n">response</span> <span class="o">=</span> <span class="n">send_from_directory</span><span class="p">(</span><span class="n">directory</span><span class="p">,</span> <span class="n">filename</span><span class="p">)</span>
+</span><span id="serve_avatar-51"><a href="#serve_avatar-51"><span class="linenos">51</span></a>    <span class="c1"># Add cache headers (1 day for avatars)</span>
+</span><span id="serve_avatar-52"><a href="#serve_avatar-52"><span class="linenos">52</span></a>    <span class="n">response</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="s2">&quot;Cache-Control&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;public, max-age=86400&quot;</span>
+</span><span id="serve_avatar-53"><a href="#serve_avatar-53"><span class="linenos">53</span></a>    <span class="k">return</span> <span class="n">response</span>
+</span></pre></div>
+
+
+            <div class="docstring"><p>Serve avatar files from storage directory.</p>
+
+<h6 id="arguments">Arguments:</h6>
+
+<ul>
+<li><strong>key:</strong>  Relative path to avatar file (e.g., user_id/filename)</li>
+</ul>
+
+<h6 id="returns">Returns:</h6>
+
+<blockquote>
+  <p>The avatar image file with cache headers.</p>
+</blockquote>
+</div>
+
 
                 </section>
     </main>

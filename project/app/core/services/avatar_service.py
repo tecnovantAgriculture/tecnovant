@@ -10,16 +10,17 @@ import shutil
 import time
 from pathlib import Path
 from typing import Optional, Tuple
-from werkzeug.datastructures import FileStorage
 
 from flask import current_app
+from werkzeug.datastructures import FileStorage
 
 from app.core.constants import AvatarConstants, ProfileDataKeys
-from app.core.exceptions import AvatarValidationError, AvatarStorageError
+from app.core.exceptions import AvatarStorageError, AvatarValidationError
 
 # Try to import PIL for image validation (optional)
 try:
     from PIL import Image
+
     PIL_AVAILABLE = True
 except ImportError:
     PIL_AVAILABLE = False
@@ -40,27 +41,29 @@ class AvatarService:
             Tuple of (is_valid, error_message). If valid, error_message is empty.
         """
         # Check file exists
-        if not file or file.filename == '':
+        if not file or file.filename == "":
             return False, "No file uploaded"
 
         # Validate file extension
         ext = cls._get_extension(file.filename)
         allowed_extensions = current_app.config.get(
-            'AVATAR_ALLOWED_EXTENSIONS', 
-            AvatarConstants.ALLOWED_MIME_TYPES
+            "AVATAR_ALLOWED_EXTENSIONS", AvatarConstants.ALLOWED_MIME_TYPES
         )
         if ext.lower() not in allowed_extensions:
-            return False, f"File type not allowed. Allowed: {', '.join(allowed_extensions)}"
+            return (
+                False,
+                f"File type not allowed. Allowed: {', '.join(allowed_extensions)}",
+            )
 
         # Validate MIME type
-        mime_type = file.mimetype.lower() if file.mimetype else ''
+        mime_type = file.mimetype.lower() if file.mimetype else ""
         allowed_mime = AvatarConstants.ALLOWED_MIME_TYPES
         if mime_type not in allowed_mime:
             # Not a recognized MIME type, but we'll still try to validate via content
             pass
 
         # Validate file size
-        max_size = current_app.config.get('AVATAR_MAX_SIZE', 5 * 1024 * 1024)
+        max_size = current_app.config.get("AVATAR_MAX_SIZE", 5 * 1024 * 1024)
         file.seek(0, os.SEEK_END)
         size = file.tell()
         file.seek(0)
@@ -76,10 +79,22 @@ class AvatarService:
                 # Load image to validate it's valid (no need for verify() which closes file)
                 img.load()
                 width, height = img.size
-                if width > AvatarConstants.MAX_DIMENSION or height > AvatarConstants.MAX_DIMENSION:
-                    return False, f"Image dimensions exceed {AvatarConstants.MAX_DIMENSION}px"
-                if width < AvatarConstants.MIN_DIMENSION or height < AvatarConstants.MIN_DIMENSION:
-                    return False, f"Image dimensions below {AvatarConstants.MIN_DIMENSION}px"
+                if (
+                    width > AvatarConstants.MAX_DIMENSION
+                    or height > AvatarConstants.MAX_DIMENSION
+                ):
+                    return (
+                        False,
+                        f"Image dimensions exceed {AvatarConstants.MAX_DIMENSION}px",
+                    )
+                if (
+                    width < AvatarConstants.MIN_DIMENSION
+                    or height < AvatarConstants.MIN_DIMENSION
+                ):
+                    return (
+                        False,
+                        f"Image dimensions below {AvatarConstants.MIN_DIMENSION}px",
+                    )
                 img.close()
             except Exception as e:
                 return False, f"Invalid image: {str(e)}"
@@ -111,11 +126,11 @@ class AvatarService:
         timestamp = int(time.time())
         ext = cls._get_extension(file.filename).lower()
         filename = f"{user_id}_avatar_{timestamp}.{ext}"
-        
+
         # Create user-specific subdirectory (optional)
         user_dir = upload_dir / user_id
         user_dir.mkdir(exist_ok=True)
-        
+
         # Save file
         destination = user_dir / filename
         try:
@@ -140,18 +155,22 @@ class AvatarService:
         """
         if not avatar_path:
             return True
-        
-        upload_dir = Path(current_app.config.get('AVATAR_UPLOAD_DIR', '/var/www/avatars'))
+
+        upload_dir = Path(
+            current_app.config.get("AVATAR_UPLOAD_DIR", "/var/www/avatars")
+        )
         absolute_path = upload_dir / avatar_path
-        
+
         # Ensure the path is within the upload directory (security)
         try:
             absolute_path.resolve().relative_to(upload_dir.resolve())
         except ValueError:
             # Path traversal attempt
-            current_app.logger.warning(f"Invalid avatar path outside upload directory: {avatar_path}")
+            current_app.logger.warning(
+                f"Invalid avatar path outside upload directory: {avatar_path}"
+            )
             return False
-        
+
         if absolute_path.exists():
             try:
                 absolute_path.unlink()
@@ -161,7 +180,9 @@ class AvatarService:
                     user_dir.rmdir()
                 return True
             except Exception as e:
-                current_app.logger.error(f"Failed to delete avatar {avatar_path}: {str(e)}")
+                current_app.logger.error(
+                    f"Failed to delete avatar {avatar_path}: {str(e)}"
+                )
                 return False
         return True  # File doesn't exist, consider deletion successful
 
@@ -177,11 +198,11 @@ class AvatarService:
         """
         if not avatar_path:
             return None
-        
-        url_prefix = current_app.config.get('AVATAR_URL_PREFIX', '/avatars')
+
+        url_prefix = current_app.config.get("AVATAR_URL_PREFIX", "/avatars")
         # Ensure no double slashes
-        url_prefix = url_prefix.rstrip('/')
-        avatar_path = avatar_path.lstrip('/')
+        url_prefix = url_prefix.rstrip("/")
+        avatar_path = avatar_path.lstrip("/")
         return f"{url_prefix}/{avatar_path}"
 
     @classmethod
@@ -195,13 +216,17 @@ class AvatarService:
             Path object for the storage directory.
         """
         # Check if env var is set AND is not empty
-        env_upload_dir = os.environ.get('AVATAR_UPLOAD_DIR', '').strip()
+        env_upload_dir = os.environ.get("AVATAR_UPLOAD_DIR", "").strip()
         if env_upload_dir:
             upload_dir = Path(env_upload_dir)
         else:
             # Project root is one level above app/ (same pattern as media)
-            project_root = os.path.abspath(os.path.join(current_app.root_path, os.pardir))
-            upload_dir = Path(os.path.join(project_root, "storage", "profile", "avatars"))
+            project_root = os.path.abspath(
+                os.path.join(current_app.root_path, os.pardir)
+            )
+            upload_dir = Path(
+                os.path.join(project_root, "storage", "profile", "avatars")
+            )
 
         upload_dir.mkdir(parents=True, exist_ok=True)
         return upload_dir
@@ -209,4 +234,4 @@ class AvatarService:
     @staticmethod
     def _get_extension(filename: str) -> str:
         """Extract file extension from filename."""
-        return filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
+        return filename.rsplit(".", 1)[1].lower() if "." in filename else ""

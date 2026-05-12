@@ -9,10 +9,10 @@ from flask import url_for
 
 def get_dashboard_menu():
     """Define el menú superior en los templates.
-    
+
     Returns:
         dict: Estructura del menú con nombre y URL para cada item.
-        
+
     Ejemplo:
         {
             "menu": [
@@ -33,15 +33,15 @@ def get_dashboard_menu():
 
 def get_module_dashboard_menu(module_name=None):
     """Obtiene menú del dashboard con opciones específicas del módulo.
-    
+
     Args:
         module_name (str, optional): Nombre del módulo para personalización.
-        
+
     Returns:
         dict: Menú personalizado según el módulo.
     """
     base_menu = get_dashboard_menu()
-    
+
     # Personalizaciones por módulo (si se implementan en el futuro)
     if module_name == "agrovista":
         # Podría agregar opciones específicas de Agrovista
@@ -52,5 +52,5 @@ def get_module_dashboard_menu(module_name=None):
     elif module_name == "media":
         # Podría agregar opciones específicas de media
         pass
-    
+
     return base_menu

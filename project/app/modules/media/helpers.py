@@ -26,26 +26,24 @@ Notes:
 - PNG previews are quicklooks; scientific consumers should prefer GeoTIFF/NPZ.
 """
 
+import hashlib
+import json
 import math
+import mimetypes
 import os
 import tempfile
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 import numpy as np
+import rasterio
+from flask import current_app
 from numpy.typing import NDArray
 from PIL import Image
-import rasterio
-from rasterio.io import DatasetReader
-
-import hashlib
-import mimetypes
-import uuid
-
-from flask import current_app
-
 from rasterio.enums import Resampling
+from rasterio.io import DatasetReader
 from rasterio.vrt import WarpedVRT
 from rasterio.windows import Window
 from werkzeug.datastructures import FileStorage
@@ -103,7 +101,9 @@ class UploadCapture:
         except FileNotFoundError:
             return
         except Exception:
-            current_app.logger.debug("media: unable to discard temp upload %s", self.temp_path)
+            current_app.logger.debug(
+                "media: unable to discard temp upload %s", self.temp_path
+            )
 
     def move_to(self, destination: str) -> None:
         """Move the temporary file to ``destination`` replacing existing files."""
@@ -112,10 +112,16 @@ class UploadCapture:
         os.replace(self.temp_path, destination)
 
 
-def capture_upload_to_temp(file: FileStorage, *, chunk_size: int | None = None) -> UploadCapture:
+def capture_upload_to_temp(
+    file: FileStorage, *, chunk_size: int | None = None
+) -> UploadCapture:
     """Stream ``file`` into a temporary location while hashing and measuring size."""
 
-    cfg_chunk = chunk_size or current_app.config.get("MEDIA_UPLOAD_CHUNK_SIZE") or (16 * 1024 * 1024)
+    cfg_chunk = (
+        chunk_size
+        or current_app.config.get("MEDIA_UPLOAD_CHUNK_SIZE")
+        or (16 * 1024 * 1024)
+    )
     chunk_len = max(int(cfg_chunk), 1024 * 1024)
     tmp_dir = current_app.config.get("MEDIA_UPLOAD_TMP_DIR")
     if not tmp_dir:
@@ -133,7 +139,9 @@ def capture_upload_to_temp(file: FileStorage, *, chunk_size: int | None = None) 
     suffix = Path(file.filename or "").suffix or ".upload"
     tmp_path = None
 
-    with tempfile.NamedTemporaryFile(prefix="media-upload-", suffix=suffix, dir=tmp_dir, delete=False) as tmp:
+    with tempfile.NamedTemporaryFile(
+        prefix="media-upload-", suffix=suffix, dir=tmp_dir, delete=False
+    ) as tmp:
         while True:
             chunk = stream.read(chunk_len)
             if not chunk:
@@ -143,7 +151,8 @@ def capture_upload_to_temp(file: FileStorage, *, chunk_size: int | None = None) 
             size += len(chunk)
         try:
             tmp.flush()
-            os.fsync(tmp.fileno())
+            if os.getenv("MEDIA_UPLOAD_FSYNC", "false").lower() == "true":
+                os.fsync(tmp.fileno())
         except Exception:
             pass
         tmp_path = tmp.name
@@ -162,6 +171,7 @@ def capture_upload_to_temp(file: FileStorage, *, chunk_size: int | None = None) 
 @dataclass
 class ImageInfo:
     """Metadata snapshot extracted from an image file."""
+
     width: Optional[int] = None
     height: Optional[int] = None
     exif: Optional[dict] = None
@@ -172,7 +182,7 @@ def extract_image_info(filepath: str) -> ImageInfo:
     info = ImageInfo()
     # Try Pillow first
     try:
-        from PIL import Image, ExifTags  # type: ignore
+        from PIL import ExifTags, Image  # type: ignore
 
         with Image.open(filepath) as im:
             info.width, info.height = im.size
@@ -204,6 +214,7 @@ def extract_image_info(filepath: str) -> ImageInfo:
 @dataclass
 class GeoInfo:
     """Geospatial metadata for raster files."""
+
     is_geo: bool = False
     crs: Optional[str] = None
     bounds: Optional[dict] = None
@@ -227,7 +238,12 @@ def extract_geo_info_if_tiff(filepath: str) -> GeoInfo:
                 geo.crs = None
             try:
                 b = src.bounds
-                geo.bounds = {"left": b.left, "bottom": b.bottom, "right": b.right, "top": b.top}
+                geo.bounds = {
+                    "left": b.left,
+                    "bottom": b.bottom,
+                    "right": b.right,
+                    "top": b.top,
+                }
             except Exception:
                 geo.bounds = None
             try:
@@ -267,13 +283,16 @@ def allocate_storage_path(ext: str) -> Tuple[str, str]:
 @dataclass
 class ThumbnailResult:
     """Description of a generated thumbnail variant stored on disk."""
+
     kind: str
     storage_key: str
     width: Optional[int]
     height: Optional[int]
 
 
-def allocate_variant_path(asset_uuid: str, kind: str, ext: str = "webp") -> Tuple[str, str]:
+def allocate_variant_path(
+    asset_uuid: str, kind: str, ext: str = "webp"
+) -> Tuple[str, str]:
     """Return storage key/absolute path for a derivative of ``asset_uuid``."""
 
     rel_dir = os.path.join("variants", kind, asset_uuid[:2], asset_uuid[2:4])
@@ -302,21 +321,19 @@ def generate_webp_thumbnails(
     try:
         from PIL import Image, ImageOps  # type: ignore
     except Exception:
-        current_app.logger.warning("Pillow not available; skipping thumbnail generation")
+        current_app.logger.warning(
+            "Pillow not available; skipping thumbnail generation"
+        )
         return []
 
     # Default to a single thumbnail tuned for the library grid unless
     # configuration overrides are provided.
-    default_specs = {"gallery": {"max_width": 512, "max_height": 512, "quality": 82, "method": 3}}
+    default_specs = {
+        "gallery": {"max_width": 512, "max_height": 512, "quality": 82, "method": 3}
+    }
     specs = specs or current_app.config.get("MEDIA_THUMBNAIL_SPECS", default_specs)
 
     results: List[ThumbnailResult] = []
-
-    try:
-        base_image = Image.open(src_path)
-        base_image = ImageOps.exif_transpose(base_image)
-    except Exception:
-        base_image = None
 
     def build_image_via_rasterio(target_dims: Tuple[int, int]):
         try:
@@ -357,15 +374,28 @@ def generate_webp_thumbnails(
         except Exception:
             return None
 
+    def build_image_via_pillow():
+        try:
+            im = Image.open(src_path)
+            im = ImageOps.exif_transpose(im)
+            return im
+        except Exception:
+            return None
+
     for kind, cfg in specs.items():
         target = (cfg.get("max_width", 512), cfg.get("max_height", 512))
         quality = cfg.get("quality", 82)
         method = cfg.get("method", 3)
         storage_key, abs_path = allocate_variant_path(asset_uuid, kind)
 
-        im = base_image.copy() if base_image else build_image_via_rasterio(target)
+        # Rasterio-first: handles GeoTIFFs at output resolution without loading
+        # the full raster into RAM. Falls back to Pillow for formats rasterio
+        # cannot open (plain PNG/JPG without geo metadata).
+        im = build_image_via_rasterio(target) or build_image_via_pillow()
         if im is None:
-            current_app.logger.exception("Failed to build %s thumbnail for asset %s", kind, asset_uuid)
+            current_app.logger.exception(
+                "Failed to build %s thumbnail for asset %s", kind, asset_uuid
+            )
             continue
 
         try:
@@ -395,19 +425,18 @@ def generate_webp_thumbnails(
             im.save(abs_path, **save_kwargs)
             width, height = im.size
         except Exception:
-            current_app.logger.exception("Failed to build %s thumbnail for asset %s", kind, asset_uuid)
+            current_app.logger.exception(
+                "Failed to build %s thumbnail for asset %s", kind, asset_uuid
+            )
             continue
 
-        results.append(ThumbnailResult(kind=kind, storage_key=storage_key, width=width, height=height))
-
-    if base_image is not None:
-        try:
-            base_image.close()
-        except Exception:
-            pass
+        results.append(
+            ThumbnailResult(
+                kind=kind, storage_key=storage_key, width=width, height=height
+            )
+        )
 
     return results
-
 
 
 def robust_minmax(arr: np.ndarray, mask: np.ndarray | None = None, p_lo=2.0, p_hi=98.0):
@@ -453,12 +482,16 @@ def compute_block_minmax(src, band_map=(1, 2, 3), block=1024):
             rl, rh = robust_minmax(r, mask)
             gl, gh = robust_minmax(g, mask)
             bl, bh = robust_minmax(b, mask)
-            r_vals.append((rl, rh)); g_vals.append((gl, gh)); b_vals.append((bl, bh))
-    r_lo = float(np.median([v[0] for v in r_vals])); r_hi = float(np.median([v[1] for v in r_vals]))
-    g_lo = float(np.median([v[0] for v in g_vals])); g_hi = float(np.median([v[1] for v in g_vals]))
-    b_lo = float(np.median([v[0] for v in b_vals])); b_hi = float(np.median([v[1] for v in b_vals]))
+            r_vals.append((rl, rh))
+            g_vals.append((gl, gh))
+            b_vals.append((bl, bh))
+    r_lo = float(np.median([v[0] for v in r_vals]))
+    r_hi = float(np.median([v[1] for v in r_vals]))
+    g_lo = float(np.median([v[0] for v in g_vals]))
+    g_hi = float(np.median([v[1] for v in g_vals]))
+    b_lo = float(np.median([v[0] for v in b_vals]))
+    b_hi = float(np.median([v[1] for v in b_vals]))
     return (r_lo, r_hi), (g_lo, g_hi), (b_lo, b_hi)
-
 
 
 # --------------------- Memory / block sizing utilities --------------------- #
@@ -600,6 +633,7 @@ def build_lut(cmap_name: str = "RdYlGn", levels: int = 65536) -> np.ndarray:
     key = (cmap_name, levels)
     if key not in _LUT_CACHE:
         import matplotlib  # noqa: PLC0415
+
         cmap = matplotlib.colormaps.get_cmap(cmap_name)
         x = np.linspace(0.0, 1.0, levels, dtype=np.float32)
         _LUT_CACHE[key] = cmap(x, bytes=True)  # shape (levels, 4) uint8
@@ -616,8 +650,6 @@ __all__ = [
     "write_float32_geotiff",
     "PreprocessConfig",
     "preprocess_rgb_once",
-    "visible_indices",
-    "combine_indices",
     "true_ndvi",
     "ProcessResult",
     "process_minimal",
@@ -626,6 +658,8 @@ __all__ = [
     "iter_windows",
     "build_lut",
     "generate_nd_index_rgba",
+    "compute_wb_factors_from_tif",
+    "read_tif_window_as_linear_rgb",
 ]
 
 # --------------------- Color transforms --------------------- #
@@ -990,6 +1024,7 @@ class PreprocessConfig:
         Se aplica un muestreo por pasos simples cuando el raster supera este
         tamaño para evitar picos de memoria.
     """
+
     apply_gray_world: bool = True
     apply_shadow_mask: bool = True
     shadow_thr: float = 0.06
@@ -1000,6 +1035,7 @@ class PreprocessConfig:
 def preprocess_rgb_once(
     input_path: Path,
     cfg: PreprocessConfig,
+    progress_cb: Optional[Callable[[str, float, str], None]] = None,
 ) -> Tuple[
     NDArray[np.float32],
     Optional[Path],
@@ -1016,7 +1052,7 @@ def preprocess_rgb_once(
     2) Optional gray-world white balance.
     3) Optional shadow mask: pixels with low linear RGB sum are set to NaN.
     4) Cache artifacts:
-       - NPZ with exact linear float32 RGB (for scientific use).
+       - NPY with exact linear float32 RGB (for scientific use).
        - PNG (sRGB 8-bit) preview for UI.
 
     Parameters
@@ -1028,28 +1064,38 @@ def preprocess_rgb_once(
 
     Returns
     -------
-    (rgb_lin, png_path, npz_path, vi_gray_path, vi_heat_path, heatmap_path)
+    (rgb_lin, png_path, npy_path, vi_gray_path, vi_heat_path, heatmap_path)
         - rgb_lin: linear RGB float32 en [0, 1] con NaNs donde aplique.
         - png_path: vista previa RGB normalizada en PNG, si se generó.
-        - npz_path: cache NPZ con los flotantes exactos, si se generó.
+        - npy_path: cache NPY con los flotantes exactos, si se generó.
         - vi_gray_path: PNG en escala de grises con VI (G/R), si se generó.
         - vi_heat_path: PNG coloreado (tonos naranja/rojo) derivado del VI.
         - heatmap_path: PNG RGBA con heatmap pseudo-NDVI y máscara de vegetación.
 
     Notes
     -----
-    - If the NPZ cache already exists, it is used directly (fast path). The
+    - If the NPY cache already exists, it is used directly (fast path). The
       preview PNG is not recomputed if already present.
     - NaN pixels are mapped to black (0) in the preview PNG to avoid visible
-      checkerboards, but the NPZ preserves NaNs exactly.
+      checkerboards, but the NPY preserves NaNs exactly.
     """
     in_key = input_path.stem
     cache_dir = cfg.cache_dir or input_path.parent
     cache_dir.mkdir(parents=True, exist_ok=True)
-    npz_path = cache_dir / f"{in_key}__rgb_preproc_linear.npz"
+    npy_path = cache_dir / f"{in_key}__rgb_preproc_linear.npy"
     png_path = cache_dir / f"{in_key}__rgb_preproc_preview.png"
 
-    def _downsample_for_preview(rgb_data: NDArray[np.float32], max_dim: int) -> NDArray[np.float32]:
+    def emit_progress(state: str, progress: float, message: str) -> None:
+        if not progress_cb:
+            return
+        try:
+            progress_cb(state, progress, message)
+        except Exception:
+            return
+
+    def _downsample_for_preview(
+        rgb_data: NDArray[np.float32], max_dim: int
+    ) -> NDArray[np.float32]:
         h, w = rgb_data.shape[:2]
         if max_dim <= 0 or max(h, w) <= max_dim:
             return rgb_data
@@ -1068,25 +1114,27 @@ def preprocess_rgb_once(
                 return rgb_data
         return ds
 
-    def _apply_heatmap_colormap(norm: NDArray[np.float32], mask: Optional[NDArray[np.bool_]]) -> NDArray[np.uint8]:
+    def _apply_heatmap_colormap(
+        norm: NDArray[np.float32], mask: Optional[NDArray[np.bool_]]
+    ) -> NDArray[np.uint8]:
         stops = np.array([0.0, 0.5, 1.0], dtype=np.float32)
         colors = np.array(
             [
-                [0.647, 0.0, 0.149],   # deep red
-                [1.0, 0.973, 0.533],   # yellow
-                [0.0, 0.4, 0.0],       # dark green
+                [0.647, 0.0, 0.149],  # deep red
+                [1.0, 0.973, 0.533],  # yellow
+                [0.0, 0.4, 0.0],  # dark green
             ],
             dtype=np.float32,
         )
-        flat = norm.ravel()
+        flat = np.nan_to_num(norm.ravel(), nan=0.0)
         r = np.interp(flat, stops, colors[:, 0]).reshape(norm.shape)
         g = np.interp(flat, stops, colors[:, 1]).reshape(norm.shape)
         b = np.interp(flat, stops, colors[:, 2]).reshape(norm.shape)
         rgba = np.stack(
             [
-                (r * 255.0).astype(np.uint8),
-                (g * 255.0).astype(np.uint8),
-                (b * 255.0).astype(np.uint8),
+                np.clip(r * 255.0, 0, 255).astype(np.uint8),
+                np.clip(g * 255.0, 0, 255).astype(np.uint8),
+                np.clip(b * 255.0, 0, 255).astype(np.uint8),
                 np.full(norm.shape, 255, dtype=np.uint8),
             ],
             axis=-1,
@@ -1104,7 +1152,9 @@ def preprocess_rgb_once(
         os.replace(_png_tmp, png_path)
         return png_path
 
-    def ensure_vi_outputs(rgb_data: NDArray[np.float32]) -> Tuple[Optional[Path], Optional[Path]]:
+    def ensure_vi_outputs(
+        rgb_data: NDArray[np.float32],
+    ) -> Tuple[Optional[Path], Optional[Path]]:
         vi_gray_path = cache_dir / f"{in_key}__vi_gr_ratio.png"
         vi_heat_path = cache_dir / f"{in_key}__vi_gr_heat.png"
         if vi_gray_path.exists() and vi_heat_path.exists():
@@ -1158,12 +1208,7 @@ def preprocess_rgb_once(
         vari = (G - R) / (G + R - B + EPS)
         gli = (2.0 * G - R - B) / (2.0 * G + R + B + EPS)
         exg = 2.0 * G - R - B
-        pseudo = (
-            0.4 * ngrdi
-            + 0.25 * vari
-            + 0.25 * gli
-            + 0.10 * exg
-        )
+        pseudo = 0.4 * ngrdi + 0.25 * vari + 0.25 * gli + 0.10 * exg
         pseudo = np.clip(pseudo, -1.0, 1.0).astype(np.float32)
 
         vi = G / (R + EPS)
@@ -1179,136 +1224,109 @@ def preprocess_rgb_once(
             return None
         return heatmap_path
 
-    cached_rgb: Optional[NDArray[np.float32]] = None
-    if npz_path.exists():
-        # Sub-fast-path: si todos los PNGs ya existen, retornar sin cargar el NPZ a RAM.
-        _vi_gray_maybe = cache_dir / f"{in_key}__vi_gr_ratio.png"
-        _vi_heat_maybe = cache_dir / f"{in_key}__vi_gr_heat.png"
-        _heatmap_maybe = cache_dir / f"{in_key}__vi_heatmap.png"
-        if (
-            png_path.exists()
-            and _vi_gray_maybe.exists()
-            and _vi_heat_maybe.exists()
-            and _heatmap_maybe.exists()
-        ):
-            return (
-                None,
-                png_path,
-                npz_path,
-                _vi_gray_maybe,
-                _vi_heat_maybe,
-                _heatmap_maybe,
+    # Fast path: todos los artefactos ya existen — nada que generar.
+    _vi_gray_maybe = cache_dir / f"{in_key}__vi_gr_ratio.png"
+    _vi_heat_maybe = cache_dir / f"{in_key}__vi_gr_heat.png"
+    _heatmap_maybe = cache_dir / f"{in_key}__vi_heatmap.png"
+    if (
+        png_path.exists()
+        and _vi_gray_maybe.exists()
+        and _vi_heat_maybe.exists()
+        and _heatmap_maybe.exists()
+    ):
+        return (None, png_path, None, _vi_gray_maybe, _vi_heat_maybe, _heatmap_maybe)
+
+    # 1. Preview RGB — TIF-directo, sin cargar el raster completo en RAM.
+    emit_progress("preview", 0.05, "Generando vista previa RGB")
+    preview_path = ensure_rgb_preview()
+
+    # 2. Factores WB globales: se calculan por muestreo de bloques (~800 ms)
+    #    y se persisten en un sidecar .wb.json de 57 bytes para reutilización.
+    wb_path = cache_dir / f"{in_key}.wb.json"
+    emit_progress("wb_computing", 0.08, "Calculando balance de blancos global")
+    if not wb_path.exists():
+        try:
+            factors = compute_wb_factors_from_tif(input_path)
+            wb_path.write_text(json.dumps(factors))
+        except Exception:
+            current_app.logger.exception(
+                "media: WB computation failed for %s", input_path
             )
 
-        # Algún PNG falta — necesitamos cargar el NPZ para regenerarlo.
-        try:
-            data = np.load(npz_path)
-            cached_rgb = data["rgb"].astype(np.float32)
-        except Exception:
-            try:
-                npz_path.unlink()
-            except OSError:
-                pass
-            for _stale in (png_path, _vi_gray_maybe, _vi_heat_maybe, _heatmap_maybe):
-                try:
-                    _stale.unlink()
-                except OSError:
-                    pass
-            current_app.logger.warning(
-                "media: invalid NPZ cache detected for %s; regenerating artifacts",
-                input_path,
+    # 3. Lectura del TIF a resolución de preview via WarpedVRT.
+    #    Huella de memoria: out_w × out_h × 3 × 4 B ≈ 25 MB a 2 048 px.
+    #    rasterio solo descomprime los tiles que intersectan la ventana.
+    emit_progress("tif_reading", 0.12, "Leyendo TIF en resolución de preview")
+    vi_gray_path: Optional[Path] = None
+    vi_heat_path: Optional[Path] = None
+    heatmap_path: Optional[Path] = None
+    try:
+        with rasterio.open(str(input_path)) as src:
+            if src.count < 3:
+                raise ValueError("imagen sin 3 bandas RGB — sin previews VI")
+            raw_dtype = np.dtype(src.dtypes[0])
+            dtype_max = (
+                float(np.iinfo(raw_dtype).max)
+                if np.issubdtype(raw_dtype, np.integer)
+                else 1.0
             )
-        else:
-            preview_path = ensure_rgb_preview()
-            vi_gray_path, vi_heat_path = ensure_vi_outputs(cached_rgb)
-            heatmap_path = ensure_heatmap(cached_rgb)
-            return cached_rgb, preview_path, npz_path, vi_gray_path, vi_heat_path, heatmap_path
+            max_dim = cfg.preview_max_dim
+            longest = max(src.width, src.height)
+            scale = min(1.0, max_dim / longest) if longest > 0 else 1.0
+            out_w = max(1, int(round(src.width * scale)))
+            out_h = max(1, int(round(src.height * scale)))
 
-    # ------------------------------------------------------------------
-    # NPZ memory strategy: array completo en RAM (full resolution).
-    #
-    # INVARIANTE: el NPZ SIEMPRE se escribe a la resolución original del
-    # GeoTIFF fuente. preview_max_dim (2048) aplica exclusivamente a los
-    # artefactos PNG (via save_quick_preview y _downsample_for_preview)
-    # — NUNCA al NPZ.
-    #
-    # El bloque _needs_downsample que existía aquí causaba que el NPZ se
-    # guardara a 2048×2048, haciendo que _protein_from_media() produjera
-    # índices de vegetación incorrectos sobre los polígonos del usuario
-    # en Agrovista (resolución degradada → coordenadas de píxel erróneas).
-    #
-    # Huella de memoria esperada:
-    #   10 000×8 000 px · float32 · 3 bandas ≈ 960 MB.
-    #   Con srgb_to_linear() in-place (Paso 2.1) el pico se mantiene en
-    #   ~960 MB en lugar de ~1.9 GB. Si persiste OOM ver Paso 2.4 en:
-    #   docs_internal/sessions/2026-04-06-media-ndindex-oom.md
-    # ------------------------------------------------------------------
-    rgb_srgb = read_rgb(input_path).astype(np.float32)
-    nan_mask = np.isnan(rgb_srgb).any(axis=-1)
+            with WarpedVRT(
+                src, width=out_w, height=out_h, resampling=Resampling.bilinear
+            ) as vrt:
+                emit_progress(
+                    "tif_reading", 0.20, f"Cargando {out_w}×{out_h} px desde TIF"
+                )
+                raw = vrt.read([1, 2, 3]).astype(np.float32) / dtype_max  # (3, H, W)
 
-    rgb_srgb[nan_mask] = 0.0  # keep mask but avoid NaN propagation in transfer
-    rgb_lin = srgb_to_linear(rgb_srgb)
-    del rgb_srgb  # free full-res sRGB array before creating more derived arrays
+        # (3, H, W) → (H, W, 3), sRGB → lineal
+        rgb_srgb = np.moveaxis(raw, 0, -1)
+        del raw
+        np.clip(rgb_srgb, 0.0, 1.0, out=rgb_srgb)
+        rgb_lin = srgb_to_linear(rgb_srgb)
+        del rgb_srgb
 
-    if cfg.apply_gray_world:
-        rgb_lin = gray_world(rgb_lin)
-
-    if cfg.apply_shadow_mask:
-        dark = (rgb_lin[..., 0] + rgb_lin[..., 1] + rgb_lin[..., 2]) < cfg.shadow_thr
-        rgb_lin[dark] = np.nan
-
-    # np.savez_compressed appends ".npz" automatically if the path doesn't
-    # already end in ".npz".  The tmp name must end in ".npz" so numpy writes
-    # exactly to that path and os.replace finds the file.
-    _npz_tmp = npz_path.parent / (npz_path.stem + "__tmp.npz")
-    np.savez_compressed(_npz_tmp, rgb=rgb_lin.astype(np.float32))
-    os.replace(_npz_tmp, npz_path)
-
-    # ------------------------------------------------------------------
-    # MEMORY OPTIMIZATION: Generate PNGs with minimal memory footprint
-    # ------------------------------------------------------------------
-    import gc
-    
-    # 1. Create downsampled copy once for all PNGs that need it
-    rgb_downsampled = _downsample_for_preview(rgb_lin, cfg.preview_max_dim)
-    
-    # 2. RGB preview - optimized version that uses rgb_downsampled
-    def generate_rgb_preview_from_array() -> Optional[Path]:
-        if png_path.exists():
-            return png_path
-        _png_tmp = png_path.with_suffix(".png.tmp")
-        try:
-            # Convert linear RGB to sRGB for display
-            rgb_srgb_ds = linear_to_srgb(rgb_downsampled)
-            # Fill NaN with 0, clip, convert to uint8
-            arr = np.nan_to_num(rgb_srgb_ds, nan=0.0)
-            arr = np.clip(arr, 0.0, 1.0)
-            im = Image.fromarray((arr * 255).astype(np.uint8))
-            im.save(_png_tmp, format="PNG")
-            os.replace(_png_tmp, png_path)
-            return png_path
-        except Exception:
-            # Fallback to original save_quick_preview
+        # Aplica WB desde el sidecar; si no está disponible usa gray_world local.
+        wb_factors = None
+        if wb_path.exists():
             try:
-                save_quick_preview(input_path, _png_tmp, max_size=cfg.preview_max_dim)
-                os.replace(_png_tmp, png_path)
-                return png_path
+                wb_factors = json.loads(wb_path.read_text())
             except Exception:
-                return None
-    
-    preview_path = generate_rgb_preview_from_array()
-    
-    # 3. VI outputs (uses rgb_downsampled)
-    vi_gray_path, vi_heat_path = ensure_vi_outputs(rgb_downsampled)
-    
-    # 4. Heatmap (uses rgb_downsampled)
-    heatmap_path = ensure_heatmap(rgb_downsampled)
-    
-    # Cleanup
-    del rgb_downsampled
-    gc.collect()
+                pass
+        if wb_factors:
+            rgb_lin[:, :, 0] *= float(wb_factors.get("scale_r", 1.0))
+            rgb_lin[:, :, 1] *= float(wb_factors.get("scale_g", 1.0))
+            rgb_lin[:, :, 2] *= float(wb_factors.get("scale_b", 1.0))
+            np.clip(rgb_lin, 0.0, 1.0, out=rgb_lin)
+        elif cfg.apply_gray_world:
+            rgb_lin = gray_world(rgb_lin)
 
-    return rgb_lin.astype(np.float32), preview_path, npz_path, vi_gray_path, vi_heat_path, heatmap_path
+        if cfg.apply_shadow_mask:
+            dark = (
+                rgb_lin[..., 0] + rgb_lin[..., 1] + rgb_lin[..., 2]
+            ) < cfg.shadow_thr
+            rgb_lin[dark] = np.nan
+
+        emit_progress("vi_generating", 0.60, "Generando visualizaciones VI")
+        vi_gray_path, vi_heat_path = ensure_vi_outputs(rgb_lin)
+
+        emit_progress("heatmap_generating", 0.80, "Generando heatmap pseudo-NDVI")
+        heatmap_path = ensure_heatmap(rgb_lin)
+
+        del rgb_lin
+
+    except Exception:
+        current_app.logger.exception(
+            "media: VI preview generation failed for %s", input_path
+        )
+
+    emit_progress("artifacts_done", 0.98, "Derivados listos")
+    return (None, preview_path, None, vi_gray_path, vi_heat_path, heatmap_path)
 
 
 def generate_nd_index_rgba(
@@ -1485,107 +1503,6 @@ def generate_nd_index_rgba(
     return out_path
 
 
-# --------------------- Visible indices & NDVI --------------------- #
-
-
-def visible_indices(
-    rgb_lin: NDArray[np.floating],
-) -> Dict[str, NDArray[np.float32]]:
-    """
-    Compute visible-only vegetation indices from linear RGB.
-
-    Parameters
-    ----------
-    rgb_lin
-        Linear RGB image (H, W, 3) in [0, 1]. NaNs are allowed and propagate.
-
-    Returns
-    -------
-    dict
-        Dictionary with float32 arrays in [-1, 1]:
-        - "VARI"  : (G - R) / (G + R - B + eps)
-        - "NGRDI" : (G - R) / (G + R + eps)  (also called GRVI)
-        - "GLI"   : (2G - R - B) / (2G + R + B + eps)
-        - "ExG"   : 2*gN - rN - bN, with rN,gN,bN normalized by (R+G+B)
-
-    Notes
-    -----
-    - Uses eps=1e-6 to guard divisions.
-    - Returns values clipped to [-1, 1]; NaNs are preserved.
-    """
-    if rgb_lin.shape[-1] != 3:
-        raise ValueError("rgb_lin must have last dimension of size 3 (RGB).")
-    r, g, b = rgb_lin[..., 0], rgb_lin[..., 1], rgb_lin[..., 2]
-    eps = 1e-6
-    with np.errstate(divide="ignore", invalid="ignore"):
-        vari = (g - r) / (g + r - b + eps)
-        ngrdi = (g - r) / (g + r + eps)
-        gli = (2.0 * g - r - b) / (2.0 * g + r + b + eps)
-        total = r + g + b
-        r_n, g_n, b_n = r / (total + eps), g / (total + eps), b / (total + eps)
-        exg = 2.0 * g_n - r_n - b_n
-    return {
-        "VARI": np.clip(vari, -1.0, 1.0).astype(np.float32),
-        "NGRDI": np.clip(ngrdi, -1.0, 1.0).astype(np.float32),
-        "GLI": np.clip(gli, -1.0, 1.0).astype(np.float32),
-        "ExG": np.clip(exg, -1.0, 1.0).astype(np.float32),
-    }
-
-
-def combine_indices(
-    indices: Dict[str, NDArray[np.floating]],
-    method: str = "combined",
-    weights: Tuple[float, float, float, float] = (0.4, 0.3, 0.2, 0.1),
-) -> NDArray[np.float32]:
-    """
-    Combine visible indices or select a single index.
-
-    Parameters
-    ----------
-    indices
-        Dict as returned by `visible_indices`.
-    method
-        One of {"combined", "ngrdi", "vari", "gli", "exg"} (case-sensitive).
-    weights
-        Weights for ("NGRDI", "VARI", "GLI", "ExG") when `method="combined"`.
-
-    Returns
-    -------
-    numpy.ndarray
-        Float32 array in [-1, 1].
-
-    Raises
-    ------
-    KeyError
-        If required indices are missing for the chosen method.
-    ValueError
-        If `method` is not recognized.
-
-    Notes
-    -----
-    The default combination emphasizes NGRDI and VARI, which often show good
-    contrast for vegetation in visible-only scenarios.
-    """
-    if method == "ngrdi":
-        return indices["NGRDI"].astype(np.float32)
-    if method == "vari":
-        return indices["VARI"].astype(np.float32)
-    if method == "gli":
-        return indices["GLI"].astype(np.float32)
-    if method == "exg":
-        return indices["ExG"].astype(np.float32)
-    if method != "combined":
-        raise ValueError(f"Unknown method: {method}")
-
-    out = (
-        weights[0] * indices["NGRDI"]
-        + weights[1] * indices["VARI"]
-        + weights[2] * indices["GLI"]
-        + weights[3] * indices["ExG"]
-    )
-    return np.clip(out, -1.0, 1.0).astype(np.float32)
-
-
 def true_ndvi(
     src: DatasetReader,
     red_band: int = 3,
@@ -1644,15 +1561,16 @@ class ProcessResult:
     png_preview_path
         Path to a grayscale NDVI preview ("ndvi.png" or "ndvi_approx.png") when
         generated. For the RGB-only path, this is the approximation preview.
-    rgb_cache_npz
-        Path to the cached NPZ containing linear RGB exact floats (RGB-only path).
+    rgb_cache_npy
+        Path to the cached NPY containing linear RGB exact floats (RGB-only path).
     indices
         Dict of visible indices (RGB-only path). None when NIR path was used.
     """
+
     has_nir: bool
     ndvi_map: NDArray[np.float32]
     png_preview_path: Optional[Path]
-    rgb_cache_npz: Optional[Path]
+    rgb_cache_npy: Optional[Path]
     indices: Optional[Dict[str, NDArray[np.float32]]]
 
 
@@ -1692,7 +1610,7 @@ def process_minimal(
     nir_band
         1-based NIR band index in the source.
     method
-        Combination method passed to `combine_indices`.
+        Combination method passed to ``agrovista.helpers.combine_indices``.
     weights
         Weights used when `method="combined"`.
     cfg
@@ -1732,23 +1650,32 @@ def process_minimal(
             write_float32_geotiff(src, ndvi, out_dir / "ndvi.tif", "NDVI")
 
             preview = out_dir / "ndvi.png"
-            ndvi_gray = (np.clip((ndvi + 1.0) / 2.0, 0.0, 1.0) * 255.0).astype(
-                np.uint8
-            )
+            ndvi_gray = (np.clip((ndvi + 1.0) / 2.0, 0.0, 1.0) * 255.0).astype(np.uint8)
             Image.fromarray(ndvi_gray, mode="L").save(preview)
 
             return ProcessResult(
                 has_nir=True,
                 ndvi_map=ndvi.astype(np.float32),
                 png_preview_path=preview,
-                rgb_cache_npz=None,
+                rgb_cache_npy=None,
                 indices=None,
             )
 
-    # RGB-only path
-    rgb_lin, png_preview_path, npz_path, *_ = preprocess_rgb_once(input_path, cfg)
-    idx = visible_indices(rgb_lin)
-    ndvi_approx = combine_indices(idx, method=method, weights=weights)
+    # RGB-only path — delega cálculo de índices a agrovista (fuente de verdad)
+    rgb_lin, png_preview_path, _npy_unused, *_ = preprocess_rgb_once(input_path, cfg)
+    from app.modules.agrovista.helpers import (
+        VisibleConfig,
+    )
+    from app.modules.agrovista.helpers import combine_indices as _agrovista_combine
+    from app.modules.agrovista.helpers import compute_visible_indices as _agrovista_vis
+
+    idx = _agrovista_vis(
+        rgb_lin,
+        VisibleConfig(
+            do_linearize=False, do_white_balance=False, shadow_mask=True, median_size=0
+        ),
+    )
+    ndvi_approx = _agrovista_combine(idx, method=method, weights=weights)
 
     # Persist float32 GeoTIFF for downstream use (reuse input as template)
     with rasterio.open(input_path) as src_ref:
@@ -1767,6 +1694,106 @@ def process_minimal(
         has_nir=False,
         ndvi_map=ndvi_approx.astype(np.float32),
         png_preview_path=png_preview_path or preview,  # keep UI RGB preview if exists
-        rgb_cache_npz=npz_path,
+        rgb_cache_npy=None,
         indices=idx,
     )
+
+
+# --------------------- TIF direct-access helpers --------------------- #
+
+
+def compute_wb_factors_from_tif(
+    tif_path: Path,
+    block_size: int = 1024,
+    sample_step: int = 4,
+) -> Dict[str, float]:
+    """Compute gray-world white balance scale factors by block-sampling a GeoTIFF.
+
+    Reads every ``sample_step``-th block of ``block_size`` × ``block_size`` pixels
+    from bands 1-3, accumulates per-channel means, and returns the gray-world
+    correction factors (global_mean / channel_mean) as plain Python floats so the
+    result is directly JSON-serializable.
+
+    Returns {"scale_r": float, "scale_g": float, "scale_b": float}.
+    Identity dict (all 1.0) is returned for images with fewer than 3 bands or
+    when all sampled pixels are black/NoData.
+    """
+    with rasterio.open(str(tif_path)) as ds:
+        if ds.count < 3:
+            return {"scale_r": 1.0, "scale_g": 1.0, "scale_b": 1.0}
+        h, w = ds.height, ds.width
+        raw_dtype = np.dtype(ds.dtypes[0])
+        dtype_max = (
+            float(np.iinfo(raw_dtype).max)
+            if np.issubdtype(raw_dtype, np.integer)
+            else 1.0
+        )
+
+        sum_r = sum_g = sum_b = 0.0
+        n = 0
+        stride = block_size * sample_step
+        for y in range(0, h, stride):
+            for x in range(0, w, stride):
+                win = Window(x, y, min(block_size, w - x), min(block_size, h - y))
+                data = ds.read([1, 2, 3], window=win).astype(np.float32) / dtype_max
+                valid = np.any(data > 0.0, axis=0)
+                if not valid.any():
+                    continue
+                sum_r += float(data[0][valid].mean())
+                sum_g += float(data[1][valid].mean())
+                sum_b += float(data[2][valid].mean())
+                n += 1
+
+    if n == 0 or sum_r == 0.0 or sum_g == 0.0 or sum_b == 0.0:
+        return {"scale_r": 1.0, "scale_g": 1.0, "scale_b": 1.0}
+
+    mean_r = sum_r / n
+    mean_g = sum_g / n
+    mean_b = sum_b / n
+    global_mean = (mean_r + mean_g + mean_b) / 3.0
+
+    return {
+        "scale_r": float(global_mean / mean_r),
+        "scale_g": float(global_mean / mean_g),
+        "scale_b": float(global_mean / mean_b),
+    }
+
+
+def read_tif_window_as_linear_rgb(
+    tif_path: Path,
+    x0: int,
+    y0: int,
+    x1: int,
+    y1: int,
+    wb_factors: Optional[Dict[str, float]] = None,
+) -> NDArray[np.float32]:
+    """Read a pixel BBox from a GeoTIFF as linear float32 RGB in [0, 1].
+
+    Bands 1-3 are read into shape (y1-y0, x1-x0, 3), converted from sRGB to
+    linear light, and optionally scaled by ``wb_factors`` (gray-world correction).
+    NoData/out-of-range values are clipped to [0, 1] after each transform.
+    """
+    with rasterio.open(str(tif_path)) as ds:
+        win = Window(x0, y0, x1 - x0, y1 - y0)
+        raw_dtype = np.dtype(ds.dtypes[0])
+        dtype_max = (
+            float(np.iinfo(raw_dtype).max)
+            if np.issubdtype(raw_dtype, np.integer)
+            else 1.0
+        )
+        data = (
+            ds.read([1, 2, 3], window=win).astype(np.float32) / dtype_max
+        )  # (3, H, W)
+
+    rgb = np.moveaxis(data, 0, -1)  # (H, W, 3)
+    np.clip(rgb, 0.0, 1.0, out=rgb)
+
+    rgb = srgb_to_linear(rgb)
+
+    if wb_factors:
+        rgb[:, :, 0] *= float(wb_factors.get("scale_r", 1.0))
+        rgb[:, :, 1] *= float(wb_factors.get("scale_g", 1.0))
+        rgb[:, :, 2] *= float(wb_factors.get("scale_b", 1.0))
+        np.clip(rgb, 0.0, 1.0, out=rgb)
+
+    return rgb

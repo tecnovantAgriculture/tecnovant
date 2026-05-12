@@ -138,6 +138,39 @@
                 </ul>
 
             </li>
+            <li>
+                    <a class="class" href="#ExtendedUserSchema">ExtendedUserSchema</a>
+                            <ul class="memberlist">
+                        <li>
+                                <a class="variable" href="#ExtendedUserSchema.avatar_url">avatar_url</a>
+                        </li>
+                        <li>
+                                <a class="variable" href="#ExtendedUserSchema.birthday">birthday</a>
+                        </li>
+                        <li>
+                                <a class="variable" href="#ExtendedUserSchema.last_access">last_access</a>
+                        </li>
+                        <li>
+                                <a class="variable" href="#ExtendedUserSchema.role_display">role_display</a>
+                        </li>
+                        <li>
+                                <a class="variable" href="#ExtendedUserSchema.organizations">organizations</a>
+                        </li>
+                        <li>
+                                <a class="class" href="#ExtendedUserSchema.Meta">ExtendedUserSchema.Meta</a>
+                                        <ul class="memberlist">
+                                    <li>
+                                            <a class="variable" href="#ExtendedUserSchema.Meta.exclude">exclude</a>
+                                    </li>
+                            </ul>
+
+                        </li>
+                        <li>
+                                <a class="variable" href="#ExtendedUserSchema.opts">opts</a>
+                        </li>
+                </ul>
+
+            </li>
     </ul>
 
 
@@ -154,75 +187,24 @@
                     <h1 class="modulename">
 <a href="./../../app.html">app</a><wbr>.<a href="./../core.html">core</a><wbr>.schemas    </h1>
 
-                
+                        <div class="docstring"><p>Core Marshmallow schemas.</p>
+</div>
+
                         <input id="mod-schemas-view-source" class="view-source-toggle-state" type="checkbox" aria-hidden="true" tabindex="-1">
 
                         <label class="view-source-button" for="mod-schemas-view-source"><span>View Source</span></label>
 
-                        <div class="pdoc-code codehilite"><pre><span></span><span id="L-1"><a href="#L-1"><span class="linenos"> 1</span></a><span class="c1"># Third party imports</span>
-</span><span id="L-2"><a href="#L-2"><span class="linenos"> 2</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">marshmallow</span><span class="w"> </span><span class="kn">import</span> <span class="n">fields</span>
-</span><span id="L-3"><a href="#L-3"><span class="linenos"> 3</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">marshmallow_sqlalchemy</span><span class="w"> </span><span class="kn">import</span> <span class="n">SQLAlchemyAutoSchema</span>
-</span><span id="L-4"><a href="#L-4"><span class="linenos"> 4</span></a>
-</span><span id="L-5"><a href="#L-5"><span class="linenos"> 5</span></a><span class="c1"># Local application imports</span>
-</span><span id="L-6"><a href="#L-6"><span class="linenos"> 6</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">Organization</span><span class="p">,</span> <span class="n">ResellerPackage</span><span class="p">,</span> <span class="n">RoleEnum</span><span class="p">,</span> <span class="n">User</span>
-</span><span id="L-7"><a href="#L-7"><span class="linenos"> 7</span></a>
-</span><span id="L-8"><a href="#L-8"><span class="linenos"> 8</span></a>
-</span><span id="L-9"><a href="#L-9"><span class="linenos"> 9</span></a><span class="k">class</span><span class="w"> </span><span class="nc">UserSchema</span><span class="p">(</span><span class="n">SQLAlchemyAutoSchema</span><span class="p">):</span>
-</span><span id="L-10"><a href="#L-10"><span class="linenos">10</span></a>    <span class="n">role</span> <span class="o">=</span> <span class="n">fields</span><span class="o">.</span><span class="n">Enum</span><span class="p">(</span><span class="n">RoleEnum</span><span class="p">,</span> <span class="n">by_value</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">dump_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-</span><span id="L-11"><a href="#L-11"><span class="linenos">11</span></a>    <span class="n">organizations</span> <span class="o">=</span> <span class="n">fields</span><span class="o">.</span><span class="n">List</span><span class="p">(</span><span class="n">fields</span><span class="o">.</span><span class="n">Integer</span><span class="p">(),</span> <span class="n">dump_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-</span><span id="L-12"><a href="#L-12"><span class="linenos">12</span></a>    <span class="n">reseller_packages</span> <span class="o">=</span> <span class="n">fields</span><span class="o">.</span><span class="n">List</span><span class="p">(</span>
-</span><span id="L-13"><a href="#L-13"><span class="linenos">13</span></a>        <span class="n">fields</span><span class="o">.</span><span class="n">Nested</span><span class="p">(</span>
-</span><span id="L-14"><a href="#L-14"><span class="linenos">14</span></a>            <span class="k">lambda</span><span class="p">:</span> <span class="n">ResellerPackageSchema</span><span class="p">(</span>
-</span><span id="L-15"><a href="#L-15"><span class="linenos">15</span></a>                <span class="n">only</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;id&quot;</span><span class="p">,</span> <span class="s2">&quot;max_clients&quot;</span><span class="p">,</span> <span class="s2">&quot;current_clients&quot;</span><span class="p">)</span>
-</span><span id="L-16"><a href="#L-16"><span class="linenos">16</span></a>            <span class="p">),</span>
-</span><span id="L-17"><a href="#L-17"><span class="linenos">17</span></a>            <span class="n">dump_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-</span><span id="L-18"><a href="#L-18"><span class="linenos">18</span></a>        <span class="p">),</span>
-</span><span id="L-19"><a href="#L-19"><span class="linenos">19</span></a>        <span class="n">dump_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-</span><span id="L-20"><a href="#L-20"><span class="linenos">20</span></a>    <span class="p">)</span>
-</span><span id="L-21"><a href="#L-21"><span class="linenos">21</span></a>    <span class="n">profile_data</span> <span class="o">=</span> <span class="n">fields</span><span class="o">.</span><span class="n">Raw</span><span class="p">(</span><span class="n">dump_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>  <span class="c1"># To include JSON profile data as is</span>
-</span><span id="L-22"><a href="#L-22"><span class="linenos">22</span></a>
-</span><span id="L-23"><a href="#L-23"><span class="linenos">23</span></a>    <span class="k">class</span><span class="w"> </span><span class="nc">Meta</span><span class="p">:</span>
-</span><span id="L-24"><a href="#L-24"><span class="linenos">24</span></a>        <span class="n">model</span> <span class="o">=</span> <span class="n">User</span>
-</span><span id="L-25"><a href="#L-25"><span class="linenos">25</span></a>        <span class="n">exclude</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;password_hash&quot;</span><span class="p">]</span>
-</span><span id="L-26"><a href="#L-26"><span class="linenos">26</span></a>        <span class="n">include_relationships</span> <span class="o">=</span> <span class="kc">False</span>
-</span><span id="L-27"><a href="#L-27"><span class="linenos">27</span></a>        <span class="n">load_instance</span> <span class="o">=</span> <span class="kc">False</span>  <span class="c1"># For output, not needed</span>
-</span><span id="L-28"><a href="#L-28"><span class="linenos">28</span></a>
-</span><span id="L-29"><a href="#L-29"><span class="linenos">29</span></a>
-</span><span id="L-30"><a href="#L-30"><span class="linenos">30</span></a><span class="k">class</span><span class="w"> </span><span class="nc">OrganizationSchema</span><span class="p">(</span><span class="n">SQLAlchemyAutoSchema</span><span class="p">):</span>
-</span><span id="L-31"><a href="#L-31"><span class="linenos">31</span></a>    <span class="n">users</span> <span class="o">=</span> <span class="n">fields</span><span class="o">.</span><span class="n">List</span><span class="p">(</span>
-</span><span id="L-32"><a href="#L-32"><span class="linenos">32</span></a>        <span class="n">fields</span><span class="o">.</span><span class="n">String</span><span class="p">(),</span>
-</span><span id="L-33"><a href="#L-33"><span class="linenos">33</span></a>        <span class="n">attribute</span><span class="o">=</span><span class="k">lambda</span> <span class="n">obj</span><span class="p">:</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">u</span><span class="o">.</span><span class="n">id</span><span class="p">)</span> <span class="k">for</span> <span class="n">u</span> <span class="ow">in</span> <span class="n">obj</span><span class="o">.</span><span class="n">users</span><span class="p">],</span>
-</span><span id="L-34"><a href="#L-34"><span class="linenos">34</span></a>        <span class="n">dump_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-</span><span id="L-35"><a href="#L-35"><span class="linenos">35</span></a>    <span class="p">)</span>
-</span><span id="L-36"><a href="#L-36"><span class="linenos">36</span></a>    <span class="n">reseller_package</span> <span class="o">=</span> <span class="n">fields</span><span class="o">.</span><span class="n">Nested</span><span class="p">(</span>
-</span><span id="L-37"><a href="#L-37"><span class="linenos">37</span></a>        <span class="k">lambda</span><span class="p">:</span> <span class="n">ResellerPackageSchema</span><span class="p">(</span><span class="n">only</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;id&quot;</span><span class="p">,</span> <span class="s2">&quot;reseller&quot;</span><span class="p">,</span> <span class="s2">&quot;max_clients&quot;</span><span class="p">)),</span>
-</span><span id="L-38"><a href="#L-38"><span class="linenos">38</span></a>        <span class="n">dump_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-</span><span id="L-39"><a href="#L-39"><span class="linenos">39</span></a>    <span class="p">)</span>
-</span><span id="L-40"><a href="#L-40"><span class="linenos">40</span></a>    <span class="n">nit</span> <span class="o">=</span> <span class="n">fields</span><span class="o">.</span><span class="n">String</span><span class="p">(</span><span class="n">allow_none</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-</span><span id="L-41"><a href="#L-41"><span class="linenos">41</span></a>    <span class="n">contact</span> <span class="o">=</span> <span class="n">fields</span><span class="o">.</span><span class="n">String</span><span class="p">(</span><span class="n">allow_none</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-</span><span id="L-42"><a href="#L-42"><span class="linenos">42</span></a>    <span class="n">address</span> <span class="o">=</span> <span class="n">fields</span><span class="o">.</span><span class="n">String</span><span class="p">(</span><span class="n">allow_none</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-</span><span id="L-43"><a href="#L-43"><span class="linenos">43</span></a>    <span class="n">phone</span> <span class="o">=</span> <span class="n">fields</span><span class="o">.</span><span class="n">String</span><span class="p">(</span><span class="n">allow_none</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-</span><span id="L-44"><a href="#L-44"><span class="linenos">44</span></a>
-</span><span id="L-45"><a href="#L-45"><span class="linenos">45</span></a>    <span class="k">class</span><span class="w"> </span><span class="nc">Meta</span><span class="p">:</span>
-</span><span id="L-46"><a href="#L-46"><span class="linenos">46</span></a>        <span class="n">model</span> <span class="o">=</span> <span class="n">Organization</span>
-</span><span id="L-47"><a href="#L-47"><span class="linenos">47</span></a>        <span class="n">exclude</span> <span class="o">=</span> <span class="p">[]</span>
-</span><span id="L-48"><a href="#L-48"><span class="linenos">48</span></a>        <span class="n">load_instance</span> <span class="o">=</span> <span class="kc">False</span>
-</span><span id="L-49"><a href="#L-49"><span class="linenos">49</span></a>
-</span><span id="L-50"><a href="#L-50"><span class="linenos">50</span></a>    <span class="c1"># Alternative method-based approach for users field</span>
-</span><span id="L-51"><a href="#L-51"><span class="linenos">51</span></a>    <span class="c1"># def get_user_ids(self, obj):</span>
-</span><span id="L-52"><a href="#L-52"><span class="linenos">52</span></a>    <span class="c1">#     return [str(user.id) for user in obj.users]</span>
-</span><span id="L-53"><a href="#L-53"><span class="linenos">53</span></a>    <span class="c1"># users = fields.Method(&quot;get_user_ids&quot;, dump_only=True)</span>
-</span><span id="L-54"><a href="#L-54"><span class="linenos">54</span></a>
-</span><span id="L-55"><a href="#L-55"><span class="linenos">55</span></a>
-</span><span id="L-56"><a href="#L-56"><span class="linenos">56</span></a><span class="k">class</span><span class="w"> </span><span class="nc">ResellerPackageSchema</span><span class="p">(</span><span class="n">SQLAlchemyAutoSchema</span><span class="p">):</span>
-</span><span id="L-57"><a href="#L-57"><span class="linenos">57</span></a>    <span class="n">reseller</span> <span class="o">=</span> <span class="n">fields</span><span class="o">.</span><span class="n">Nested</span><span class="p">(</span>
-</span><span id="L-58"><a href="#L-58"><span class="linenos">58</span></a>        <span class="k">lambda</span><span class="p">:</span> <span class="n">UserSchema</span><span class="p">(</span><span class="n">only</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;id&quot;</span><span class="p">,</span> <span class="s2">&quot;username&quot;</span><span class="p">)),</span> <span class="n">dump_only</span><span class="o">=</span><span class="kc">True</span>
-</span><span id="L-59"><a href="#L-59"><span class="linenos">59</span></a>    <span class="p">)</span>
-</span><span id="L-60"><a href="#L-60"><span class="linenos">60</span></a>
-</span><span id="L-61"><a href="#L-61"><span class="linenos">61</span></a>    <span class="k">class</span><span class="w"> </span><span class="nc">Meta</span><span class="p">:</span>
-</span><span id="L-62"><a href="#L-62"><span class="linenos">62</span></a>        <span class="n">model</span> <span class="o">=</span> <span class="n">ResellerPackage</span>
-</span><span id="L-63"><a href="#L-63"><span class="linenos">63</span></a>        <span class="n">exclude</span> <span class="o">=</span> <span class="p">[]</span>
-</span><span id="L-64"><a href="#L-64"><span class="linenos">64</span></a>        <span class="n">load_instance</span> <span class="o">=</span> <span class="kc">False</span>
+                        <div class="pdoc-code codehilite"><pre><span></span><span id="L-1"><a href="#L-1"><span class="linenos"> 1</span></a><span class="sd">&quot;&quot;&quot;Core Marshmallow schemas.&quot;&quot;&quot;</span>
+</span><span id="L-2"><a href="#L-2"><span class="linenos"> 2</span></a>
+</span><span id="L-3"><a href="#L-3"><span class="linenos"> 3</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrganizationSchema</span><span class="p">,</span> <span class="n">ResellerPackageSchema</span><span class="p">,</span> <span class="n">UserSchema</span>
+</span><span id="L-4"><a href="#L-4"><span class="linenos"> 4</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">.extended_user_schema</span><span class="w"> </span><span class="kn">import</span> <span class="n">ExtendedUserSchema</span>
+</span><span id="L-5"><a href="#L-5"><span class="linenos"> 5</span></a>
+</span><span id="L-6"><a href="#L-6"><span class="linenos"> 6</span></a><span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+</span><span id="L-7"><a href="#L-7"><span class="linenos"> 7</span></a>    <span class="s2">&quot;UserSchema&quot;</span><span class="p">,</span>
+</span><span id="L-8"><a href="#L-8"><span class="linenos"> 8</span></a>    <span class="s2">&quot;OrganizationSchema&quot;</span><span class="p">,</span>
+</span><span id="L-9"><a href="#L-9"><span class="linenos"> 9</span></a>    <span class="s2">&quot;ResellerPackageSchema&quot;</span><span class="p">,</span>
+</span><span id="L-10"><a href="#L-10"><span class="linenos">10</span></a>    <span class="s2">&quot;ExtendedUserSchema&quot;</span><span class="p">,</span>
+</span><span id="L-11"><a href="#L-11"><span class="linenos">11</span></a><span class="p">]</span>
 </span></pre></div>
 
 
@@ -238,25 +220,25 @@
 
     </div>
     <a class="headerlink" href="#UserSchema"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="UserSchema-10"><a href="#UserSchema-10"><span class="linenos">10</span></a><span class="k">class</span><span class="w"> </span><span class="nc">UserSchema</span><span class="p">(</span><span class="n">SQLAlchemyAutoSchema</span><span class="p">):</span>
-</span><span id="UserSchema-11"><a href="#UserSchema-11"><span class="linenos">11</span></a>    <span class="n">role</span> <span class="o">=</span> <span class="n">fields</span><span class="o">.</span><span class="n">Enum</span><span class="p">(</span><span class="n">RoleEnum</span><span class="p">,</span> <span class="n">by_value</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">dump_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-</span><span id="UserSchema-12"><a href="#UserSchema-12"><span class="linenos">12</span></a>    <span class="n">organizations</span> <span class="o">=</span> <span class="n">fields</span><span class="o">.</span><span class="n">List</span><span class="p">(</span><span class="n">fields</span><span class="o">.</span><span class="n">Integer</span><span class="p">(),</span> <span class="n">dump_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-</span><span id="UserSchema-13"><a href="#UserSchema-13"><span class="linenos">13</span></a>    <span class="n">reseller_packages</span> <span class="o">=</span> <span class="n">fields</span><span class="o">.</span><span class="n">List</span><span class="p">(</span>
-</span><span id="UserSchema-14"><a href="#UserSchema-14"><span class="linenos">14</span></a>        <span class="n">fields</span><span class="o">.</span><span class="n">Nested</span><span class="p">(</span>
-</span><span id="UserSchema-15"><a href="#UserSchema-15"><span class="linenos">15</span></a>            <span class="k">lambda</span><span class="p">:</span> <span class="n">ResellerPackageSchema</span><span class="p">(</span>
-</span><span id="UserSchema-16"><a href="#UserSchema-16"><span class="linenos">16</span></a>                <span class="n">only</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;id&quot;</span><span class="p">,</span> <span class="s2">&quot;max_clients&quot;</span><span class="p">,</span> <span class="s2">&quot;current_clients&quot;</span><span class="p">)</span>
-</span><span id="UserSchema-17"><a href="#UserSchema-17"><span class="linenos">17</span></a>            <span class="p">),</span>
-</span><span id="UserSchema-18"><a href="#UserSchema-18"><span class="linenos">18</span></a>            <span class="n">dump_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-</span><span id="UserSchema-19"><a href="#UserSchema-19"><span class="linenos">19</span></a>        <span class="p">),</span>
-</span><span id="UserSchema-20"><a href="#UserSchema-20"><span class="linenos">20</span></a>        <span class="n">dump_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-</span><span id="UserSchema-21"><a href="#UserSchema-21"><span class="linenos">21</span></a>    <span class="p">)</span>
-</span><span id="UserSchema-22"><a href="#UserSchema-22"><span class="linenos">22</span></a>    <span class="n">profile_data</span> <span class="o">=</span> <span class="n">fields</span><span class="o">.</span><span class="n">Raw</span><span class="p">(</span><span class="n">dump_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>  <span class="c1"># To include JSON profile data as is</span>
-</span><span id="UserSchema-23"><a href="#UserSchema-23"><span class="linenos">23</span></a>
-</span><span id="UserSchema-24"><a href="#UserSchema-24"><span class="linenos">24</span></a>    <span class="k">class</span><span class="w"> </span><span class="nc">Meta</span><span class="p">:</span>
-</span><span id="UserSchema-25"><a href="#UserSchema-25"><span class="linenos">25</span></a>        <span class="n">model</span> <span class="o">=</span> <span class="n">User</span>
-</span><span id="UserSchema-26"><a href="#UserSchema-26"><span class="linenos">26</span></a>        <span class="n">exclude</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;password_hash&quot;</span><span class="p">]</span>
-</span><span id="UserSchema-27"><a href="#UserSchema-27"><span class="linenos">27</span></a>        <span class="n">include_relationships</span> <span class="o">=</span> <span class="kc">False</span>
-</span><span id="UserSchema-28"><a href="#UserSchema-28"><span class="linenos">28</span></a>        <span class="n">load_instance</span> <span class="o">=</span> <span class="kc">False</span>  <span class="c1"># For output, not needed</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="UserSchema-8"><a href="#UserSchema-8"><span class="linenos"> 8</span></a><span class="k">class</span><span class="w"> </span><span class="nc">UserSchema</span><span class="p">(</span><span class="n">SQLAlchemyAutoSchema</span><span class="p">):</span>
+</span><span id="UserSchema-9"><a href="#UserSchema-9"><span class="linenos"> 9</span></a>    <span class="n">role</span> <span class="o">=</span> <span class="n">fields</span><span class="o">.</span><span class="n">Enum</span><span class="p">(</span><span class="n">RoleEnum</span><span class="p">,</span> <span class="n">by_value</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">dump_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span><span id="UserSchema-10"><a href="#UserSchema-10"><span class="linenos">10</span></a>    <span class="n">organizations</span> <span class="o">=</span> <span class="n">fields</span><span class="o">.</span><span class="n">List</span><span class="p">(</span><span class="n">fields</span><span class="o">.</span><span class="n">Integer</span><span class="p">(),</span> <span class="n">dump_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span><span id="UserSchema-11"><a href="#UserSchema-11"><span class="linenos">11</span></a>    <span class="n">reseller_packages</span> <span class="o">=</span> <span class="n">fields</span><span class="o">.</span><span class="n">List</span><span class="p">(</span>
+</span><span id="UserSchema-12"><a href="#UserSchema-12"><span class="linenos">12</span></a>        <span class="n">fields</span><span class="o">.</span><span class="n">Nested</span><span class="p">(</span>
+</span><span id="UserSchema-13"><a href="#UserSchema-13"><span class="linenos">13</span></a>            <span class="k">lambda</span><span class="p">:</span> <span class="n">ResellerPackageSchema</span><span class="p">(</span>
+</span><span id="UserSchema-14"><a href="#UserSchema-14"><span class="linenos">14</span></a>                <span class="n">only</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;id&quot;</span><span class="p">,</span> <span class="s2">&quot;max_clients&quot;</span><span class="p">,</span> <span class="s2">&quot;current_clients&quot;</span><span class="p">)</span>
+</span><span id="UserSchema-15"><a href="#UserSchema-15"><span class="linenos">15</span></a>            <span class="p">),</span>
+</span><span id="UserSchema-16"><a href="#UserSchema-16"><span class="linenos">16</span></a>            <span class="n">dump_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+</span><span id="UserSchema-17"><a href="#UserSchema-17"><span class="linenos">17</span></a>        <span class="p">),</span>
+</span><span id="UserSchema-18"><a href="#UserSchema-18"><span class="linenos">18</span></a>        <span class="n">dump_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+</span><span id="UserSchema-19"><a href="#UserSchema-19"><span class="linenos">19</span></a>    <span class="p">)</span>
+</span><span id="UserSchema-20"><a href="#UserSchema-20"><span class="linenos">20</span></a>    <span class="n">profile_data</span> <span class="o">=</span> <span class="n">fields</span><span class="o">.</span><span class="n">Raw</span><span class="p">(</span><span class="n">dump_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span><span id="UserSchema-21"><a href="#UserSchema-21"><span class="linenos">21</span></a>
+</span><span id="UserSchema-22"><a href="#UserSchema-22"><span class="linenos">22</span></a>    <span class="k">class</span><span class="w"> </span><span class="nc">Meta</span><span class="p">:</span>
+</span><span id="UserSchema-23"><a href="#UserSchema-23"><span class="linenos">23</span></a>        <span class="n">model</span> <span class="o">=</span> <span class="n">User</span>
+</span><span id="UserSchema-24"><a href="#UserSchema-24"><span class="linenos">24</span></a>        <span class="n">exclude</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;password_hash&quot;</span><span class="p">]</span>
+</span><span id="UserSchema-25"><a href="#UserSchema-25"><span class="linenos">25</span></a>        <span class="n">include_relationships</span> <span class="o">=</span> <span class="kc">False</span>
+</span><span id="UserSchema-26"><a href="#UserSchema-26"><span class="linenos">26</span></a>        <span class="n">load_instance</span> <span class="o">=</span> <span class="kc">False</span>
 </span></pre></div>
 
 
@@ -349,11 +331,11 @@ class UserSchema(SQLAlchemyAutoSchema):
 
     </div>
     <a class="headerlink" href="#UserSchema.Meta"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="UserSchema.Meta-24"><a href="#UserSchema.Meta-24"><span class="linenos">24</span></a>    <span class="k">class</span><span class="w"> </span><span class="nc">Meta</span><span class="p">:</span>
-</span><span id="UserSchema.Meta-25"><a href="#UserSchema.Meta-25"><span class="linenos">25</span></a>        <span class="n">model</span> <span class="o">=</span> <span class="n">User</span>
-</span><span id="UserSchema.Meta-26"><a href="#UserSchema.Meta-26"><span class="linenos">26</span></a>        <span class="n">exclude</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;password_hash&quot;</span><span class="p">]</span>
-</span><span id="UserSchema.Meta-27"><a href="#UserSchema.Meta-27"><span class="linenos">27</span></a>        <span class="n">include_relationships</span> <span class="o">=</span> <span class="kc">False</span>
-</span><span id="UserSchema.Meta-28"><a href="#UserSchema.Meta-28"><span class="linenos">28</span></a>        <span class="n">load_instance</span> <span class="o">=</span> <span class="kc">False</span>  <span class="c1"># For output, not needed</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="UserSchema.Meta-22"><a href="#UserSchema.Meta-22"><span class="linenos">22</span></a>    <span class="k">class</span><span class="w"> </span><span class="nc">Meta</span><span class="p">:</span>
+</span><span id="UserSchema.Meta-23"><a href="#UserSchema.Meta-23"><span class="linenos">23</span></a>        <span class="n">model</span> <span class="o">=</span> <span class="n">User</span>
+</span><span id="UserSchema.Meta-24"><a href="#UserSchema.Meta-24"><span class="linenos">24</span></a>        <span class="n">exclude</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;password_hash&quot;</span><span class="p">]</span>
+</span><span id="UserSchema.Meta-25"><a href="#UserSchema.Meta-25"><span class="linenos">25</span></a>        <span class="n">include_relationships</span> <span class="o">=</span> <span class="kc">False</span>
+</span><span id="UserSchema.Meta-26"><a href="#UserSchema.Meta-26"><span class="linenos">26</span></a>        <span class="n">load_instance</span> <span class="o">=</span> <span class="kc">False</span>
 </span></pre></div>
 
 
@@ -419,30 +401,25 @@ class UserSchema(SQLAlchemyAutoSchema):
 
     </div>
     <a class="headerlink" href="#OrganizationSchema"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="OrganizationSchema-31"><a href="#OrganizationSchema-31"><span class="linenos">31</span></a><span class="k">class</span><span class="w"> </span><span class="nc">OrganizationSchema</span><span class="p">(</span><span class="n">SQLAlchemyAutoSchema</span><span class="p">):</span>
-</span><span id="OrganizationSchema-32"><a href="#OrganizationSchema-32"><span class="linenos">32</span></a>    <span class="n">users</span> <span class="o">=</span> <span class="n">fields</span><span class="o">.</span><span class="n">List</span><span class="p">(</span>
-</span><span id="OrganizationSchema-33"><a href="#OrganizationSchema-33"><span class="linenos">33</span></a>        <span class="n">fields</span><span class="o">.</span><span class="n">String</span><span class="p">(),</span>
-</span><span id="OrganizationSchema-34"><a href="#OrganizationSchema-34"><span class="linenos">34</span></a>        <span class="n">attribute</span><span class="o">=</span><span class="k">lambda</span> <span class="n">obj</span><span class="p">:</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">u</span><span class="o">.</span><span class="n">id</span><span class="p">)</span> <span class="k">for</span> <span class="n">u</span> <span class="ow">in</span> <span class="n">obj</span><span class="o">.</span><span class="n">users</span><span class="p">],</span>
-</span><span id="OrganizationSchema-35"><a href="#OrganizationSchema-35"><span class="linenos">35</span></a>        <span class="n">dump_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-</span><span id="OrganizationSchema-36"><a href="#OrganizationSchema-36"><span class="linenos">36</span></a>    <span class="p">)</span>
-</span><span id="OrganizationSchema-37"><a href="#OrganizationSchema-37"><span class="linenos">37</span></a>    <span class="n">reseller_package</span> <span class="o">=</span> <span class="n">fields</span><span class="o">.</span><span class="n">Nested</span><span class="p">(</span>
-</span><span id="OrganizationSchema-38"><a href="#OrganizationSchema-38"><span class="linenos">38</span></a>        <span class="k">lambda</span><span class="p">:</span> <span class="n">ResellerPackageSchema</span><span class="p">(</span><span class="n">only</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;id&quot;</span><span class="p">,</span> <span class="s2">&quot;reseller&quot;</span><span class="p">,</span> <span class="s2">&quot;max_clients&quot;</span><span class="p">)),</span>
-</span><span id="OrganizationSchema-39"><a href="#OrganizationSchema-39"><span class="linenos">39</span></a>        <span class="n">dump_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-</span><span id="OrganizationSchema-40"><a href="#OrganizationSchema-40"><span class="linenos">40</span></a>    <span class="p">)</span>
-</span><span id="OrganizationSchema-41"><a href="#OrganizationSchema-41"><span class="linenos">41</span></a>    <span class="n">nit</span> <span class="o">=</span> <span class="n">fields</span><span class="o">.</span><span class="n">String</span><span class="p">(</span><span class="n">allow_none</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-</span><span id="OrganizationSchema-42"><a href="#OrganizationSchema-42"><span class="linenos">42</span></a>    <span class="n">contact</span> <span class="o">=</span> <span class="n">fields</span><span class="o">.</span><span class="n">String</span><span class="p">(</span><span class="n">allow_none</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-</span><span id="OrganizationSchema-43"><a href="#OrganizationSchema-43"><span class="linenos">43</span></a>    <span class="n">address</span> <span class="o">=</span> <span class="n">fields</span><span class="o">.</span><span class="n">String</span><span class="p">(</span><span class="n">allow_none</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-</span><span id="OrganizationSchema-44"><a href="#OrganizationSchema-44"><span class="linenos">44</span></a>    <span class="n">phone</span> <span class="o">=</span> <span class="n">fields</span><span class="o">.</span><span class="n">String</span><span class="p">(</span><span class="n">allow_none</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-</span><span id="OrganizationSchema-45"><a href="#OrganizationSchema-45"><span class="linenos">45</span></a>
-</span><span id="OrganizationSchema-46"><a href="#OrganizationSchema-46"><span class="linenos">46</span></a>    <span class="k">class</span><span class="w"> </span><span class="nc">Meta</span><span class="p">:</span>
-</span><span id="OrganizationSchema-47"><a href="#OrganizationSchema-47"><span class="linenos">47</span></a>        <span class="n">model</span> <span class="o">=</span> <span class="n">Organization</span>
-</span><span id="OrganizationSchema-48"><a href="#OrganizationSchema-48"><span class="linenos">48</span></a>        <span class="n">exclude</span> <span class="o">=</span> <span class="p">[]</span>
-</span><span id="OrganizationSchema-49"><a href="#OrganizationSchema-49"><span class="linenos">49</span></a>        <span class="n">load_instance</span> <span class="o">=</span> <span class="kc">False</span>
-</span><span id="OrganizationSchema-50"><a href="#OrganizationSchema-50"><span class="linenos">50</span></a>
-</span><span id="OrganizationSchema-51"><a href="#OrganizationSchema-51"><span class="linenos">51</span></a>    <span class="c1"># Alternative method-based approach for users field</span>
-</span><span id="OrganizationSchema-52"><a href="#OrganizationSchema-52"><span class="linenos">52</span></a>    <span class="c1"># def get_user_ids(self, obj):</span>
-</span><span id="OrganizationSchema-53"><a href="#OrganizationSchema-53"><span class="linenos">53</span></a>    <span class="c1">#     return [str(user.id) for user in obj.users]</span>
-</span><span id="OrganizationSchema-54"><a href="#OrganizationSchema-54"><span class="linenos">54</span></a>    <span class="c1"># users = fields.Method(&quot;get_user_ids&quot;, dump_only=True)</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="OrganizationSchema-29"><a href="#OrganizationSchema-29"><span class="linenos">29</span></a><span class="k">class</span><span class="w"> </span><span class="nc">OrganizationSchema</span><span class="p">(</span><span class="n">SQLAlchemyAutoSchema</span><span class="p">):</span>
+</span><span id="OrganizationSchema-30"><a href="#OrganizationSchema-30"><span class="linenos">30</span></a>    <span class="n">users</span> <span class="o">=</span> <span class="n">fields</span><span class="o">.</span><span class="n">List</span><span class="p">(</span>
+</span><span id="OrganizationSchema-31"><a href="#OrganizationSchema-31"><span class="linenos">31</span></a>        <span class="n">fields</span><span class="o">.</span><span class="n">String</span><span class="p">(),</span>
+</span><span id="OrganizationSchema-32"><a href="#OrganizationSchema-32"><span class="linenos">32</span></a>        <span class="n">attribute</span><span class="o">=</span><span class="k">lambda</span> <span class="n">obj</span><span class="p">:</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">u</span><span class="o">.</span><span class="n">id</span><span class="p">)</span> <span class="k">for</span> <span class="n">u</span> <span class="ow">in</span> <span class="n">obj</span><span class="o">.</span><span class="n">users</span><span class="p">],</span>
+</span><span id="OrganizationSchema-33"><a href="#OrganizationSchema-33"><span class="linenos">33</span></a>        <span class="n">dump_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+</span><span id="OrganizationSchema-34"><a href="#OrganizationSchema-34"><span class="linenos">34</span></a>    <span class="p">)</span>
+</span><span id="OrganizationSchema-35"><a href="#OrganizationSchema-35"><span class="linenos">35</span></a>    <span class="n">reseller_package</span> <span class="o">=</span> <span class="n">fields</span><span class="o">.</span><span class="n">Nested</span><span class="p">(</span>
+</span><span id="OrganizationSchema-36"><a href="#OrganizationSchema-36"><span class="linenos">36</span></a>        <span class="k">lambda</span><span class="p">:</span> <span class="n">ResellerPackageSchema</span><span class="p">(</span><span class="n">only</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;id&quot;</span><span class="p">,</span> <span class="s2">&quot;reseller&quot;</span><span class="p">,</span> <span class="s2">&quot;max_clients&quot;</span><span class="p">)),</span>
+</span><span id="OrganizationSchema-37"><a href="#OrganizationSchema-37"><span class="linenos">37</span></a>        <span class="n">dump_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+</span><span id="OrganizationSchema-38"><a href="#OrganizationSchema-38"><span class="linenos">38</span></a>    <span class="p">)</span>
+</span><span id="OrganizationSchema-39"><a href="#OrganizationSchema-39"><span class="linenos">39</span></a>    <span class="n">nit</span> <span class="o">=</span> <span class="n">fields</span><span class="o">.</span><span class="n">String</span><span class="p">(</span><span class="n">allow_none</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span><span id="OrganizationSchema-40"><a href="#OrganizationSchema-40"><span class="linenos">40</span></a>    <span class="n">contact</span> <span class="o">=</span> <span class="n">fields</span><span class="o">.</span><span class="n">String</span><span class="p">(</span><span class="n">allow_none</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span><span id="OrganizationSchema-41"><a href="#OrganizationSchema-41"><span class="linenos">41</span></a>    <span class="n">address</span> <span class="o">=</span> <span class="n">fields</span><span class="o">.</span><span class="n">String</span><span class="p">(</span><span class="n">allow_none</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span><span id="OrganizationSchema-42"><a href="#OrganizationSchema-42"><span class="linenos">42</span></a>    <span class="n">phone</span> <span class="o">=</span> <span class="n">fields</span><span class="o">.</span><span class="n">String</span><span class="p">(</span><span class="n">allow_none</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span><span id="OrganizationSchema-43"><a href="#OrganizationSchema-43"><span class="linenos">43</span></a>
+</span><span id="OrganizationSchema-44"><a href="#OrganizationSchema-44"><span class="linenos">44</span></a>    <span class="k">class</span><span class="w"> </span><span class="nc">Meta</span><span class="p">:</span>
+</span><span id="OrganizationSchema-45"><a href="#OrganizationSchema-45"><span class="linenos">45</span></a>        <span class="n">model</span> <span class="o">=</span> <span class="n">Organization</span>
+</span><span id="OrganizationSchema-46"><a href="#OrganizationSchema-46"><span class="linenos">46</span></a>        <span class="n">exclude</span> <span class="o">=</span> <span class="p">[]</span>
+</span><span id="OrganizationSchema-47"><a href="#OrganizationSchema-47"><span class="linenos">47</span></a>        <span class="n">load_instance</span> <span class="o">=</span> <span class="kc">False</span>
 </span></pre></div>
 
 
@@ -557,10 +534,10 @@ class UserSchema(SQLAlchemyAutoSchema):
 
     </div>
     <a class="headerlink" href="#OrganizationSchema.Meta"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="OrganizationSchema.Meta-46"><a href="#OrganizationSchema.Meta-46"><span class="linenos">46</span></a>    <span class="k">class</span><span class="w"> </span><span class="nc">Meta</span><span class="p">:</span>
-</span><span id="OrganizationSchema.Meta-47"><a href="#OrganizationSchema.Meta-47"><span class="linenos">47</span></a>        <span class="n">model</span> <span class="o">=</span> <span class="n">Organization</span>
-</span><span id="OrganizationSchema.Meta-48"><a href="#OrganizationSchema.Meta-48"><span class="linenos">48</span></a>        <span class="n">exclude</span> <span class="o">=</span> <span class="p">[]</span>
-</span><span id="OrganizationSchema.Meta-49"><a href="#OrganizationSchema.Meta-49"><span class="linenos">49</span></a>        <span class="n">load_instance</span> <span class="o">=</span> <span class="kc">False</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="OrganizationSchema.Meta-44"><a href="#OrganizationSchema.Meta-44"><span class="linenos">44</span></a>    <span class="k">class</span><span class="w"> </span><span class="nc">Meta</span><span class="p">:</span>
+</span><span id="OrganizationSchema.Meta-45"><a href="#OrganizationSchema.Meta-45"><span class="linenos">45</span></a>        <span class="n">model</span> <span class="o">=</span> <span class="n">Organization</span>
+</span><span id="OrganizationSchema.Meta-46"><a href="#OrganizationSchema.Meta-46"><span class="linenos">46</span></a>        <span class="n">exclude</span> <span class="o">=</span> <span class="p">[]</span>
+</span><span id="OrganizationSchema.Meta-47"><a href="#OrganizationSchema.Meta-47"><span class="linenos">47</span></a>        <span class="n">load_instance</span> <span class="o">=</span> <span class="kc">False</span>
 </span></pre></div>
 
 
@@ -614,15 +591,15 @@ class UserSchema(SQLAlchemyAutoSchema):
 
     </div>
     <a class="headerlink" href="#ResellerPackageSchema"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="ResellerPackageSchema-57"><a href="#ResellerPackageSchema-57"><span class="linenos">57</span></a><span class="k">class</span><span class="w"> </span><span class="nc">ResellerPackageSchema</span><span class="p">(</span><span class="n">SQLAlchemyAutoSchema</span><span class="p">):</span>
-</span><span id="ResellerPackageSchema-58"><a href="#ResellerPackageSchema-58"><span class="linenos">58</span></a>    <span class="n">reseller</span> <span class="o">=</span> <span class="n">fields</span><span class="o">.</span><span class="n">Nested</span><span class="p">(</span>
-</span><span id="ResellerPackageSchema-59"><a href="#ResellerPackageSchema-59"><span class="linenos">59</span></a>        <span class="k">lambda</span><span class="p">:</span> <span class="n">UserSchema</span><span class="p">(</span><span class="n">only</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;id&quot;</span><span class="p">,</span> <span class="s2">&quot;username&quot;</span><span class="p">)),</span> <span class="n">dump_only</span><span class="o">=</span><span class="kc">True</span>
-</span><span id="ResellerPackageSchema-60"><a href="#ResellerPackageSchema-60"><span class="linenos">60</span></a>    <span class="p">)</span>
-</span><span id="ResellerPackageSchema-61"><a href="#ResellerPackageSchema-61"><span class="linenos">61</span></a>
-</span><span id="ResellerPackageSchema-62"><a href="#ResellerPackageSchema-62"><span class="linenos">62</span></a>    <span class="k">class</span><span class="w"> </span><span class="nc">Meta</span><span class="p">:</span>
-</span><span id="ResellerPackageSchema-63"><a href="#ResellerPackageSchema-63"><span class="linenos">63</span></a>        <span class="n">model</span> <span class="o">=</span> <span class="n">ResellerPackage</span>
-</span><span id="ResellerPackageSchema-64"><a href="#ResellerPackageSchema-64"><span class="linenos">64</span></a>        <span class="n">exclude</span> <span class="o">=</span> <span class="p">[]</span>
-</span><span id="ResellerPackageSchema-65"><a href="#ResellerPackageSchema-65"><span class="linenos">65</span></a>        <span class="n">load_instance</span> <span class="o">=</span> <span class="kc">False</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="ResellerPackageSchema-50"><a href="#ResellerPackageSchema-50"><span class="linenos">50</span></a><span class="k">class</span><span class="w"> </span><span class="nc">ResellerPackageSchema</span><span class="p">(</span><span class="n">SQLAlchemyAutoSchema</span><span class="p">):</span>
+</span><span id="ResellerPackageSchema-51"><a href="#ResellerPackageSchema-51"><span class="linenos">51</span></a>    <span class="n">reseller</span> <span class="o">=</span> <span class="n">fields</span><span class="o">.</span><span class="n">Nested</span><span class="p">(</span>
+</span><span id="ResellerPackageSchema-52"><a href="#ResellerPackageSchema-52"><span class="linenos">52</span></a>        <span class="k">lambda</span><span class="p">:</span> <span class="n">UserSchema</span><span class="p">(</span><span class="n">only</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;id&quot;</span><span class="p">,</span> <span class="s2">&quot;username&quot;</span><span class="p">)),</span> <span class="n">dump_only</span><span class="o">=</span><span class="kc">True</span>
+</span><span id="ResellerPackageSchema-53"><a href="#ResellerPackageSchema-53"><span class="linenos">53</span></a>    <span class="p">)</span>
+</span><span id="ResellerPackageSchema-54"><a href="#ResellerPackageSchema-54"><span class="linenos">54</span></a>
+</span><span id="ResellerPackageSchema-55"><a href="#ResellerPackageSchema-55"><span class="linenos">55</span></a>    <span class="k">class</span><span class="w"> </span><span class="nc">Meta</span><span class="p">:</span>
+</span><span id="ResellerPackageSchema-56"><a href="#ResellerPackageSchema-56"><span class="linenos">56</span></a>        <span class="n">model</span> <span class="o">=</span> <span class="n">ResellerPackage</span>
+</span><span id="ResellerPackageSchema-57"><a href="#ResellerPackageSchema-57"><span class="linenos">57</span></a>        <span class="n">exclude</span> <span class="o">=</span> <span class="p">[]</span>
+</span><span id="ResellerPackageSchema-58"><a href="#ResellerPackageSchema-58"><span class="linenos">58</span></a>        <span class="n">load_instance</span> <span class="o">=</span> <span class="kc">False</span>
 </span></pre></div>
 
 
@@ -682,10 +659,10 @@ class UserSchema(SQLAlchemyAutoSchema):
 
     </div>
     <a class="headerlink" href="#ResellerPackageSchema.Meta"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="ResellerPackageSchema.Meta-62"><a href="#ResellerPackageSchema.Meta-62"><span class="linenos">62</span></a>    <span class="k">class</span><span class="w"> </span><span class="nc">Meta</span><span class="p">:</span>
-</span><span id="ResellerPackageSchema.Meta-63"><a href="#ResellerPackageSchema.Meta-63"><span class="linenos">63</span></a>        <span class="n">model</span> <span class="o">=</span> <span class="n">ResellerPackage</span>
-</span><span id="ResellerPackageSchema.Meta-64"><a href="#ResellerPackageSchema.Meta-64"><span class="linenos">64</span></a>        <span class="n">exclude</span> <span class="o">=</span> <span class="p">[]</span>
-</span><span id="ResellerPackageSchema.Meta-65"><a href="#ResellerPackageSchema.Meta-65"><span class="linenos">65</span></a>        <span class="n">load_instance</span> <span class="o">=</span> <span class="kc">False</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="ResellerPackageSchema.Meta-55"><a href="#ResellerPackageSchema.Meta-55"><span class="linenos">55</span></a>    <span class="k">class</span><span class="w"> </span><span class="nc">Meta</span><span class="p">:</span>
+</span><span id="ResellerPackageSchema.Meta-56"><a href="#ResellerPackageSchema.Meta-56"><span class="linenos">56</span></a>        <span class="n">model</span> <span class="o">=</span> <span class="n">ResellerPackage</span>
+</span><span id="ResellerPackageSchema.Meta-57"><a href="#ResellerPackageSchema.Meta-57"><span class="linenos">57</span></a>        <span class="n">exclude</span> <span class="o">=</span> <span class="p">[]</span>
+</span><span id="ResellerPackageSchema.Meta-58"><a href="#ResellerPackageSchema.Meta-58"><span class="linenos">58</span></a>        <span class="n">load_instance</span> <span class="o">=</span> <span class="kc">False</span>
 </span></pre></div>
 
 
@@ -723,6 +700,158 @@ class UserSchema(SQLAlchemyAutoSchema):
         
     </div>
     <a class="headerlink" href="#ResellerPackageSchema.Meta.load_instance"></a>
+    
+    
+
+                            </div>
+                </section>
+                <section id="ExtendedUserSchema">
+                            <input id="ExtendedUserSchema-view-source" class="view-source-toggle-state" type="checkbox" aria-hidden="true" tabindex="-1">
+<div class="attr class">
+            
+    <span class="def">class</span>
+    <span class="name">ExtendedUserSchema</span><wbr>(<span class="base">marshmallow_sqlalchemy.schema.SQLAlchemySchema[~_ModelType]</span>):
+
+                <label class="view-source-button" for="ExtendedUserSchema-view-source"><span>View Source</span></label>
+
+    </div>
+    <a class="headerlink" href="#ExtendedUserSchema"></a>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="ExtendedUserSchema-19"><a href="#ExtendedUserSchema-19"><span class="linenos">19</span></a><span class="k">class</span><span class="w"> </span><span class="nc">ExtendedUserSchema</span><span class="p">(</span><span class="n">BaseUserSchema</span><span class="p">):</span>
+</span><span id="ExtendedUserSchema-20"><a href="#ExtendedUserSchema-20"><span class="linenos">20</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Extended User Schema for v1 API endpoints.</span>
+</span><span id="ExtendedUserSchema-21"><a href="#ExtendedUserSchema-21"><span class="linenos">21</span></a>
+</span><span id="ExtendedUserSchema-22"><a href="#ExtendedUserSchema-22"><span class="linenos">22</span></a><span class="sd">    Includes:</span>
+</span><span id="ExtendedUserSchema-23"><a href="#ExtendedUserSchema-23"><span class="linenos">23</span></a><span class="sd">    - avatar_url: Computed URL to user&#39;s avatar</span>
+</span><span id="ExtendedUserSchema-24"><a href="#ExtendedUserSchema-24"><span class="linenos">24</span></a><span class="sd">    - birthday: Optional ISO 8601 date</span>
+</span><span id="ExtendedUserSchema-25"><a href="#ExtendedUserSchema-25"><span class="linenos">25</span></a><span class="sd">    - last_access: Optional ISO 8601 datetime (read-only)</span>
+</span><span id="ExtendedUserSchema-26"><a href="#ExtendedUserSchema-26"><span class="linenos">26</span></a><span class="sd">    - role_display: Human-readable role description</span>
+</span><span id="ExtendedUserSchema-27"><a href="#ExtendedUserSchema-27"><span class="linenos">27</span></a><span class="sd">    - organizations: List of organization IDs</span>
+</span><span id="ExtendedUserSchema-28"><a href="#ExtendedUserSchema-28"><span class="linenos">28</span></a><span class="sd">    &quot;&quot;&quot;</span>
+</span><span id="ExtendedUserSchema-29"><a href="#ExtendedUserSchema-29"><span class="linenos">29</span></a>
+</span><span id="ExtendedUserSchema-30"><a href="#ExtendedUserSchema-30"><span class="linenos">30</span></a>    <span class="n">avatar_url</span> <span class="o">=</span> <span class="n">fields</span><span class="o">.</span><span class="n">String</span><span class="p">(</span><span class="n">attribute</span><span class="o">=</span><span class="s2">&quot;avatar_url&quot;</span><span class="p">,</span> <span class="n">dump_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span><span id="ExtendedUserSchema-31"><a href="#ExtendedUserSchema-31"><span class="linenos">31</span></a>    <span class="n">birthday</span> <span class="o">=</span> <span class="n">fields</span><span class="o">.</span><span class="n">Date</span><span class="p">(</span>
+</span><span id="ExtendedUserSchema-32"><a href="#ExtendedUserSchema-32"><span class="linenos">32</span></a>        <span class="n">attribute</span><span class="o">=</span><span class="s2">&quot;birthday&quot;</span><span class="p">,</span>
+</span><span id="ExtendedUserSchema-33"><a href="#ExtendedUserSchema-33"><span class="linenos">33</span></a>        <span class="n">allow_none</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+</span><span id="ExtendedUserSchema-34"><a href="#ExtendedUserSchema-34"><span class="linenos">34</span></a>        <span class="n">validate</span><span class="o">=</span><span class="n">validate</span><span class="o">.</span><span class="n">Range</span><span class="p">(</span><span class="nb">max</span><span class="o">=</span><span class="n">_date</span><span class="o">.</span><span class="n">today</span><span class="p">()),</span>
+</span><span id="ExtendedUserSchema-35"><a href="#ExtendedUserSchema-35"><span class="linenos">35</span></a>    <span class="p">)</span>
+</span><span id="ExtendedUserSchema-36"><a href="#ExtendedUserSchema-36"><span class="linenos">36</span></a>    <span class="n">last_access</span> <span class="o">=</span> <span class="n">fields</span><span class="o">.</span><span class="n">DateTime</span><span class="p">(</span><span class="n">attribute</span><span class="o">=</span><span class="s2">&quot;last_access&quot;</span><span class="p">,</span> <span class="n">dump_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span><span id="ExtendedUserSchema-37"><a href="#ExtendedUserSchema-37"><span class="linenos">37</span></a>    <span class="n">role_display</span> <span class="o">=</span> <span class="n">fields</span><span class="o">.</span><span class="n">String</span><span class="p">(</span><span class="n">attribute</span><span class="o">=</span><span class="s2">&quot;get_role&quot;</span><span class="p">,</span> <span class="n">dump_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span><span id="ExtendedUserSchema-38"><a href="#ExtendedUserSchema-38"><span class="linenos">38</span></a>    <span class="n">organizations</span> <span class="o">=</span> <span class="n">fields</span><span class="o">.</span><span class="n">List</span><span class="p">(</span><span class="n">fields</span><span class="o">.</span><span class="n">Integer</span><span class="p">(),</span> <span class="n">dump_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span><span id="ExtendedUserSchema-39"><a href="#ExtendedUserSchema-39"><span class="linenos">39</span></a>
+</span><span id="ExtendedUserSchema-40"><a href="#ExtendedUserSchema-40"><span class="linenos">40</span></a>    <span class="k">class</span><span class="w"> </span><span class="nc">Meta</span><span class="p">(</span><span class="n">BaseUserSchema</span><span class="o">.</span><span class="n">Meta</span><span class="p">):</span>
+</span><span id="ExtendedUserSchema-41"><a href="#ExtendedUserSchema-41"><span class="linenos">41</span></a>        <span class="c1"># Exclude raw profile_data field as we have separate fields</span>
+</span><span id="ExtendedUserSchema-42"><a href="#ExtendedUserSchema-42"><span class="linenos">42</span></a>        <span class="n">exclude</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;profile_data&quot;</span><span class="p">]</span>
+</span></pre></div>
+
+
+            <div class="docstring"><p>Extended User Schema for v1 API endpoints.</p>
+
+<p>Includes:</p>
+
+<ul>
+<li>avatar_url: Computed URL to user's avatar</li>
+<li>birthday: Optional ISO 8601 date</li>
+<li>last_access: Optional ISO 8601 datetime (read-only)</li>
+<li>role_display: Human-readable role description</li>
+<li>organizations: List of organization IDs</li>
+</ul>
+</div>
+
+
+                            <div id="ExtendedUserSchema.avatar_url" class="classattr">
+                                <div class="attr variable">
+            <span class="name">avatar_url</span>
+
+        
+    </div>
+    <a class="headerlink" href="#ExtendedUserSchema.avatar_url"></a>
+    
+    
+
+                            </div>
+                            <div id="ExtendedUserSchema.birthday" class="classattr">
+                                <div class="attr variable">
+            <span class="name">birthday</span>
+
+        
+    </div>
+    <a class="headerlink" href="#ExtendedUserSchema.birthday"></a>
+    
+    
+
+                            </div>
+                            <div id="ExtendedUserSchema.last_access" class="classattr">
+                                <div class="attr variable">
+            <span class="name">last_access</span>
+
+        
+    </div>
+    <a class="headerlink" href="#ExtendedUserSchema.last_access"></a>
+    
+    
+
+                            </div>
+                            <div id="ExtendedUserSchema.role_display" class="classattr">
+                                <div class="attr variable">
+            <span class="name">role_display</span>
+
+        
+    </div>
+    <a class="headerlink" href="#ExtendedUserSchema.role_display"></a>
+    
+    
+
+                            </div>
+                            <div id="ExtendedUserSchema.organizations" class="classattr">
+                                <div class="attr variable">
+            <span class="name">organizations</span>
+
+        
+    </div>
+    <a class="headerlink" href="#ExtendedUserSchema.organizations"></a>
+    
+    
+
+                            </div>
+                            <div id="ExtendedUserSchema.opts" class="classattr">
+                                <div class="attr variable">
+            <span class="name">opts</span><span class="annotation">: &#39;LoadInstanceMixin.Opts&#39;</span>        =
+<span class="default_value">&lt;marshmallow_sqlalchemy.schema.SQLAlchemyAutoSchemaOpts object&gt;</span>
+
+        
+    </div>
+    <a class="headerlink" href="#ExtendedUserSchema.opts"></a>
+    
+    
+
+                            </div>
+                </section>
+                <section id="ExtendedUserSchema.Meta">
+                            <input id="ExtendedUserSchema.Meta-view-source" class="view-source-toggle-state" type="checkbox" aria-hidden="true" tabindex="-1">
+<div class="attr class">
+            
+    <span class="def">class</span>
+    <span class="name">ExtendedUserSchema.Meta</span><wbr>(<span class="base"><a href="#UserSchema.Meta">app.core.schemas.UserSchema.Meta</a></span>):
+
+                <label class="view-source-button" for="ExtendedUserSchema.Meta-view-source"><span>View Source</span></label>
+
+    </div>
+    <a class="headerlink" href="#ExtendedUserSchema.Meta"></a>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="ExtendedUserSchema.Meta-40"><a href="#ExtendedUserSchema.Meta-40"><span class="linenos">40</span></a>    <span class="k">class</span><span class="w"> </span><span class="nc">Meta</span><span class="p">(</span><span class="n">BaseUserSchema</span><span class="o">.</span><span class="n">Meta</span><span class="p">):</span>
+</span><span id="ExtendedUserSchema.Meta-41"><a href="#ExtendedUserSchema.Meta-41"><span class="linenos">41</span></a>        <span class="c1"># Exclude raw profile_data field as we have separate fields</span>
+</span><span id="ExtendedUserSchema.Meta-42"><a href="#ExtendedUserSchema.Meta-42"><span class="linenos">42</span></a>        <span class="n">exclude</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;profile_data&quot;</span><span class="p">]</span>
+</span></pre></div>
+
+
+    
+
+                            <div id="ExtendedUserSchema.Meta.exclude" class="classattr">
+                                <div class="attr variable">
+            <span class="name">exclude</span>        =
+<span class="default_value">[&#39;profile_data&#39;]</span>
+
+        
+    </div>
+    <a class="headerlink" href="#ExtendedUserSchema.Meta.exclude"></a>
     
     
 

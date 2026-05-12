@@ -11,8 +11,8 @@ from werkzeug.datastructures import FileStorage
 from app.extensions import db
 
 from .helpers import (
-    allowed_extension,
     allocate_storage_path,
+    allowed_extension,
     capture_upload_to_temp,
     extract_geo_info_if_tiff,
     extract_image_info,
@@ -74,7 +74,9 @@ class MediaController:
         if existing_asset:
             capture.discard()
             try:
-                existing_variants = {variant.kind for variant in existing_asset.variants}
+                existing_variants = {
+                    variant.kind for variant in existing_asset.variants
+                }
             except Exception:
                 existing_variants = set()
 
@@ -87,15 +89,20 @@ class MediaController:
             if missing_kinds:
                 from .helpers import _media_root
 
-                abs_existing_path = os.path.join(_media_root(), existing_asset.storage_key)
+                abs_existing_path = os.path.join(
+                    _media_root(), existing_asset.storage_key
+                )
                 if not os.path.isfile(abs_existing_path):
                     current_app.logger.warning(
-                        "Physical file missing for asset %s; cannot build thumbnail.", existing_asset.uuid
+                        "Physical file missing for asset %s; cannot build thumbnail.",
+                        existing_asset.uuid,
                     )
                     return existing_asset, False
                 new_variants = False
                 try:
-                    thumb_results = generate_webp_thumbnails(abs_existing_path, existing_asset.uuid, specs=thumb_specs)
+                    thumb_results = generate_webp_thumbnails(
+                        abs_existing_path, existing_asset.uuid, specs=thumb_specs
+                    )
                     for thumb in thumb_results:
                         if thumb.kind not in missing_kinds:
                             continue
@@ -114,7 +121,8 @@ class MediaController:
                         db.session.commit()
                 except Exception:
                     current_app.logger.exception(
-                        "Thumbnail regeneration failed for existing asset %s", existing_asset.uuid
+                        "Thumbnail regeneration failed for existing asset %s",
+                        existing_asset.uuid,
                     )
             return existing_asset, False
 
@@ -130,7 +138,9 @@ class MediaController:
         mpp = _derive_mpp_from_transform(geo)
 
         asset_type = (
-            AssetType.GEOTIFF.value if ext in {".tif", ".tiff"} else AssetType.IMAGE.value
+            AssetType.GEOTIFF.value
+            if ext in {".tif", ".tiff"}
+            else AssetType.IMAGE.value
         )
 
         asset = Asset(
@@ -153,21 +163,9 @@ class MediaController:
             exif=img.exif,
         )
 
-        if asset_type in {AssetType.IMAGE.value, AssetType.GEOTIFF.value}:
-            try:
-                thumb_results = generate_webp_thumbnails(abs_path, asset.uuid)
-                for thumb in thumb_results:
-                    asset.variants.append(
-                        AssetVariant(
-                            kind=thumb.kind,
-                            storage=StorageLocation.LOCAL.value,
-                            storage_key=thumb.storage_key,
-                            width=thumb.width,
-                            height=thumb.height,
-                        )
-                    )
-            except Exception:
-                current_app.logger.exception("Thumbnail generation failed for %s", asset.uuid)
+        # Thumbnail generation is deferred to the background preprocessing worker
+        # (_run_preprocess in tasks.py) to avoid blocking the HTTP response for
+        # large GeoTIFFs where Pillow would load the full raster into RAM.
 
         db.session.add(asset)
         db.session.commit()
@@ -198,6 +196,7 @@ class MediaController:
 
         # 1. Remove source file
         from .helpers import _media_root
+
         base = _media_root()
         abs_path = os.path.join(base, asset.storage_key)
         try:
@@ -225,6 +224,7 @@ class MediaController:
             cache_dir = cache_root / asset.uuid
             if cache_dir.exists():
                 import shutil
+
                 shutil.rmtree(cache_dir, ignore_errors=True)
         except Exception:
             pass
@@ -242,9 +242,9 @@ class MediaController:
     @staticmethod
     def _cleanup_agrovista_data(asset_uuid: str) -> None:
         """Remove NDVIImage records and associated data files for an asset."""
+        from app.extensions import db
         from app.modules.agrovista.helpers import DATA_DIR as AGROVISTA_DATA_DIR
         from app.modules.agrovista.models import NDVIImage
-        from app.extensions import db
 
         records = NDVIImage.query.filter(NDVIImage.id == asset_uuid).all()
         for record in records:
@@ -279,6 +279,7 @@ class MediaController:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _derive_mpp_from_transform(geo) -> Optional[float]:
     """Derive meters-per-pixel from a GeoTIFF affine transform.
@@ -316,6 +317,7 @@ def _derive_mpp_from_transform(geo) -> Optional[float]:
         if geo.bounds:
             lat = (geo.bounds.get("bottom", 0) + geo.bounds.get("top", 0)) / 2
         import math
+
         lat_rad = math.radians(abs(lat)) if lat is not None else 0
         m_per_deg_lat = 111320.0
         m_per_deg_lon = 111320.0 * math.cos(lat_rad)

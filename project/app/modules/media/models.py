@@ -6,12 +6,12 @@ from typing import Optional
 
 from sqlalchemy import (
     JSON,
+    BigInteger,
     Boolean,
     DateTime,
     Float,
     ForeignKey,
     Integer,
-    BigInteger,
     String,
     UniqueConstraint,
 )
@@ -34,7 +34,9 @@ class Asset(db.Model):
     __tablename__ = "media_asset"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    uuid: Mapped[str] = mapped_column(String(36), unique=True, nullable=False, index=True)
+    uuid: Mapped[str] = mapped_column(
+        String(36), unique=True, nullable=False, index=True
+    )
     original_name: Mapped[str] = mapped_column(String(255), nullable=False)
     ext: Mapped[str] = mapped_column(String(16), nullable=False)
     mime: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -52,7 +54,9 @@ class Asset(db.Model):
     mpp: Mapped[Optional[float]] = mapped_column(Float)
     exif: Mapped[Optional[dict]] = mapped_column(JSON)
     variants = relationship("AssetVariant", cascade="all, delete-orphan")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
 
     __table_args__ = (UniqueConstraint("sha256", "size_bytes", name="uq_asset_dedup"),)
 
@@ -61,7 +65,9 @@ class AssetVariant(db.Model):
     __tablename__ = "media_variant"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    asset_id: Mapped[int] = mapped_column(ForeignKey("media_asset.id", ondelete="CASCADE"), index=True)
+    asset_id: Mapped[int] = mapped_column(
+        ForeignKey("media_asset.id", ondelete="CASCADE"), index=True
+    )
     kind: Mapped[str] = mapped_column(String(32))  # "thumbnail", "tile", "cog"
     storage: Mapped[str] = mapped_column(String(16))
     storage_key: Mapped[str] = mapped_column(String(1024))

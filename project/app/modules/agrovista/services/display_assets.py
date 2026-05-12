@@ -9,12 +9,11 @@ from typing import Dict, Literal, Optional, Tuple, cast
 
 import numpy as np
 import rasterio
+from flask import current_app
 from PIL import Image
 from rasterio.enums import Resampling
 from rasterio.transform import Affine
 from rasterio.warp import transform_bounds
-
-from flask import current_app
 
 from app.modules.media.helpers import _media_root
 
@@ -63,7 +62,9 @@ def _resolve_display_dir(image_id: str) -> Path:
     return display_dir
 
 
-def _dataset_bounds_wgs84(src: rasterio.io.DatasetReader) -> Tuple[float, float, float, float]:
+def _dataset_bounds_wgs84(
+    src: rasterio.io.DatasetReader,
+) -> Tuple[float, float, float, float]:
     if src.crs is None:
         raise GeoDisplayError("Dataset is missing CRS information.")
     try:
@@ -106,7 +107,9 @@ def _compute_out_shape(width: int, height: int, max_dim: int) -> Tuple[int, int]
     return out_h, out_w
 
 
-def _read_downsampled(src: rasterio.io.DatasetReader, indexes: Tuple[int, ...], out_shape: Tuple[int, int]) -> np.ndarray:
+def _read_downsampled(
+    src: rasterio.io.DatasetReader, indexes: Tuple[int, ...], out_shape: Tuple[int, int]
+) -> np.ndarray:
     bands = len(indexes)
     arr = src.read(
         indexes=indexes,
@@ -122,7 +125,9 @@ def _read_downsampled(src: rasterio.io.DatasetReader, indexes: Tuple[int, ...], 
     return data
 
 
-def _dataset_valid_mask(src: rasterio.io.DatasetReader, out_shape: Tuple[int, int]) -> np.ndarray:
+def _dataset_valid_mask(
+    src: rasterio.io.DatasetReader, out_shape: Tuple[int, int]
+) -> np.ndarray:
     mask = src.dataset_mask(
         out_shape=out_shape,
         resampling=Resampling.nearest,
@@ -156,12 +161,7 @@ def _pseudo_ndvi_rgb(data: np.ndarray, valid_mask: Optional[np.ndarray]) -> np.n
     vari = (G - R) / (G + R - B + eps)
     gli = (2.0 * G - R - B) / (2.0 * G + R + B + eps)
     exg = 2.0 * G - R - B
-    pseudo = (
-        0.4 * ngrdi
-        + 0.25 * vari
-        + 0.25 * gli
-        + 0.10 * exg
-    )
+    pseudo = 0.4 * ngrdi + 0.25 * vari + 0.25 * gli + 0.10 * exg
     pseudo = np.clip(pseudo, -1.0, 1.0)
     vi = G / (R + eps)
     veg_mask = (exg > 0.05) & (ngrdi > 0.0) & (vi > 1.2)
@@ -188,7 +188,9 @@ def _pseudo_ndvi_rgb(data: np.ndarray, valid_mask: Optional[np.ndarray]) -> np.n
         pseudo_min,
         pseudo_max,
     )
-    logger.info("agrovista: display pseudo_ndvi dtype=%s shape=%s", rgb.dtype, rgb.shape)
+    logger.info(
+        "agrovista: display pseudo_ndvi dtype=%s shape=%s", rgb.dtype, rgb.shape
+    )
     return rgb
 
 
@@ -225,7 +227,9 @@ def _rgb_visualisation(data: np.ndarray, mask: Optional[np.ndarray]) -> np.ndarr
     return rgb
 
 
-def _grayscale_visualisation(base: np.ndarray, mask: Optional[np.ndarray]) -> np.ndarray:
+def _grayscale_visualisation(
+    base: np.ndarray, mask: Optional[np.ndarray]
+) -> np.ndarray:
     Gs = _robust_uint8(base)
     rgb = np.stack([Gs, Gs, Gs], axis=-1)
     if mask is not None:
@@ -343,7 +347,11 @@ def generate_display_assets(
             bounds=bounds_wgs84,
             crs=src.crs.to_string() if src.crs else "unknown",
             transform=transform_dict,
-            nodata=float(src.nodata) if src.nodata is not None and not math.isnan(src.nodata) else None,
+            nodata=(
+                float(src.nodata)
+                if src.nodata is not None and not math.isnan(src.nodata)
+                else None
+            ),
             display_png_size={"width": int(rgb.shape[1]), "height": int(rgb.shape[0])},
             mode=chosen_mode,
             storage_key=storage_key,

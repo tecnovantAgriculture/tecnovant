@@ -5,16 +5,17 @@ avatar management, and extended profile data (birthday, last_access).
 """
 
 import re
-from datetime import datetime, date
-from typing import Optional, Dict, Any, Tuple
+from datetime import date, datetime
+from typing import Any, Dict, Optional, Tuple
+
 from flask import current_app
 from werkzeug.datastructures import FileStorage
 
-from app.extensions import db
+from app.core.constants import ProfileDataKeys
+from app.core.exceptions import AvatarStorageError, ProfileDataError, ProfileUpdateError
 from app.core.models import User
 from app.core.services.avatar_service import AvatarService
-from app.core.constants import ProfileDataKeys
-from app.core.exceptions import ProfileUpdateError, ProfileDataError, AvatarStorageError
+from app.extensions import db
 
 
 class ProfileService:
@@ -33,20 +34,19 @@ class ProfileService:
         # Get avatar URL
         avatar_path = user.avatar_path
         avatar_url = AvatarService.get_avatar_url(avatar_path)
-        
+
         # Get extended fields
         birthday = user.birthday
         last_access = user.last_access
-        
+
         # Organizations
         organizations = [
-            {"id": org.id, "name": org.name}
-            for org in user.organizations.all()
+            {"id": org.id, "name": org.name} for org in user.organizations.all()
         ]
-        
+
         # Role display
         role_display = user.get_role()
-        
+
         # Build response matching legacy profile structure plus extensions
         result = {
             "id": user.id,
@@ -63,7 +63,7 @@ class ProfileService:
             "last_access": last_access,
             "role_display": role_display,
         }
-        
+
         return result
 
     @classmethod
@@ -78,13 +78,15 @@ class ProfileService:
             True if update successful, False otherwise.
         """
         updated = False
-        
+
         # Validate allowed fields
         allowed_fields = {"full_name", "email", "birthday"}
         for key in data:
             if key not in allowed_fields:
-                raise ProfileUpdateError(f"Field '{key}' is not allowed for profile update")
-        
+                raise ProfileUpdateError(
+                    f"Field '{key}' is not allowed for profile update"
+                )
+
         # Update full_name
         if "full_name" in data:
             full_name = data["full_name"].strip()
@@ -93,26 +95,27 @@ class ProfileService:
             if full_name != user.full_name:
                 user.full_name = full_name
                 updated = True
-        
+
         # Update email
         if "email" in data:
             new_email = data["email"].strip().lower()
             if not new_email:
                 raise ProfileUpdateError("Email cannot be empty")
             # Basic email format validation
-            if not re.match(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$", new_email):
+            if not re.match(
+                r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$", new_email
+            ):
                 raise ProfileUpdateError("Invalid email format")
             if new_email != user.email:
                 # Check uniqueness
                 existing = User.query.filter(
-                    User.email == new_email,
-                    User.id != user.id
+                    User.email == new_email, User.id != user.id
                 ).first()
                 if existing:
                     raise ProfileUpdateError("Email address is already in use")
                 user.email = new_email
                 updated = True
-        
+
         # Update birthday
         if "birthday" in data:
             birthday_str = data["birthday"]
@@ -120,7 +123,7 @@ class ProfileService:
             if validated_birthday != user.birthday:
                 user.birthday = validated_birthday
                 updated = True
-        
+
         return updated
 
     @classmethod
@@ -150,20 +153,20 @@ class ProfileService:
     @classmethod
     def replace_avatar(cls, user: User, file: FileStorage) -> Tuple[str, Optional[str]]:
         """Replace user's avatar with new file atomically.
-        
+
         This method saves the new file, updates the user's avatar_path in the
         session, and returns the new and old avatar paths. The caller must
         commit the session. If the commit fails, the caller should delete the
         new file using AvatarService.delete_avatar(new_path). If commit succeeds,
         the caller should delete the old file (if different).
-        
+
         Args:
             user: User instance.
             file: Validated avatar file.
-            
+
         Returns:
             Tuple of (new_avatar_path, old_avatar_path).
-            
+
         Raises:
             AvatarStorageError: If file save fails.
         """
@@ -175,14 +178,14 @@ class ProfileService:
     @classmethod
     def remove_avatar(cls, user: User) -> Optional[str]:
         """Remove user's avatar atomically.
-        
+
         This method updates the user's avatar_path to None in the session
         and returns the old avatar path. The caller must commit the session.
         If commit succeeds, the caller should delete the old file.
-        
+
         Args:
             user: User instance.
-            
+
         Returns:
             Old avatar path, or None if no avatar.
         """
@@ -202,11 +205,11 @@ class ProfileService:
         """
         if not birthday_str:
             return None
-        
+
         birthday_str = birthday_str.strip()
         if not birthday_str:
             return None
-        
+
         try:
             # Parse date
             birth_date = datetime.strptime(birthday_str, "%Y-%m-%d").date()

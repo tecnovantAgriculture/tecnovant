@@ -1,9 +1,7 @@
-# Third party imports
 from marshmallow import fields
 from marshmallow_sqlalchemy import SQLAlchemyAutoSchema
 
-# Local application imports
-from .models import Organization, ResellerPackage, RoleEnum, User
+from app.core.models import Organization, ResellerPackage, RoleEnum, User
 
 
 class UserSchema(SQLAlchemyAutoSchema):
@@ -18,13 +16,13 @@ class UserSchema(SQLAlchemyAutoSchema):
         ),
         dump_only=True,
     )
-    profile_data = fields.Raw(dump_only=True)  # To include JSON profile data as is
+    profile_data = fields.Raw(dump_only=True)
 
     class Meta:
         model = User
         exclude = ["password_hash"]
         include_relationships = False
-        load_instance = False  # For output, not needed
+        load_instance = False
 
 
 class OrganizationSchema(SQLAlchemyAutoSchema):
@@ -46,11 +44,6 @@ class OrganizationSchema(SQLAlchemyAutoSchema):
         model = Organization
         exclude = []
         load_instance = False
-
-    # Alternative method-based approach for users field
-    # def get_user_ids(self, obj):
-    #     return [str(user.id) for user in obj.users]
-    # users = fields.Method("get_user_ids", dump_only=True)
 
 
 class ResellerPackageSchema(SQLAlchemyAutoSchema):

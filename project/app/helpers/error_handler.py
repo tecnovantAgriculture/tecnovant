@@ -80,11 +80,13 @@ def error_handler(app: Flask, logger) -> None:
         return f"{size:.1f} TiB"
 
     # Paths that browsers or tools probe automatically; suppress error logging for these.
-    _SILENT_404_PATHS = frozenset({
-        "/.well-known/appspecific/com.chrome.devtools.json",
-        "/favicon.ico",
-        "/robots.txt",
-    })
+    _SILENT_404_PATHS = frozenset(
+        {
+            "/.well-known/appspecific/com.chrome.devtools.json",
+            "/favicon.ico",
+            "/robots.txt",
+        }
+    )
 
     @app.errorhandler(Exception)
     def handle_exception(e: Exception) -> tuple:

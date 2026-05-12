@@ -183,7 +183,9 @@ def vista_reporte(report_id):
     text_recommendations = data_response.get("text_recommendations", "")
 
     # Obtener CV de nutrientes para la tabla de Ley del Mínimo
-    lot_id = data_response.get("lot", {}).get("id") if data_response.get("lot") else None
+    lot_id = (
+        data_response.get("lot", {}).get("id") if data_response.get("lot") else None
+    )
     cv_data = {}
     if lot_id:
         try:
@@ -229,7 +231,11 @@ def vista_reporte(report_id):
         minimum_law_analyses=minimum_law_analyses,
         automatic_recommendations=automatic_recommendations,
         text_recommendations=text_recommendations,
-        crop_name=data_response.get("crop", {}).get("name") if data_response.get("crop") else None,
+        crop_name=(
+            data_response.get("crop", {}).get("name")
+            if data_response.get("crop")
+            else None
+        ),
         report_title=data_response.get("title", ""),
         report_author=data_response.get("author", ""),
         recommendation_id=report_id,

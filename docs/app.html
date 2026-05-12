@@ -40,6 +40,9 @@
                     <a class="function" href="#register_blueprints">register_blueprints</a>
             </li>
             <li>
+                    <a class="function" href="#init_avatar_storage">init_avatar_storage</a>
+            </li>
+            <li>
                     <a class="function" href="#configure_logging">configure_logging</a>
             </li>
             <li>
@@ -76,11 +79,11 @@ app    </h1>
 </span><span id="L-6"><a href="#L-6"><span class="linenos">  6</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">importlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">import_module</span>
 </span><span id="L-7"><a href="#L-7"><span class="linenos">  7</span></a>
 </span><span id="L-8"><a href="#L-8"><span class="linenos">  8</span></a><span class="c1"># Third party imports</span>
-</span><span id="L-9"><a href="#L-9"><span class="linenos">  9</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">flask</span><span class="w"> </span><span class="kn">import</span> <span class="n">Flask</span>
+</span><span id="L-9"><a href="#L-9"><span class="linenos">  9</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">flask</span><span class="w"> </span><span class="kn">import</span> <span class="n">Flask</span><span class="p">,</span> <span class="n">request</span>
 </span><span id="L-10"><a href="#L-10"><span class="linenos"> 10</span></a>
 </span><span id="L-11"><a href="#L-11"><span class="linenos"> 11</span></a><span class="c1"># Local application imports</span>
 </span><span id="L-12"><a href="#L-12"><span class="linenos"> 12</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">.config</span><span class="w"> </span><span class="kn">import</span> <span class="n">Config</span>
-</span><span id="L-13"><a href="#L-13"><span class="linenos"> 13</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">.extensions</span><span class="w"> </span><span class="kn">import</span> <span class="n">cache</span><span class="p">,</span> <span class="n">db</span><span class="p">,</span> <span class="n">jwt</span><span class="p">,</span> <span class="n">migrate</span>
+</span><span id="L-13"><a href="#L-13"><span class="linenos"> 13</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">.extensions</span><span class="w"> </span><span class="kn">import</span> <span class="n">cache</span><span class="p">,</span> <span class="n">db</span><span class="p">,</span> <span class="n">jwt</span><span class="p">,</span> <span class="n">limiter</span><span class="p">,</span> <span class="n">migrate</span>
 </span><span id="L-14"><a href="#L-14"><span class="linenos"> 14</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">.helpers.error_handler</span><span class="w"> </span><span class="kn">import</span> <span class="n">error_handler</span><span class="p">,</span> <span class="n">setup_logging</span>
 </span><span id="L-15"><a href="#L-15"><span class="linenos"> 15</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">.helpers.helpers_functions</span><span class="w"> </span><span class="kn">import</span> <span class="n">inject_user</span><span class="p">,</span> <span class="n">merge_dicts</span>
 </span><span id="L-16"><a href="#L-16"><span class="linenos"> 16</span></a><span class="kn">from</span><span class="w"> </span><span class="nn">.helpers.mail</span><span class="w"> </span><span class="kn">import</span> <span class="n">mail</span>
@@ -99,126 +102,228 @@ app    </h1>
 </span><span id="L-29"><a href="#L-29"><span class="linenos"> 29</span></a>    <span class="n">migrate</span><span class="o">.</span><span class="n">init_app</span><span class="p">(</span><span class="n">app</span><span class="p">,</span> <span class="n">db</span><span class="p">)</span>
 </span><span id="L-30"><a href="#L-30"><span class="linenos"> 30</span></a>    <span class="n">cache</span><span class="o">.</span><span class="n">init_app</span><span class="p">(</span><span class="n">app</span><span class="p">)</span>
 </span><span id="L-31"><a href="#L-31"><span class="linenos"> 31</span></a>
-</span><span id="L-32"><a href="#L-32"><span class="linenos"> 32</span></a>
-</span><span id="L-33"><a href="#L-33"><span class="linenos"> 33</span></a><span class="k">def</span><span class="w"> </span><span class="nf">register_blueprints</span><span class="p">(</span><span class="n">app</span><span class="p">):</span>
-</span><span id="L-34"><a href="#L-34"><span class="linenos"> 34</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-</span><span id="L-35"><a href="#L-35"><span class="linenos"> 35</span></a><span class="sd">    Register Flask Blueprints from the configuration.</span>
-</span><span id="L-36"><a href="#L-36"><span class="linenos"> 36</span></a>
-</span><span id="L-37"><a href="#L-37"><span class="linenos"> 37</span></a><span class="sd">    Args:</span>
-</span><span id="L-38"><a href="#L-38"><span class="linenos"> 38</span></a><span class="sd">        app (Flask): The Flask application instance.</span>
-</span><span id="L-39"><a href="#L-39"><span class="linenos"> 39</span></a><span class="sd">    &quot;&quot;&quot;</span>
-</span><span id="L-40"><a href="#L-40"><span class="linenos"> 40</span></a>    <span class="k">if</span> <span class="n">Config</span><span class="o">.</span><span class="n">CORE</span> <span class="o">==</span> <span class="kc">True</span><span class="p">:</span>
-</span><span id="L-41"><a href="#L-41"><span class="linenos"> 41</span></a>        <span class="k">try</span><span class="p">:</span>
-</span><span id="L-42"><a href="#L-42"><span class="linenos"> 42</span></a>            <span class="kn">from</span><span class="w"> </span><span class="nn">app.core</span><span class="w"> </span><span class="kn">import</span> <span class="n">core</span><span class="p">,</span> <span class="n">core_api</span>
-</span><span id="L-43"><a href="#L-43"><span class="linenos"> 43</span></a>
-</span><span id="L-44"><a href="#L-44"><span class="linenos"> 44</span></a>            <span class="n">app</span><span class="o">.</span><span class="n">register_blueprint</span><span class="p">(</span><span class="n">core</span><span class="p">)</span>
-</span><span id="L-45"><a href="#L-45"><span class="linenos"> 45</span></a>            <span class="n">app</span><span class="o">.</span><span class="n">register_blueprint</span><span class="p">(</span><span class="n">core_api</span><span class="p">)</span>
-</span><span id="L-46"><a href="#L-46"><span class="linenos"> 46</span></a>        <span class="k">except</span> <span class="ne">ImportError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-</span><span id="L-47"><a href="#L-47"><span class="linenos"> 47</span></a>            <span class="n">logging</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to import core module: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-</span><span id="L-48"><a href="#L-48"><span class="linenos"> 48</span></a>
-</span><span id="L-49"><a href="#L-49"><span class="linenos"> 49</span></a>    <span class="k">for</span> <span class="n">module</span> <span class="ow">in</span> <span class="n">Config</span><span class="o">.</span><span class="n">MODULES</span><span class="p">:</span>
-</span><span id="L-50"><a href="#L-50"><span class="linenos"> 50</span></a>        <span class="n">module_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;app.modules.</span><span class="si">{</span><span class="n">module</span><span class="si">}</span><span class="s2">&quot;</span>
-</span><span id="L-51"><a href="#L-51"><span class="linenos"> 51</span></a>        <span class="k">try</span><span class="p">:</span>
-</span><span id="L-52"><a href="#L-52"><span class="linenos"> 52</span></a>            <span class="n">module_obj</span> <span class="o">=</span> <span class="n">import_module</span><span class="p">(</span><span class="n">module_name</span><span class="p">)</span>
-</span><span id="L-53"><a href="#L-53"><span class="linenos"> 53</span></a>            <span class="n">blueprint_web</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">module_obj</span><span class="p">,</span> <span class="n">module</span><span class="p">)</span>
-</span><span id="L-54"><a href="#L-54"><span class="linenos"> 54</span></a>            <span class="n">app</span><span class="o">.</span><span class="n">register_blueprint</span><span class="p">(</span><span class="n">blueprint_web</span><span class="p">)</span>
-</span><span id="L-55"><a href="#L-55"><span class="linenos"> 55</span></a>
-</span><span id="L-56"><a href="#L-56"><span class="linenos"> 56</span></a>            <span class="c1"># Verificar si existe el blueprint MODULE_api</span>
-</span><span id="L-57"><a href="#L-57"><span class="linenos"> 57</span></a>            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">module_obj</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">module</span><span class="si">}</span><span class="s2">_api&quot;</span><span class="p">):</span>
-</span><span id="L-58"><a href="#L-58"><span class="linenos"> 58</span></a>                <span class="n">blueprint_api</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">module_obj</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">module</span><span class="si">}</span><span class="s2">_api&quot;</span><span class="p">)</span>
-</span><span id="L-59"><a href="#L-59"><span class="linenos"> 59</span></a>                <span class="n">app</span><span class="o">.</span><span class="n">register_blueprint</span><span class="p">(</span><span class="n">blueprint_api</span><span class="p">)</span>
-</span><span id="L-60"><a href="#L-60"><span class="linenos"> 60</span></a>        <span class="k">except</span> <span class="ne">ImportError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-</span><span id="L-61"><a href="#L-61"><span class="linenos"> 61</span></a>            <span class="n">logging</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to import module </span><span class="si">{</span><span class="n">module_name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-</span><span id="L-62"><a href="#L-62"><span class="linenos"> 62</span></a>        <span class="k">except</span> <span class="ne">AttributeError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-</span><span id="L-63"><a href="#L-63"><span class="linenos"> 63</span></a>            <span class="n">logging</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Blueprint </span><span class="si">{</span><span class="n">module</span><span class="si">}</span><span class="s2"> not found in module </span><span class="si">{</span><span class="n">module_name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</span><span id="L-32"><a href="#L-32"><span class="linenos"> 32</span></a>    <span class="c1"># Configure rate limiter storage (Redis if available, else memory)</span>
+</span><span id="L-33"><a href="#L-33"><span class="linenos"> 33</span></a>    <span class="c1"># RATELIMIT_STORAGE_URI must be set in app.config BEFORE init_app</span>
+</span><span id="L-34"><a href="#L-34"><span class="linenos"> 34</span></a>    <span class="k">if</span> <span class="n">app</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;CACHE_REDIS_URL&quot;</span><span class="p">):</span>
+</span><span id="L-35"><a href="#L-35"><span class="linenos"> 35</span></a>        <span class="n">app</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="s2">&quot;RATELIMIT_STORAGE_URI&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">app</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="s2">&quot;CACHE_REDIS_URL&quot;</span><span class="p">]</span>
+</span><span id="L-36"><a href="#L-36"><span class="linenos"> 36</span></a>    <span class="k">else</span><span class="p">:</span>
+</span><span id="L-37"><a href="#L-37"><span class="linenos"> 37</span></a>        <span class="n">app</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;RATELIMIT_STORAGE_URI&quot;</span><span class="p">,</span> <span class="s2">&quot;memory://&quot;</span><span class="p">)</span>
+</span><span id="L-38"><a href="#L-38"><span class="linenos"> 38</span></a>    <span class="n">limiter</span><span class="o">.</span><span class="n">init_app</span><span class="p">(</span><span class="n">app</span><span class="p">)</span>
+</span><span id="L-39"><a href="#L-39"><span class="linenos"> 39</span></a>
+</span><span id="L-40"><a href="#L-40"><span class="linenos"> 40</span></a>
+</span><span id="L-41"><a href="#L-41"><span class="linenos"> 41</span></a><span class="k">def</span><span class="w"> </span><span class="nf">register_blueprints</span><span class="p">(</span><span class="n">app</span><span class="p">):</span>
+</span><span id="L-42"><a href="#L-42"><span class="linenos"> 42</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="L-43"><a href="#L-43"><span class="linenos"> 43</span></a><span class="sd">    Register Flask Blueprints from the configuration.</span>
+</span><span id="L-44"><a href="#L-44"><span class="linenos"> 44</span></a>
+</span><span id="L-45"><a href="#L-45"><span class="linenos"> 45</span></a><span class="sd">    Args:</span>
+</span><span id="L-46"><a href="#L-46"><span class="linenos"> 46</span></a><span class="sd">        app (Flask): The Flask application instance.</span>
+</span><span id="L-47"><a href="#L-47"><span class="linenos"> 47</span></a><span class="sd">    &quot;&quot;&quot;</span>
+</span><span id="L-48"><a href="#L-48"><span class="linenos"> 48</span></a>    <span class="k">if</span> <span class="n">Config</span><span class="o">.</span><span class="n">CORE</span> <span class="o">==</span> <span class="kc">True</span><span class="p">:</span>
+</span><span id="L-49"><a href="#L-49"><span class="linenos"> 49</span></a>        <span class="k">try</span><span class="p">:</span>
+</span><span id="L-50"><a href="#L-50"><span class="linenos"> 50</span></a>            <span class="kn">from</span><span class="w"> </span><span class="nn">app.core</span><span class="w"> </span><span class="kn">import</span> <span class="n">core</span><span class="p">,</span> <span class="n">core_api</span><span class="p">,</span> <span class="n">core_api_v1</span>
+</span><span id="L-51"><a href="#L-51"><span class="linenos"> 51</span></a>
+</span><span id="L-52"><a href="#L-52"><span class="linenos"> 52</span></a>            <span class="n">app</span><span class="o">.</span><span class="n">register_blueprint</span><span class="p">(</span><span class="n">core</span><span class="p">)</span>
+</span><span id="L-53"><a href="#L-53"><span class="linenos"> 53</span></a>            <span class="n">app</span><span class="o">.</span><span class="n">register_blueprint</span><span class="p">(</span><span class="n">core_api</span><span class="p">)</span>
+</span><span id="L-54"><a href="#L-54"><span class="linenos"> 54</span></a>            <span class="n">app</span><span class="o">.</span><span class="n">register_blueprint</span><span class="p">(</span><span class="n">core_api_v1</span><span class="p">)</span>
+</span><span id="L-55"><a href="#L-55"><span class="linenos"> 55</span></a>        <span class="k">except</span> <span class="ne">ImportError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+</span><span id="L-56"><a href="#L-56"><span class="linenos"> 56</span></a>            <span class="n">logging</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to import core module: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</span><span id="L-57"><a href="#L-57"><span class="linenos"> 57</span></a>
+</span><span id="L-58"><a href="#L-58"><span class="linenos"> 58</span></a>    <span class="k">for</span> <span class="n">module</span> <span class="ow">in</span> <span class="n">Config</span><span class="o">.</span><span class="n">MODULES</span><span class="p">:</span>
+</span><span id="L-59"><a href="#L-59"><span class="linenos"> 59</span></a>        <span class="n">module_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;app.modules.</span><span class="si">{</span><span class="n">module</span><span class="si">}</span><span class="s2">&quot;</span>
+</span><span id="L-60"><a href="#L-60"><span class="linenos"> 60</span></a>        <span class="k">try</span><span class="p">:</span>
+</span><span id="L-61"><a href="#L-61"><span class="linenos"> 61</span></a>            <span class="n">module_obj</span> <span class="o">=</span> <span class="n">import_module</span><span class="p">(</span><span class="n">module_name</span><span class="p">)</span>
+</span><span id="L-62"><a href="#L-62"><span class="linenos"> 62</span></a>            <span class="n">blueprint_web</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">module_obj</span><span class="p">,</span> <span class="n">module</span><span class="p">)</span>
+</span><span id="L-63"><a href="#L-63"><span class="linenos"> 63</span></a>            <span class="n">app</span><span class="o">.</span><span class="n">register_blueprint</span><span class="p">(</span><span class="n">blueprint_web</span><span class="p">)</span>
 </span><span id="L-64"><a href="#L-64"><span class="linenos"> 64</span></a>
-</span><span id="L-65"><a href="#L-65"><span class="linenos"> 65</span></a>
-</span><span id="L-66"><a href="#L-66"><span class="linenos"> 66</span></a><span class="k">def</span><span class="w"> </span><span class="nf">configure_logging</span><span class="p">():</span>
-</span><span id="L-67"><a href="#L-67"><span class="linenos"> 67</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;✍🏼 Configure application logging.</span>
-</span><span id="L-68"><a href="#L-68"><span class="linenos"> 68</span></a>
-</span><span id="L-69"><a href="#L-69"><span class="linenos"> 69</span></a><span class="sd">    Returns:</span>
-</span><span id="L-70"><a href="#L-70"><span class="linenos"> 70</span></a><span class="sd">        logging.Logger: The configured logger instance.</span>
-</span><span id="L-71"><a href="#L-71"><span class="linenos"> 71</span></a><span class="sd">    &quot;&quot;&quot;</span>
-</span><span id="L-72"><a href="#L-72"><span class="linenos"> 72</span></a>    <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="s2">&quot;mail&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">setLevel</span><span class="p">(</span><span class="n">logging</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">)</span>
-</span><span id="L-73"><a href="#L-73"><span class="linenos"> 73</span></a>    <span class="k">return</span> <span class="n">setup_logging</span><span class="p">()</span>
+</span><span id="L-65"><a href="#L-65"><span class="linenos"> 65</span></a>            <span class="c1"># Verificar si existe el blueprint MODULE_api</span>
+</span><span id="L-66"><a href="#L-66"><span class="linenos"> 66</span></a>            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">module_obj</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">module</span><span class="si">}</span><span class="s2">_api&quot;</span><span class="p">):</span>
+</span><span id="L-67"><a href="#L-67"><span class="linenos"> 67</span></a>                <span class="n">blueprint_api</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">module_obj</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">module</span><span class="si">}</span><span class="s2">_api&quot;</span><span class="p">)</span>
+</span><span id="L-68"><a href="#L-68"><span class="linenos"> 68</span></a>                <span class="n">app</span><span class="o">.</span><span class="n">register_blueprint</span><span class="p">(</span><span class="n">blueprint_api</span><span class="p">)</span>
+</span><span id="L-69"><a href="#L-69"><span class="linenos"> 69</span></a>        <span class="k">except</span> <span class="ne">ImportError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+</span><span id="L-70"><a href="#L-70"><span class="linenos"> 70</span></a>            <span class="n">logging</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to import module </span><span class="si">{</span><span class="n">module_name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</span><span id="L-71"><a href="#L-71"><span class="linenos"> 71</span></a>        <span class="k">except</span> <span class="ne">AttributeError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+</span><span id="L-72"><a href="#L-72"><span class="linenos"> 72</span></a>            <span class="n">logging</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Blueprint </span><span class="si">{</span><span class="n">module</span><span class="si">}</span><span class="s2"> not found in module </span><span class="si">{</span><span class="n">module_name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</span><span id="L-73"><a href="#L-73"><span class="linenos"> 73</span></a>
 </span><span id="L-74"><a href="#L-74"><span class="linenos"> 74</span></a>
-</span><span id="L-75"><a href="#L-75"><span class="linenos"> 75</span></a>
-</span><span id="L-76"><a href="#L-76"><span class="linenos"> 76</span></a><span class="k">def</span><span class="w"> </span><span class="nf">create_app</span><span class="p">():</span>
-</span><span id="L-77"><a href="#L-77"><span class="linenos"> 77</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;🌟 Factory function to create and configure the Flask application.</span>
-</span><span id="L-78"><a href="#L-78"><span class="linenos"> 78</span></a>
-</span><span id="L-79"><a href="#L-79"><span class="linenos"> 79</span></a><span class="sd">    Returns:</span>
-</span><span id="L-80"><a href="#L-80"><span class="linenos"> 80</span></a><span class="sd">        Flask: The configured Flask application instance.</span>
-</span><span id="L-81"><a href="#L-81"><span class="linenos"> 81</span></a><span class="sd">    &quot;&quot;&quot;</span>
-</span><span id="L-82"><a href="#L-82"><span class="linenos"> 82</span></a>    <span class="n">app</span> <span class="o">=</span> <span class="n">Flask</span><span class="p">(</span><span class="vm">__name__</span><span class="p">,</span> <span class="n">static_folder</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
-</span><span id="L-83"><a href="#L-83"><span class="linenos"> 83</span></a>    <span class="n">app</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">from_object</span><span class="p">(</span><span class="n">Config</span><span class="p">)</span>
-</span><span id="L-84"><a href="#L-84"><span class="linenos"> 84</span></a>
-</span><span id="L-85"><a href="#L-85"><span class="linenos"> 85</span></a>    <span class="c1"># Set template folder based on config theme</span>
-</span><span id="L-86"><a href="#L-86"><span class="linenos"> 86</span></a>    <span class="n">theme</span> <span class="o">=</span> <span class="n">Config</span><span class="o">.</span><span class="n">THEME</span>
-</span><span id="L-87"><a href="#L-87"><span class="linenos"> 87</span></a>    <span class="n">template_folder</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">app</span><span class="o">.</span><span class="n">root_path</span><span class="p">,</span> <span class="s2">&quot;templates&quot;</span><span class="p">,</span> <span class="n">theme</span><span class="p">)</span>
-</span><span id="L-88"><a href="#L-88"><span class="linenos"> 88</span></a>    <span class="n">app</span><span class="o">.</span><span class="n">template_folder</span> <span class="o">=</span> <span class="n">template_folder</span>
-</span><span id="L-89"><a href="#L-89"><span class="linenos"> 89</span></a>
-</span><span id="L-90"><a href="#L-90"><span class="linenos"> 90</span></a>
-</span><span id="L-91"><a href="#L-91"><span class="linenos"> 91</span></a>    <span class="c1"># Initialize extensions and blueprints</span>
-</span><span id="L-92"><a href="#L-92"><span class="linenos"> 92</span></a>    <span class="n">init_extensions</span><span class="p">(</span><span class="n">app</span><span class="p">)</span>
-</span><span id="L-93"><a href="#L-93"><span class="linenos"> 93</span></a>    <span class="n">register_blueprints</span><span class="p">(</span><span class="n">app</span><span class="p">)</span>
+</span><span id="L-75"><a href="#L-75"><span class="linenos"> 75</span></a><span class="k">def</span><span class="w"> </span><span class="nf">init_avatar_storage</span><span class="p">(</span><span class="n">app</span><span class="p">):</span>
+</span><span id="L-76"><a href="#L-76"><span class="linenos"> 76</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Initialize avatar storage directory at application startup.</span>
+</span><span id="L-77"><a href="#L-77"><span class="linenos"> 77</span></a>
+</span><span id="L-78"><a href="#L-78"><span class="linenos"> 78</span></a><span class="sd">    Args:</span>
+</span><span id="L-79"><a href="#L-79"><span class="linenos"> 79</span></a><span class="sd">        app (Flask): The Flask application instance.</span>
+</span><span id="L-80"><a href="#L-80"><span class="linenos"> 80</span></a><span class="sd">    &quot;&quot;&quot;</span>
+</span><span id="L-81"><a href="#L-81"><span class="linenos"> 81</span></a>    <span class="k">try</span><span class="p">:</span>
+</span><span id="L-82"><a href="#L-82"><span class="linenos"> 82</span></a>        <span class="kn">from</span><span class="w"> </span><span class="nn">app.core.services.avatar_service</span><span class="w"> </span><span class="kn">import</span> <span class="n">AvatarService</span>
+</span><span id="L-83"><a href="#L-83"><span class="linenos"> 83</span></a>
+</span><span id="L-84"><a href="#L-84"><span class="linenos"> 84</span></a>        <span class="c1"># Usar app context para que current_app esté disponible</span>
+</span><span id="L-85"><a href="#L-85"><span class="linenos"> 85</span></a>        <span class="c1"># (necesario para acceder a app.config durante flask db migrate)</span>
+</span><span id="L-86"><a href="#L-86"><span class="linenos"> 86</span></a>        <span class="k">with</span> <span class="n">app</span><span class="o">.</span><span class="n">app_context</span><span class="p">():</span>
+</span><span id="L-87"><a href="#L-87"><span class="linenos"> 87</span></a>            <span class="n">AvatarService</span><span class="o">.</span><span class="n">ensure_storage_directory</span><span class="p">()</span>
+</span><span id="L-88"><a href="#L-88"><span class="linenos"> 88</span></a>            <span class="n">app</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Avatar storage directory initialized&quot;</span><span class="p">)</span>
+</span><span id="L-89"><a href="#L-89"><span class="linenos"> 89</span></a>    <span class="k">except</span> <span class="ne">ImportError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+</span><span id="L-90"><a href="#L-90"><span class="linenos"> 90</span></a>        <span class="n">app</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Cannot initialize avatar storage: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</span><span id="L-91"><a href="#L-91"><span class="linenos"> 91</span></a>    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+</span><span id="L-92"><a href="#L-92"><span class="linenos"> 92</span></a>        <span class="n">app</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to initialize avatar storage directory: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</span><span id="L-93"><a href="#L-93"><span class="linenos"> 93</span></a>
 </span><span id="L-94"><a href="#L-94"><span class="linenos"> 94</span></a>
-</span><span id="L-95"><a href="#L-95"><span class="linenos"> 95</span></a>    <span class="c1"># Configure logging and error handling</span>
-</span><span id="L-96"><a href="#L-96"><span class="linenos"> 96</span></a>    <span class="n">logger</span> <span class="o">=</span> <span class="n">configure_logging</span><span class="p">()</span>
-</span><span id="L-97"><a href="#L-97"><span class="linenos"> 97</span></a>    <span class="n">error_handler</span><span class="p">(</span><span class="n">app</span><span class="p">,</span> <span class="n">logger</span><span class="p">)</span>
-</span><span id="L-98"><a href="#L-98"><span class="linenos"> 98</span></a>
-</span><span id="L-99"><a href="#L-99"><span class="linenos"> 99</span></a>    <span class="c1"># flask url for user refresh token, is very important, the route most be exist</span>
-</span><span id="L-100"><a href="#L-100"><span class="linenos">100</span></a>    <span class="n">app</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="s2">&quot;JWT_REFRESH_COOKIE_PATH&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;/api/core/refresh&quot;</span>
-</span><span id="L-101"><a href="#L-101"><span class="linenos">101</span></a>
-</span><span id="L-102"><a href="#L-102"><span class="linenos">102</span></a>    <span class="c1"># from app.core.controller import initialize_system</span>
+</span><span id="L-95"><a href="#L-95"><span class="linenos"> 95</span></a><span class="k">def</span><span class="w"> </span><span class="nf">configure_logging</span><span class="p">():</span>
+</span><span id="L-96"><a href="#L-96"><span class="linenos"> 96</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;✍🏼 Configure application logging.</span>
+</span><span id="L-97"><a href="#L-97"><span class="linenos"> 97</span></a>
+</span><span id="L-98"><a href="#L-98"><span class="linenos"> 98</span></a><span class="sd">    Returns:</span>
+</span><span id="L-99"><a href="#L-99"><span class="linenos"> 99</span></a><span class="sd">        logging.Logger: The configured logger instance.</span>
+</span><span id="L-100"><a href="#L-100"><span class="linenos">100</span></a><span class="sd">    &quot;&quot;&quot;</span>
+</span><span id="L-101"><a href="#L-101"><span class="linenos">101</span></a>    <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="s2">&quot;mail&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">setLevel</span><span class="p">(</span><span class="n">logging</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">)</span>
+</span><span id="L-102"><a href="#L-102"><span class="linenos">102</span></a>    <span class="k">return</span> <span class="n">setup_logging</span><span class="p">()</span>
 </span><span id="L-103"><a href="#L-103"><span class="linenos">103</span></a>
-</span><span id="L-104"><a href="#L-104"><span class="linenos">104</span></a>    <span class="c1"># @app.before_request</span>
-</span><span id="L-105"><a href="#L-105"><span class="linenos">105</span></a>    <span class="c1"># def before_request():</span>
-</span><span id="L-106"><a href="#L-106"><span class="linenos">106</span></a>    <span class="c1">#     db.create_all()</span>
-</span><span id="L-107"><a href="#L-107"><span class="linenos">107</span></a>    <span class="c1">#     initialize_system()</span>
-</span><span id="L-108"><a href="#L-108"><span class="linenos">108</span></a>
-</span><span id="L-109"><a href="#L-109"><span class="linenos">109</span></a>    <span class="nd">@app</span><span class="o">.</span><span class="n">context_processor</span>
-</span><span id="L-110"><a href="#L-110"><span class="linenos">110</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">inject_debug</span><span class="p">():</span>
-</span><span id="L-111"><a href="#L-111"><span class="linenos">111</span></a>        <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span><span class="n">DEBUG</span><span class="o">=</span><span class="n">app</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="s2">&quot;DEBUG&quot;</span><span class="p">])</span>
-</span><span id="L-112"><a href="#L-112"><span class="linenos">112</span></a>
-</span><span id="L-113"><a href="#L-113"><span class="linenos">113</span></a>    <span class="n">app</span><span class="o">.</span><span class="n">jinja_env</span><span class="o">.</span><span class="n">filters</span><span class="p">[</span><span class="s2">&quot;merge&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">merge_dicts</span>
-</span><span id="L-114"><a href="#L-114"><span class="linenos">114</span></a>    <span class="n">app</span><span class="o">.</span><span class="n">jinja_env</span><span class="o">.</span><span class="n">filters</span><span class="p">[</span><span class="s2">&quot;merge_dicts&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">merge_dicts</span>
-</span><span id="L-115"><a href="#L-115"><span class="linenos">115</span></a>
-</span><span id="L-116"><a href="#L-116"><span class="linenos">116</span></a>    <span class="nd">@app</span><span class="o">.</span><span class="n">context_processor</span>
-</span><span id="L-117"><a href="#L-117"><span class="linenos">117</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">inject_context</span><span class="p">():</span>
-</span><span id="L-118"><a href="#L-118"><span class="linenos">118</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;Agrega múltiples funciones al contexto de Jinja2.&quot;&quot;&quot;</span>
-</span><span id="L-119"><a href="#L-119"><span class="linenos">119</span></a>        <span class="n">context</span> <span class="o">=</span> <span class="p">{}</span>
-</span><span id="L-120"><a href="#L-120"><span class="linenos">120</span></a>        <span class="n">context</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">inject_user</span><span class="p">())</span>
-</span><span id="L-121"><a href="#L-121"><span class="linenos">121</span></a>        <span class="k">return</span> <span class="n">context</span>
+</span><span id="L-104"><a href="#L-104"><span class="linenos">104</span></a>
+</span><span id="L-105"><a href="#L-105"><span class="linenos">105</span></a><span class="k">def</span><span class="w"> </span><span class="nf">create_app</span><span class="p">():</span>
+</span><span id="L-106"><a href="#L-106"><span class="linenos">106</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;🌟 Factory function to create and configure the Flask application.</span>
+</span><span id="L-107"><a href="#L-107"><span class="linenos">107</span></a>
+</span><span id="L-108"><a href="#L-108"><span class="linenos">108</span></a><span class="sd">    Returns:</span>
+</span><span id="L-109"><a href="#L-109"><span class="linenos">109</span></a><span class="sd">        Flask: The configured Flask application instance.</span>
+</span><span id="L-110"><a href="#L-110"><span class="linenos">110</span></a><span class="sd">    &quot;&quot;&quot;</span>
+</span><span id="L-111"><a href="#L-111"><span class="linenos">111</span></a>    <span class="n">app</span> <span class="o">=</span> <span class="n">Flask</span><span class="p">(</span><span class="vm">__name__</span><span class="p">,</span> <span class="n">static_folder</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+</span><span id="L-112"><a href="#L-112"><span class="linenos">112</span></a>    <span class="n">app</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">from_object</span><span class="p">(</span><span class="n">Config</span><span class="p">)</span>
+</span><span id="L-113"><a href="#L-113"><span class="linenos">113</span></a>
+</span><span id="L-114"><a href="#L-114"><span class="linenos">114</span></a>    <span class="c1"># Set template folder based on config theme</span>
+</span><span id="L-115"><a href="#L-115"><span class="linenos">115</span></a>    <span class="n">theme</span> <span class="o">=</span> <span class="n">Config</span><span class="o">.</span><span class="n">THEME</span>
+</span><span id="L-116"><a href="#L-116"><span class="linenos">116</span></a>    <span class="n">template_folder</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">app</span><span class="o">.</span><span class="n">root_path</span><span class="p">,</span> <span class="s2">&quot;templates&quot;</span><span class="p">,</span> <span class="n">theme</span><span class="p">)</span>
+</span><span id="L-117"><a href="#L-117"><span class="linenos">117</span></a>    <span class="n">app</span><span class="o">.</span><span class="n">template_folder</span> <span class="o">=</span> <span class="n">template_folder</span>
+</span><span id="L-118"><a href="#L-118"><span class="linenos">118</span></a>
+</span><span id="L-119"><a href="#L-119"><span class="linenos">119</span></a>    <span class="c1"># Initialize extensions and blueprints</span>
+</span><span id="L-120"><a href="#L-120"><span class="linenos">120</span></a>    <span class="n">init_extensions</span><span class="p">(</span><span class="n">app</span><span class="p">)</span>
+</span><span id="L-121"><a href="#L-121"><span class="linenos">121</span></a>    <span class="n">register_blueprints</span><span class="p">(</span><span class="n">app</span><span class="p">)</span>
 </span><span id="L-122"><a href="#L-122"><span class="linenos">122</span></a>
-</span><span id="L-123"><a href="#L-123"><span class="linenos">123</span></a>    <span class="c1">###############################################################</span>
-</span><span id="L-124"><a href="#L-124"><span class="linenos">124</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-</span><span id="L-125"><a href="#L-125"><span class="linenos">125</span></a><span class="sd">    List all the routes in the application for debugging and api documentation purposes</span>
-</span><span id="L-126"><a href="#L-126"><span class="linenos">126</span></a><span class="sd">    &quot;&quot;&quot;</span>
-</span><span id="L-127"><a href="#L-127"><span class="linenos">127</span></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">flask</span><span class="w"> </span><span class="kn">import</span> <span class="n">render_template</span>
-</span><span id="L-128"><a href="#L-128"><span class="linenos">128</span></a>
-</span><span id="L-129"><a href="#L-129"><span class="linenos">129</span></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">.helpers.route_lister</span><span class="w"> </span><span class="kn">import</span> <span class="n">RouteLister</span>
+</span><span id="L-123"><a href="#L-123"><span class="linenos">123</span></a>    <span class="c1"># Register breadcrumbs context processor (local import avoids circular dependency)</span>
+</span><span id="L-124"><a href="#L-124"><span class="linenos">124</span></a>    <span class="k">try</span><span class="p">:</span>
+</span><span id="L-125"><a href="#L-125"><span class="linenos">125</span></a>        <span class="kn">from</span><span class="w"> </span><span class="nn">.core.navigation</span><span class="w"> </span><span class="kn">import</span> <span class="n">register_breadcrumbs_context</span>
+</span><span id="L-126"><a href="#L-126"><span class="linenos">126</span></a>
+</span><span id="L-127"><a href="#L-127"><span class="linenos">127</span></a>        <span class="n">register_breadcrumbs_context</span><span class="p">(</span><span class="n">app</span><span class="p">)</span>
+</span><span id="L-128"><a href="#L-128"><span class="linenos">128</span></a>    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+</span><span id="L-129"><a href="#L-129"><span class="linenos">129</span></a>        <span class="n">logging</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Could not register breadcrumbs context processor: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 </span><span id="L-130"><a href="#L-130"><span class="linenos">130</span></a>
-</span><span id="L-131"><a href="#L-131"><span class="linenos">131</span></a>    <span class="n">view</span> <span class="o">=</span> <span class="n">RouteLister</span><span class="o">.</span><span class="n">as_view</span><span class="p">(</span><span class="s2">&quot;list_routes&quot;</span><span class="p">)</span>
-</span><span id="L-132"><a href="#L-132"><span class="linenos">132</span></a>    <span class="n">app</span><span class="o">.</span><span class="n">add_url_rule</span><span class="p">(</span><span class="s2">&quot;/list_endpoints&quot;</span><span class="p">,</span> <span class="n">view_func</span><span class="o">=</span><span class="n">view</span><span class="p">)</span>
+</span><span id="L-131"><a href="#L-131"><span class="linenos">131</span></a>    <span class="c1"># Initialize avatar storage directory</span>
+</span><span id="L-132"><a href="#L-132"><span class="linenos">132</span></a>    <span class="n">init_avatar_storage</span><span class="p">(</span><span class="n">app</span><span class="p">)</span>
 </span><span id="L-133"><a href="#L-133"><span class="linenos">133</span></a>
-</span><span id="L-134"><a href="#L-134"><span class="linenos">134</span></a>    <span class="nd">@app</span><span class="o">.</span><span class="n">route</span><span class="p">(</span><span class="s2">&quot;/info&quot;</span><span class="p">)</span>
-</span><span id="L-135"><a href="#L-135"><span class="linenos">135</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">info</span><span class="p">():</span>
-</span><span id="L-136"><a href="#L-136"><span class="linenos">136</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;Página: Información general del proyecto</span>
-</span><span id="L-137"><a href="#L-137"><span class="linenos">137</span></a><span class="sd">        :param None: No requiere parámetros</span>
-</span><span id="L-138"><a href="#L-138"><span class="linenos">138</span></a><span class="sd">        :status 200: Retorna el contenido</span>
-</span><span id="L-139"><a href="#L-139"><span class="linenos">139</span></a><span class="sd">        &quot;&quot;&quot;</span>
-</span><span id="L-140"><a href="#L-140"><span class="linenos">140</span></a>        <span class="n">context</span> <span class="o">=</span> <span class="p">{</span>
-</span><span id="L-141"><a href="#L-141"><span class="linenos">141</span></a>            <span class="s2">&quot;title&quot;</span><span class="p">:</span> <span class="s2">&quot;About Us&quot;</span><span class="p">,</span>
-</span><span id="L-142"><a href="#L-142"><span class="linenos">142</span></a>            <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Descripción general del proyecto.&quot;</span><span class="p">,</span>
-</span><span id="L-143"><a href="#L-143"><span class="linenos">143</span></a>            <span class="s2">&quot;author&quot;</span><span class="p">:</span> <span class="s2">&quot;Johnny De Castro&quot;</span><span class="p">,</span>
-</span><span id="L-144"><a href="#L-144"><span class="linenos">144</span></a>            <span class="s2">&quot;site_title&quot;</span><span class="p">:</span> <span class="s2">&quot;Descripción&quot;</span><span class="p">,</span>
-</span><span id="L-145"><a href="#L-145"><span class="linenos">145</span></a>        <span class="p">}</span>
-</span><span id="L-146"><a href="#L-146"><span class="linenos">146</span></a>
-</span><span id="L-147"><a href="#L-147"><span class="linenos">147</span></a>        <span class="k">return</span> <span class="n">render_template</span><span class="p">(</span><span class="s2">&quot;router_lister.j2&quot;</span><span class="p">,</span> <span class="o">**</span><span class="n">context</span><span class="p">)</span>
-</span><span id="L-148"><a href="#L-148"><span class="linenos">148</span></a>
-</span><span id="L-149"><a href="#L-149"><span class="linenos">149</span></a>    <span class="c1">###############################################################</span>
-</span><span id="L-150"><a href="#L-150"><span class="linenos">150</span></a>
-</span><span id="L-151"><a href="#L-151"><span class="linenos">151</span></a>    <span class="k">return</span> <span class="n">app</span>
+</span><span id="L-134"><a href="#L-134"><span class="linenos">134</span></a>    <span class="c1"># Configure logging and error handling</span>
+</span><span id="L-135"><a href="#L-135"><span class="linenos">135</span></a>    <span class="n">logger</span> <span class="o">=</span> <span class="n">configure_logging</span><span class="p">()</span>
+</span><span id="L-136"><a href="#L-136"><span class="linenos">136</span></a>    <span class="n">error_handler</span><span class="p">(</span><span class="n">app</span><span class="p">,</span> <span class="n">logger</span><span class="p">)</span>
+</span><span id="L-137"><a href="#L-137"><span class="linenos">137</span></a>
+</span><span id="L-138"><a href="#L-138"><span class="linenos">138</span></a>    <span class="c1"># flask url for user refresh token, is very important, the route most be exist</span>
+</span><span id="L-139"><a href="#L-139"><span class="linenos">139</span></a>    <span class="n">app</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="s2">&quot;JWT_REFRESH_COOKIE_PATH&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;/api/core/refresh&quot;</span>
+</span><span id="L-140"><a href="#L-140"><span class="linenos">140</span></a>
+</span><span id="L-141"><a href="#L-141"><span class="linenos">141</span></a>    <span class="c1"># ── Inject CSRF meta tag into HTML responses ──────────────</span>
+</span><span id="L-142"><a href="#L-142"><span class="linenos">142</span></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">flask_jwt_extended</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_csrf_token</span> <span class="k">as</span> <span class="n">jwt_get_csrf</span>
+</span><span id="L-143"><a href="#L-143"><span class="linenos">143</span></a>
+</span><span id="L-144"><a href="#L-144"><span class="linenos">144</span></a>    <span class="nd">@app</span><span class="o">.</span><span class="n">after_request</span>
+</span><span id="L-145"><a href="#L-145"><span class="linenos">145</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">inject_csrf_meta</span><span class="p">(</span><span class="n">response</span><span class="p">):</span>
+</span><span id="L-146"><a href="#L-146"><span class="linenos">146</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="L-147"><a href="#L-147"><span class="linenos">147</span></a><span class="sd">        Insert &lt;meta name=&quot;csrf-token&quot; content=&quot;...&quot;&gt; into HTML &lt;head&gt;.</span>
+</span><span id="L-148"><a href="#L-148"><span class="linenos">148</span></a><span class="sd">        The token comes from the JWT access cookie (csrf_access_token).</span>
+</span><span id="L-149"><a href="#L-149"><span class="linenos">149</span></a><span class="sd">        If no JWT is present (anonymous user), the meta tag is omitted —</span>
+</span><span id="L-150"><a href="#L-150"><span class="linenos">150</span></a><span class="sd">        the JS fallback reads the cookie directly.</span>
+</span><span id="L-151"><a href="#L-151"><span class="linenos">151</span></a><span class="sd">        &quot;&quot;&quot;</span>
+</span><span id="L-152"><a href="#L-152"><span class="linenos">152</span></a>        <span class="n">ct</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">content_type</span> <span class="ow">or</span> <span class="s2">&quot;&quot;</span>
+</span><span id="L-153"><a href="#L-153"><span class="linenos">153</span></a>        <span class="k">if</span> <span class="s2">&quot;text/html&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">ct</span><span class="p">:</span>
+</span><span id="L-154"><a href="#L-154"><span class="linenos">154</span></a>            <span class="k">return</span> <span class="n">response</span>
+</span><span id="L-155"><a href="#L-155"><span class="linenos">155</span></a>
+</span><span id="L-156"><a href="#L-156"><span class="linenos">156</span></a>        <span class="c1"># Try to get CSRF token from the JWT cookie set by flask-jwt-extended</span>
+</span><span id="L-157"><a href="#L-157"><span class="linenos">157</span></a>        <span class="n">csrf_cookie</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">cookies</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;csrf_access_token&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+</span><span id="L-158"><a href="#L-158"><span class="linenos">158</span></a>        <span class="k">if</span> <span class="ow">not</span> <span class="n">csrf_cookie</span><span class="p">:</span>
+</span><span id="L-159"><a href="#L-159"><span class="linenos">159</span></a>            <span class="c1"># Also check flask-wtf style cookie</span>
+</span><span id="L-160"><a href="#L-160"><span class="linenos">160</span></a>            <span class="n">csrf_cookie</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">cookies</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;csrf_token&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+</span><span id="L-161"><a href="#L-161"><span class="linenos">161</span></a>
+</span><span id="L-162"><a href="#L-162"><span class="linenos">162</span></a>        <span class="k">if</span> <span class="n">csrf_cookie</span> <span class="ow">and</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">&lt;</span> <span class="mi">400</span><span class="p">:</span>
+</span><span id="L-163"><a href="#L-163"><span class="linenos">163</span></a>            <span class="n">meta_tag</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;&lt;meta name=&quot;csrf-token&quot; content=&quot;</span><span class="si">{</span><span class="n">csrf_cookie</span><span class="si">}</span><span class="s1">&quot;&gt;&#39;</span>
+</span><span id="L-164"><a href="#L-164"><span class="linenos">164</span></a>            <span class="c1"># Insert before &lt;/head&gt;</span>
+</span><span id="L-165"><a href="#L-165"><span class="linenos">165</span></a>            <span class="n">body</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">get_data</span><span class="p">(</span><span class="n">as_text</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span><span id="L-166"><a href="#L-166"><span class="linenos">166</span></a>            <span class="n">marker</span> <span class="o">=</span> <span class="s2">&quot;&lt;/head&gt;&quot;</span>
+</span><span id="L-167"><a href="#L-167"><span class="linenos">167</span></a>            <span class="k">if</span> <span class="n">marker</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="ow">in</span> <span class="n">body</span><span class="o">.</span><span class="n">lower</span><span class="p">():</span>
+</span><span id="L-168"><a href="#L-168"><span class="linenos">168</span></a>                <span class="c1"># Case-insensitive replace</span>
+</span><span id="L-169"><a href="#L-169"><span class="linenos">169</span></a>                <span class="n">idx</span> <span class="o">=</span> <span class="n">body</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">marker</span><span class="p">)</span>
+</span><span id="L-170"><a href="#L-170"><span class="linenos">170</span></a>                <span class="n">body</span> <span class="o">=</span> <span class="n">body</span><span class="p">[:</span><span class="n">idx</span><span class="p">]</span> <span class="o">+</span> <span class="sa">f</span><span class="s2">&quot;    </span><span class="si">{</span><span class="n">meta_tag</span><span class="si">}</span><span class="se">\n</span><span class="s2">&quot;</span> <span class="o">+</span> <span class="n">body</span><span class="p">[</span><span class="n">idx</span><span class="p">:]</span>
+</span><span id="L-171"><a href="#L-171"><span class="linenos">171</span></a>                <span class="n">response</span><span class="o">.</span><span class="n">set_data</span><span class="p">(</span><span class="n">body</span><span class="p">)</span>
+</span><span id="L-172"><a href="#L-172"><span class="linenos">172</span></a>
+</span><span id="L-173"><a href="#L-173"><span class="linenos">173</span></a>        <span class="k">return</span> <span class="n">response</span>
+</span><span id="L-174"><a href="#L-174"><span class="linenos">174</span></a>
+</span><span id="L-175"><a href="#L-175"><span class="linenos">175</span></a>    <span class="c1"># from app.core.controller import initialize_system</span>
+</span><span id="L-176"><a href="#L-176"><span class="linenos">176</span></a>
+</span><span id="L-177"><a href="#L-177"><span class="linenos">177</span></a>    <span class="c1"># @app.before_request</span>
+</span><span id="L-178"><a href="#L-178"><span class="linenos">178</span></a>    <span class="c1"># def before_request():</span>
+</span><span id="L-179"><a href="#L-179"><span class="linenos">179</span></a>    <span class="c1">#     db.create_all()</span>
+</span><span id="L-180"><a href="#L-180"><span class="linenos">180</span></a>    <span class="c1">#     initialize_system()</span>
+</span><span id="L-181"><a href="#L-181"><span class="linenos">181</span></a>
+</span><span id="L-182"><a href="#L-182"><span class="linenos">182</span></a>    <span class="nd">@app</span><span class="o">.</span><span class="n">context_processor</span>
+</span><span id="L-183"><a href="#L-183"><span class="linenos">183</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">inject_debug</span><span class="p">():</span>
+</span><span id="L-184"><a href="#L-184"><span class="linenos">184</span></a>        <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span><span class="n">DEBUG</span><span class="o">=</span><span class="n">app</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="s2">&quot;DEBUG&quot;</span><span class="p">])</span>
+</span><span id="L-185"><a href="#L-185"><span class="linenos">185</span></a>
+</span><span id="L-186"><a href="#L-186"><span class="linenos">186</span></a>    <span class="n">app</span><span class="o">.</span><span class="n">jinja_env</span><span class="o">.</span><span class="n">filters</span><span class="p">[</span><span class="s2">&quot;merge&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">merge_dicts</span>
+</span><span id="L-187"><a href="#L-187"><span class="linenos">187</span></a>    <span class="n">app</span><span class="o">.</span><span class="n">jinja_env</span><span class="o">.</span><span class="n">filters</span><span class="p">[</span><span class="s2">&quot;merge_dicts&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">merge_dicts</span>
+</span><span id="L-188"><a href="#L-188"><span class="linenos">188</span></a>
+</span><span id="L-189"><a href="#L-189"><span class="linenos">189</span></a>    <span class="nd">@app</span><span class="o">.</span><span class="n">context_processor</span>
+</span><span id="L-190"><a href="#L-190"><span class="linenos">190</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">inject_context</span><span class="p">():</span>
+</span><span id="L-191"><a href="#L-191"><span class="linenos">191</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;Agrega múltiples funciones al contexto de Jinja2.&quot;&quot;&quot;</span>
+</span><span id="L-192"><a href="#L-192"><span class="linenos">192</span></a>        <span class="n">context</span> <span class="o">=</span> <span class="p">{}</span>
+</span><span id="L-193"><a href="#L-193"><span class="linenos">193</span></a>        <span class="n">context</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">inject_user</span><span class="p">())</span>
+</span><span id="L-194"><a href="#L-194"><span class="linenos">194</span></a>        <span class="k">return</span> <span class="n">context</span>
+</span><span id="L-195"><a href="#L-195"><span class="linenos">195</span></a>
+</span><span id="L-196"><a href="#L-196"><span class="linenos">196</span></a>    <span class="c1">###############################################################</span>
+</span><span id="L-197"><a href="#L-197"><span class="linenos">197</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="L-198"><a href="#L-198"><span class="linenos">198</span></a><span class="sd">    List all the routes in the application for debugging and api documentation purposes</span>
+</span><span id="L-199"><a href="#L-199"><span class="linenos">199</span></a><span class="sd">    &quot;&quot;&quot;</span>
+</span><span id="L-200"><a href="#L-200"><span class="linenos">200</span></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">flask</span><span class="w"> </span><span class="kn">import</span> <span class="n">render_template</span>
+</span><span id="L-201"><a href="#L-201"><span class="linenos">201</span></a>
+</span><span id="L-202"><a href="#L-202"><span class="linenos">202</span></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">.helpers.route_lister</span><span class="w"> </span><span class="kn">import</span> <span class="n">RouteLister</span>
+</span><span id="L-203"><a href="#L-203"><span class="linenos">203</span></a>
+</span><span id="L-204"><a href="#L-204"><span class="linenos">204</span></a>    <span class="n">view</span> <span class="o">=</span> <span class="n">RouteLister</span><span class="o">.</span><span class="n">as_view</span><span class="p">(</span><span class="s2">&quot;list_routes&quot;</span><span class="p">)</span>
+</span><span id="L-205"><a href="#L-205"><span class="linenos">205</span></a>    <span class="n">app</span><span class="o">.</span><span class="n">add_url_rule</span><span class="p">(</span><span class="s2">&quot;/list_endpoints&quot;</span><span class="p">,</span> <span class="n">view_func</span><span class="o">=</span><span class="n">view</span><span class="p">)</span>
+</span><span id="L-206"><a href="#L-206"><span class="linenos">206</span></a>
+</span><span id="L-207"><a href="#L-207"><span class="linenos">207</span></a>    <span class="nd">@app</span><span class="o">.</span><span class="n">route</span><span class="p">(</span><span class="s2">&quot;/info&quot;</span><span class="p">)</span>
+</span><span id="L-208"><a href="#L-208"><span class="linenos">208</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">info</span><span class="p">():</span>
+</span><span id="L-209"><a href="#L-209"><span class="linenos">209</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;Página: Información general del proyecto</span>
+</span><span id="L-210"><a href="#L-210"><span class="linenos">210</span></a>
+</span><span id="L-211"><a href="#L-211"><span class="linenos">211</span></a><span class="sd">        Acceso controlado por modo DEBUG:</span>
+</span><span id="L-212"><a href="#L-212"><span class="linenos">212</span></a><span class="sd">        - DEBUG=True: acceso público (desarrollo)</span>
+</span><span id="L-213"><a href="#L-213"><span class="linenos">213</span></a><span class="sd">        - DEBUG=False: solo usuarios administradores (producción)</span>
+</span><span id="L-214"><a href="#L-214"><span class="linenos">214</span></a>
+</span><span id="L-215"><a href="#L-215"><span class="linenos">215</span></a><span class="sd">        :param None: No requiere parámetros</span>
+</span><span id="L-216"><a href="#L-216"><span class="linenos">216</span></a><span class="sd">        :status 200: Retorna el contenido</span>
+</span><span id="L-217"><a href="#L-217"><span class="linenos">217</span></a><span class="sd">        :status 403: Acceso denegado en producción para no-administradores</span>
+</span><span id="L-218"><a href="#L-218"><span class="linenos">218</span></a><span class="sd">        &quot;&quot;&quot;</span>
+</span><span id="L-219"><a href="#L-219"><span class="linenos">219</span></a>        <span class="kn">from</span><span class="w"> </span><span class="nn">flask</span><span class="w"> </span><span class="kn">import</span> <span class="n">abort</span>
+</span><span id="L-220"><a href="#L-220"><span class="linenos">220</span></a>        <span class="kn">from</span><span class="w"> </span><span class="nn">flask_jwt_extended</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_jwt_identity</span>
+</span><span id="L-221"><a href="#L-221"><span class="linenos">221</span></a>
+</span><span id="L-222"><a href="#L-222"><span class="linenos">222</span></a>        <span class="kn">from</span><span class="w"> </span><span class="nn">app.core.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">User</span>
+</span><span id="L-223"><a href="#L-223"><span class="linenos">223</span></a>
+</span><span id="L-224"><a href="#L-224"><span class="linenos">224</span></a>        <span class="c1"># Si DEBUG está activado, acceso público</span>
+</span><span id="L-225"><a href="#L-225"><span class="linenos">225</span></a>        <span class="k">if</span> <span class="n">app</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;DEBUG&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
+</span><span id="L-226"><a href="#L-226"><span class="linenos">226</span></a>            <span class="n">context</span> <span class="o">=</span> <span class="p">{</span>
+</span><span id="L-227"><a href="#L-227"><span class="linenos">227</span></a>                <span class="s2">&quot;title&quot;</span><span class="p">:</span> <span class="s2">&quot;About Us&quot;</span><span class="p">,</span>
+</span><span id="L-228"><a href="#L-228"><span class="linenos">228</span></a>                <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Descripción general del proyecto.&quot;</span><span class="p">,</span>
+</span><span id="L-229"><a href="#L-229"><span class="linenos">229</span></a>                <span class="s2">&quot;author&quot;</span><span class="p">:</span> <span class="s2">&quot;Johnny De Castro&quot;</span><span class="p">,</span>
+</span><span id="L-230"><a href="#L-230"><span class="linenos">230</span></a>                <span class="s2">&quot;site_title&quot;</span><span class="p">:</span> <span class="s2">&quot;Descripción&quot;</span><span class="p">,</span>
+</span><span id="L-231"><a href="#L-231"><span class="linenos">231</span></a>            <span class="p">}</span>
+</span><span id="L-232"><a href="#L-232"><span class="linenos">232</span></a>            <span class="k">return</span> <span class="n">render_template</span><span class="p">(</span><span class="s2">&quot;router_lister.j2&quot;</span><span class="p">,</span> <span class="o">**</span><span class="n">context</span><span class="p">)</span>
+</span><span id="L-233"><a href="#L-233"><span class="linenos">233</span></a>
+</span><span id="L-234"><a href="#L-234"><span class="linenos">234</span></a>        <span class="c1"># En producción, verificar que el usuario sea administrador</span>
+</span><span id="L-235"><a href="#L-235"><span class="linenos">235</span></a>        <span class="n">user_id</span> <span class="o">=</span> <span class="n">get_jwt_identity</span><span class="p">()</span>
+</span><span id="L-236"><a href="#L-236"><span class="linenos">236</span></a>        <span class="k">if</span> <span class="ow">not</span> <span class="n">user_id</span><span class="p">:</span>
+</span><span id="L-237"><a href="#L-237"><span class="linenos">237</span></a>            <span class="n">abort</span><span class="p">(</span><span class="mi">403</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Authentication required in production mode&quot;</span><span class="p">)</span>
+</span><span id="L-238"><a href="#L-238"><span class="linenos">238</span></a>
+</span><span id="L-239"><a href="#L-239"><span class="linenos">239</span></a>        <span class="n">user</span> <span class="o">=</span> <span class="n">User</span><span class="o">.</span><span class="n">query</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">user_id</span><span class="p">)</span>
+</span><span id="L-240"><a href="#L-240"><span class="linenos">240</span></a>        <span class="k">if</span> <span class="ow">not</span> <span class="n">user</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">user</span><span class="o">.</span><span class="n">is_admin</span><span class="p">():</span>
+</span><span id="L-241"><a href="#L-241"><span class="linenos">241</span></a>            <span class="n">abort</span><span class="p">(</span><span class="mi">403</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Admin privileges required in production mode&quot;</span><span class="p">)</span>
+</span><span id="L-242"><a href="#L-242"><span class="linenos">242</span></a>
+</span><span id="L-243"><a href="#L-243"><span class="linenos">243</span></a>        <span class="n">context</span> <span class="o">=</span> <span class="p">{</span>
+</span><span id="L-244"><a href="#L-244"><span class="linenos">244</span></a>            <span class="s2">&quot;title&quot;</span><span class="p">:</span> <span class="s2">&quot;About Us&quot;</span><span class="p">,</span>
+</span><span id="L-245"><a href="#L-245"><span class="linenos">245</span></a>            <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Descripción general del proyecto.&quot;</span><span class="p">,</span>
+</span><span id="L-246"><a href="#L-246"><span class="linenos">246</span></a>            <span class="s2">&quot;author&quot;</span><span class="p">:</span> <span class="s2">&quot;Johnny De Castro&quot;</span><span class="p">,</span>
+</span><span id="L-247"><a href="#L-247"><span class="linenos">247</span></a>            <span class="s2">&quot;site_title&quot;</span><span class="p">:</span> <span class="s2">&quot;Descripción&quot;</span><span class="p">,</span>
+</span><span id="L-248"><a href="#L-248"><span class="linenos">248</span></a>        <span class="p">}</span>
+</span><span id="L-249"><a href="#L-249"><span class="linenos">249</span></a>        <span class="k">return</span> <span class="n">render_template</span><span class="p">(</span><span class="s2">&quot;router_lister.j2&quot;</span><span class="p">,</span> <span class="o">**</span><span class="n">context</span><span class="p">)</span>
+</span><span id="L-250"><a href="#L-250"><span class="linenos">250</span></a>
+</span><span id="L-251"><a href="#L-251"><span class="linenos">251</span></a>    <span class="c1">###############################################################</span>
+</span><span id="L-252"><a href="#L-252"><span class="linenos">252</span></a>
+</span><span id="L-253"><a href="#L-253"><span class="linenos">253</span></a>    <span class="k">return</span> <span class="n">app</span>
 </span></pre></div>
 
 
@@ -246,6 +351,14 @@ app    </h1>
 </span><span id="init_extensions-29"><a href="#init_extensions-29"><span class="linenos">29</span></a>    <span class="n">db</span><span class="o">.</span><span class="n">init_app</span><span class="p">(</span><span class="n">app</span><span class="p">)</span>
 </span><span id="init_extensions-30"><a href="#init_extensions-30"><span class="linenos">30</span></a>    <span class="n">migrate</span><span class="o">.</span><span class="n">init_app</span><span class="p">(</span><span class="n">app</span><span class="p">,</span> <span class="n">db</span><span class="p">)</span>
 </span><span id="init_extensions-31"><a href="#init_extensions-31"><span class="linenos">31</span></a>    <span class="n">cache</span><span class="o">.</span><span class="n">init_app</span><span class="p">(</span><span class="n">app</span><span class="p">)</span>
+</span><span id="init_extensions-32"><a href="#init_extensions-32"><span class="linenos">32</span></a>
+</span><span id="init_extensions-33"><a href="#init_extensions-33"><span class="linenos">33</span></a>    <span class="c1"># Configure rate limiter storage (Redis if available, else memory)</span>
+</span><span id="init_extensions-34"><a href="#init_extensions-34"><span class="linenos">34</span></a>    <span class="c1"># RATELIMIT_STORAGE_URI must be set in app.config BEFORE init_app</span>
+</span><span id="init_extensions-35"><a href="#init_extensions-35"><span class="linenos">35</span></a>    <span class="k">if</span> <span class="n">app</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;CACHE_REDIS_URL&quot;</span><span class="p">):</span>
+</span><span id="init_extensions-36"><a href="#init_extensions-36"><span class="linenos">36</span></a>        <span class="n">app</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="s2">&quot;RATELIMIT_STORAGE_URI&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">app</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="s2">&quot;CACHE_REDIS_URL&quot;</span><span class="p">]</span>
+</span><span id="init_extensions-37"><a href="#init_extensions-37"><span class="linenos">37</span></a>    <span class="k">else</span><span class="p">:</span>
+</span><span id="init_extensions-38"><a href="#init_extensions-38"><span class="linenos">38</span></a>        <span class="n">app</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;RATELIMIT_STORAGE_URI&quot;</span><span class="p">,</span> <span class="s2">&quot;memory://&quot;</span><span class="p">)</span>
+</span><span id="init_extensions-39"><a href="#init_extensions-39"><span class="linenos">39</span></a>    <span class="n">limiter</span><span class="o">.</span><span class="n">init_app</span><span class="p">(</span><span class="n">app</span><span class="p">)</span>
 </span></pre></div>
 
 
@@ -271,41 +384,85 @@ app    </h1>
 
     </div>
     <a class="headerlink" href="#register_blueprints"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="register_blueprints-34"><a href="#register_blueprints-34"><span class="linenos">34</span></a><span class="k">def</span><span class="w"> </span><span class="nf">register_blueprints</span><span class="p">(</span><span class="n">app</span><span class="p">):</span>
-</span><span id="register_blueprints-35"><a href="#register_blueprints-35"><span class="linenos">35</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-</span><span id="register_blueprints-36"><a href="#register_blueprints-36"><span class="linenos">36</span></a><span class="sd">    Register Flask Blueprints from the configuration.</span>
-</span><span id="register_blueprints-37"><a href="#register_blueprints-37"><span class="linenos">37</span></a>
-</span><span id="register_blueprints-38"><a href="#register_blueprints-38"><span class="linenos">38</span></a><span class="sd">    Args:</span>
-</span><span id="register_blueprints-39"><a href="#register_blueprints-39"><span class="linenos">39</span></a><span class="sd">        app (Flask): The Flask application instance.</span>
-</span><span id="register_blueprints-40"><a href="#register_blueprints-40"><span class="linenos">40</span></a><span class="sd">    &quot;&quot;&quot;</span>
-</span><span id="register_blueprints-41"><a href="#register_blueprints-41"><span class="linenos">41</span></a>    <span class="k">if</span> <span class="n">Config</span><span class="o">.</span><span class="n">CORE</span> <span class="o">==</span> <span class="kc">True</span><span class="p">:</span>
-</span><span id="register_blueprints-42"><a href="#register_blueprints-42"><span class="linenos">42</span></a>        <span class="k">try</span><span class="p">:</span>
-</span><span id="register_blueprints-43"><a href="#register_blueprints-43"><span class="linenos">43</span></a>            <span class="kn">from</span><span class="w"> </span><span class="nn">app.core</span><span class="w"> </span><span class="kn">import</span> <span class="n">core</span><span class="p">,</span> <span class="n">core_api</span>
-</span><span id="register_blueprints-44"><a href="#register_blueprints-44"><span class="linenos">44</span></a>
-</span><span id="register_blueprints-45"><a href="#register_blueprints-45"><span class="linenos">45</span></a>            <span class="n">app</span><span class="o">.</span><span class="n">register_blueprint</span><span class="p">(</span><span class="n">core</span><span class="p">)</span>
-</span><span id="register_blueprints-46"><a href="#register_blueprints-46"><span class="linenos">46</span></a>            <span class="n">app</span><span class="o">.</span><span class="n">register_blueprint</span><span class="p">(</span><span class="n">core_api</span><span class="p">)</span>
-</span><span id="register_blueprints-47"><a href="#register_blueprints-47"><span class="linenos">47</span></a>        <span class="k">except</span> <span class="ne">ImportError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-</span><span id="register_blueprints-48"><a href="#register_blueprints-48"><span class="linenos">48</span></a>            <span class="n">logging</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to import core module: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-</span><span id="register_blueprints-49"><a href="#register_blueprints-49"><span class="linenos">49</span></a>
-</span><span id="register_blueprints-50"><a href="#register_blueprints-50"><span class="linenos">50</span></a>    <span class="k">for</span> <span class="n">module</span> <span class="ow">in</span> <span class="n">Config</span><span class="o">.</span><span class="n">MODULES</span><span class="p">:</span>
-</span><span id="register_blueprints-51"><a href="#register_blueprints-51"><span class="linenos">51</span></a>        <span class="n">module_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;app.modules.</span><span class="si">{</span><span class="n">module</span><span class="si">}</span><span class="s2">&quot;</span>
-</span><span id="register_blueprints-52"><a href="#register_blueprints-52"><span class="linenos">52</span></a>        <span class="k">try</span><span class="p">:</span>
-</span><span id="register_blueprints-53"><a href="#register_blueprints-53"><span class="linenos">53</span></a>            <span class="n">module_obj</span> <span class="o">=</span> <span class="n">import_module</span><span class="p">(</span><span class="n">module_name</span><span class="p">)</span>
-</span><span id="register_blueprints-54"><a href="#register_blueprints-54"><span class="linenos">54</span></a>            <span class="n">blueprint_web</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">module_obj</span><span class="p">,</span> <span class="n">module</span><span class="p">)</span>
-</span><span id="register_blueprints-55"><a href="#register_blueprints-55"><span class="linenos">55</span></a>            <span class="n">app</span><span class="o">.</span><span class="n">register_blueprint</span><span class="p">(</span><span class="n">blueprint_web</span><span class="p">)</span>
-</span><span id="register_blueprints-56"><a href="#register_blueprints-56"><span class="linenos">56</span></a>
-</span><span id="register_blueprints-57"><a href="#register_blueprints-57"><span class="linenos">57</span></a>            <span class="c1"># Verificar si existe el blueprint MODULE_api</span>
-</span><span id="register_blueprints-58"><a href="#register_blueprints-58"><span class="linenos">58</span></a>            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">module_obj</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">module</span><span class="si">}</span><span class="s2">_api&quot;</span><span class="p">):</span>
-</span><span id="register_blueprints-59"><a href="#register_blueprints-59"><span class="linenos">59</span></a>                <span class="n">blueprint_api</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">module_obj</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">module</span><span class="si">}</span><span class="s2">_api&quot;</span><span class="p">)</span>
-</span><span id="register_blueprints-60"><a href="#register_blueprints-60"><span class="linenos">60</span></a>                <span class="n">app</span><span class="o">.</span><span class="n">register_blueprint</span><span class="p">(</span><span class="n">blueprint_api</span><span class="p">)</span>
-</span><span id="register_blueprints-61"><a href="#register_blueprints-61"><span class="linenos">61</span></a>        <span class="k">except</span> <span class="ne">ImportError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-</span><span id="register_blueprints-62"><a href="#register_blueprints-62"><span class="linenos">62</span></a>            <span class="n">logging</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to import module </span><span class="si">{</span><span class="n">module_name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-</span><span id="register_blueprints-63"><a href="#register_blueprints-63"><span class="linenos">63</span></a>        <span class="k">except</span> <span class="ne">AttributeError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-</span><span id="register_blueprints-64"><a href="#register_blueprints-64"><span class="linenos">64</span></a>            <span class="n">logging</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Blueprint </span><span class="si">{</span><span class="n">module</span><span class="si">}</span><span class="s2"> not found in module </span><span class="si">{</span><span class="n">module_name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="register_blueprints-42"><a href="#register_blueprints-42"><span class="linenos">42</span></a><span class="k">def</span><span class="w"> </span><span class="nf">register_blueprints</span><span class="p">(</span><span class="n">app</span><span class="p">):</span>
+</span><span id="register_blueprints-43"><a href="#register_blueprints-43"><span class="linenos">43</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="register_blueprints-44"><a href="#register_blueprints-44"><span class="linenos">44</span></a><span class="sd">    Register Flask Blueprints from the configuration.</span>
+</span><span id="register_blueprints-45"><a href="#register_blueprints-45"><span class="linenos">45</span></a>
+</span><span id="register_blueprints-46"><a href="#register_blueprints-46"><span class="linenos">46</span></a><span class="sd">    Args:</span>
+</span><span id="register_blueprints-47"><a href="#register_blueprints-47"><span class="linenos">47</span></a><span class="sd">        app (Flask): The Flask application instance.</span>
+</span><span id="register_blueprints-48"><a href="#register_blueprints-48"><span class="linenos">48</span></a><span class="sd">    &quot;&quot;&quot;</span>
+</span><span id="register_blueprints-49"><a href="#register_blueprints-49"><span class="linenos">49</span></a>    <span class="k">if</span> <span class="n">Config</span><span class="o">.</span><span class="n">CORE</span> <span class="o">==</span> <span class="kc">True</span><span class="p">:</span>
+</span><span id="register_blueprints-50"><a href="#register_blueprints-50"><span class="linenos">50</span></a>        <span class="k">try</span><span class="p">:</span>
+</span><span id="register_blueprints-51"><a href="#register_blueprints-51"><span class="linenos">51</span></a>            <span class="kn">from</span><span class="w"> </span><span class="nn">app.core</span><span class="w"> </span><span class="kn">import</span> <span class="n">core</span><span class="p">,</span> <span class="n">core_api</span><span class="p">,</span> <span class="n">core_api_v1</span>
+</span><span id="register_blueprints-52"><a href="#register_blueprints-52"><span class="linenos">52</span></a>
+</span><span id="register_blueprints-53"><a href="#register_blueprints-53"><span class="linenos">53</span></a>            <span class="n">app</span><span class="o">.</span><span class="n">register_blueprint</span><span class="p">(</span><span class="n">core</span><span class="p">)</span>
+</span><span id="register_blueprints-54"><a href="#register_blueprints-54"><span class="linenos">54</span></a>            <span class="n">app</span><span class="o">.</span><span class="n">register_blueprint</span><span class="p">(</span><span class="n">core_api</span><span class="p">)</span>
+</span><span id="register_blueprints-55"><a href="#register_blueprints-55"><span class="linenos">55</span></a>            <span class="n">app</span><span class="o">.</span><span class="n">register_blueprint</span><span class="p">(</span><span class="n">core_api_v1</span><span class="p">)</span>
+</span><span id="register_blueprints-56"><a href="#register_blueprints-56"><span class="linenos">56</span></a>        <span class="k">except</span> <span class="ne">ImportError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+</span><span id="register_blueprints-57"><a href="#register_blueprints-57"><span class="linenos">57</span></a>            <span class="n">logging</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to import core module: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</span><span id="register_blueprints-58"><a href="#register_blueprints-58"><span class="linenos">58</span></a>
+</span><span id="register_blueprints-59"><a href="#register_blueprints-59"><span class="linenos">59</span></a>    <span class="k">for</span> <span class="n">module</span> <span class="ow">in</span> <span class="n">Config</span><span class="o">.</span><span class="n">MODULES</span><span class="p">:</span>
+</span><span id="register_blueprints-60"><a href="#register_blueprints-60"><span class="linenos">60</span></a>        <span class="n">module_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;app.modules.</span><span class="si">{</span><span class="n">module</span><span class="si">}</span><span class="s2">&quot;</span>
+</span><span id="register_blueprints-61"><a href="#register_blueprints-61"><span class="linenos">61</span></a>        <span class="k">try</span><span class="p">:</span>
+</span><span id="register_blueprints-62"><a href="#register_blueprints-62"><span class="linenos">62</span></a>            <span class="n">module_obj</span> <span class="o">=</span> <span class="n">import_module</span><span class="p">(</span><span class="n">module_name</span><span class="p">)</span>
+</span><span id="register_blueprints-63"><a href="#register_blueprints-63"><span class="linenos">63</span></a>            <span class="n">blueprint_web</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">module_obj</span><span class="p">,</span> <span class="n">module</span><span class="p">)</span>
+</span><span id="register_blueprints-64"><a href="#register_blueprints-64"><span class="linenos">64</span></a>            <span class="n">app</span><span class="o">.</span><span class="n">register_blueprint</span><span class="p">(</span><span class="n">blueprint_web</span><span class="p">)</span>
+</span><span id="register_blueprints-65"><a href="#register_blueprints-65"><span class="linenos">65</span></a>
+</span><span id="register_blueprints-66"><a href="#register_blueprints-66"><span class="linenos">66</span></a>            <span class="c1"># Verificar si existe el blueprint MODULE_api</span>
+</span><span id="register_blueprints-67"><a href="#register_blueprints-67"><span class="linenos">67</span></a>            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">module_obj</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">module</span><span class="si">}</span><span class="s2">_api&quot;</span><span class="p">):</span>
+</span><span id="register_blueprints-68"><a href="#register_blueprints-68"><span class="linenos">68</span></a>                <span class="n">blueprint_api</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">module_obj</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">module</span><span class="si">}</span><span class="s2">_api&quot;</span><span class="p">)</span>
+</span><span id="register_blueprints-69"><a href="#register_blueprints-69"><span class="linenos">69</span></a>                <span class="n">app</span><span class="o">.</span><span class="n">register_blueprint</span><span class="p">(</span><span class="n">blueprint_api</span><span class="p">)</span>
+</span><span id="register_blueprints-70"><a href="#register_blueprints-70"><span class="linenos">70</span></a>        <span class="k">except</span> <span class="ne">ImportError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+</span><span id="register_blueprints-71"><a href="#register_blueprints-71"><span class="linenos">71</span></a>            <span class="n">logging</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to import module </span><span class="si">{</span><span class="n">module_name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</span><span id="register_blueprints-72"><a href="#register_blueprints-72"><span class="linenos">72</span></a>        <span class="k">except</span> <span class="ne">AttributeError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+</span><span id="register_blueprints-73"><a href="#register_blueprints-73"><span class="linenos">73</span></a>            <span class="n">logging</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Blueprint </span><span class="si">{</span><span class="n">module</span><span class="si">}</span><span class="s2"> not found in module </span><span class="si">{</span><span class="n">module_name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 </span></pre></div>
 
 
             <div class="docstring"><p>Register Flask Blueprints from the configuration.</p>
+
+<h6 id="arguments">Arguments:</h6>
+
+<ul>
+<li><strong>app (Flask):</strong>  The Flask application instance.</li>
+</ul>
+</div>
+
+
+                </section>
+                <section id="init_avatar_storage">
+                            <input id="init_avatar_storage-view-source" class="view-source-toggle-state" type="checkbox" aria-hidden="true" tabindex="-1">
+<div class="attr function">
+            
+        <span class="def">def</span>
+        <span class="name">init_avatar_storage</span><span class="signature pdoc-code condensed">(<span class="param"><span class="n">app</span></span><span class="return-annotation">):</span></span>
+
+                <label class="view-source-button" for="init_avatar_storage-view-source"><span>View Source</span></label>
+
+    </div>
+    <a class="headerlink" href="#init_avatar_storage"></a>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="init_avatar_storage-76"><a href="#init_avatar_storage-76"><span class="linenos">76</span></a><span class="k">def</span><span class="w"> </span><span class="nf">init_avatar_storage</span><span class="p">(</span><span class="n">app</span><span class="p">):</span>
+</span><span id="init_avatar_storage-77"><a href="#init_avatar_storage-77"><span class="linenos">77</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Initialize avatar storage directory at application startup.</span>
+</span><span id="init_avatar_storage-78"><a href="#init_avatar_storage-78"><span class="linenos">78</span></a>
+</span><span id="init_avatar_storage-79"><a href="#init_avatar_storage-79"><span class="linenos">79</span></a><span class="sd">    Args:</span>
+</span><span id="init_avatar_storage-80"><a href="#init_avatar_storage-80"><span class="linenos">80</span></a><span class="sd">        app (Flask): The Flask application instance.</span>
+</span><span id="init_avatar_storage-81"><a href="#init_avatar_storage-81"><span class="linenos">81</span></a><span class="sd">    &quot;&quot;&quot;</span>
+</span><span id="init_avatar_storage-82"><a href="#init_avatar_storage-82"><span class="linenos">82</span></a>    <span class="k">try</span><span class="p">:</span>
+</span><span id="init_avatar_storage-83"><a href="#init_avatar_storage-83"><span class="linenos">83</span></a>        <span class="kn">from</span><span class="w"> </span><span class="nn">app.core.services.avatar_service</span><span class="w"> </span><span class="kn">import</span> <span class="n">AvatarService</span>
+</span><span id="init_avatar_storage-84"><a href="#init_avatar_storage-84"><span class="linenos">84</span></a>
+</span><span id="init_avatar_storage-85"><a href="#init_avatar_storage-85"><span class="linenos">85</span></a>        <span class="c1"># Usar app context para que current_app esté disponible</span>
+</span><span id="init_avatar_storage-86"><a href="#init_avatar_storage-86"><span class="linenos">86</span></a>        <span class="c1"># (necesario para acceder a app.config durante flask db migrate)</span>
+</span><span id="init_avatar_storage-87"><a href="#init_avatar_storage-87"><span class="linenos">87</span></a>        <span class="k">with</span> <span class="n">app</span><span class="o">.</span><span class="n">app_context</span><span class="p">():</span>
+</span><span id="init_avatar_storage-88"><a href="#init_avatar_storage-88"><span class="linenos">88</span></a>            <span class="n">AvatarService</span><span class="o">.</span><span class="n">ensure_storage_directory</span><span class="p">()</span>
+</span><span id="init_avatar_storage-89"><a href="#init_avatar_storage-89"><span class="linenos">89</span></a>            <span class="n">app</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Avatar storage directory initialized&quot;</span><span class="p">)</span>
+</span><span id="init_avatar_storage-90"><a href="#init_avatar_storage-90"><span class="linenos">90</span></a>    <span class="k">except</span> <span class="ne">ImportError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+</span><span id="init_avatar_storage-91"><a href="#init_avatar_storage-91"><span class="linenos">91</span></a>        <span class="n">app</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Cannot initialize avatar storage: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</span><span id="init_avatar_storage-92"><a href="#init_avatar_storage-92"><span class="linenos">92</span></a>    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+</span><span id="init_avatar_storage-93"><a href="#init_avatar_storage-93"><span class="linenos">93</span></a>        <span class="n">app</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to initialize avatar storage directory: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</span></pre></div>
+
+
+            <div class="docstring"><p>Initialize avatar storage directory at application startup.</p>
 
 <h6 id="arguments">Arguments:</h6>
 
@@ -327,14 +484,14 @@ app    </h1>
 
     </div>
     <a class="headerlink" href="#configure_logging"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="configure_logging-67"><a href="#configure_logging-67"><span class="linenos">67</span></a><span class="k">def</span><span class="w"> </span><span class="nf">configure_logging</span><span class="p">():</span>
-</span><span id="configure_logging-68"><a href="#configure_logging-68"><span class="linenos">68</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;✍🏼 Configure application logging.</span>
-</span><span id="configure_logging-69"><a href="#configure_logging-69"><span class="linenos">69</span></a>
-</span><span id="configure_logging-70"><a href="#configure_logging-70"><span class="linenos">70</span></a><span class="sd">    Returns:</span>
-</span><span id="configure_logging-71"><a href="#configure_logging-71"><span class="linenos">71</span></a><span class="sd">        logging.Logger: The configured logger instance.</span>
-</span><span id="configure_logging-72"><a href="#configure_logging-72"><span class="linenos">72</span></a><span class="sd">    &quot;&quot;&quot;</span>
-</span><span id="configure_logging-73"><a href="#configure_logging-73"><span class="linenos">73</span></a>    <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="s2">&quot;mail&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">setLevel</span><span class="p">(</span><span class="n">logging</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">)</span>
-</span><span id="configure_logging-74"><a href="#configure_logging-74"><span class="linenos">74</span></a>    <span class="k">return</span> <span class="n">setup_logging</span><span class="p">()</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="configure_logging-96"><a href="#configure_logging-96"><span class="linenos"> 96</span></a><span class="k">def</span><span class="w"> </span><span class="nf">configure_logging</span><span class="p">():</span>
+</span><span id="configure_logging-97"><a href="#configure_logging-97"><span class="linenos"> 97</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;✍🏼 Configure application logging.</span>
+</span><span id="configure_logging-98"><a href="#configure_logging-98"><span class="linenos"> 98</span></a>
+</span><span id="configure_logging-99"><a href="#configure_logging-99"><span class="linenos"> 99</span></a><span class="sd">    Returns:</span>
+</span><span id="configure_logging-100"><a href="#configure_logging-100"><span class="linenos">100</span></a><span class="sd">        logging.Logger: The configured logger instance.</span>
+</span><span id="configure_logging-101"><a href="#configure_logging-101"><span class="linenos">101</span></a><span class="sd">    &quot;&quot;&quot;</span>
+</span><span id="configure_logging-102"><a href="#configure_logging-102"><span class="linenos">102</span></a>    <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="s2">&quot;mail&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">setLevel</span><span class="p">(</span><span class="n">logging</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">)</span>
+</span><span id="configure_logging-103"><a href="#configure_logging-103"><span class="linenos">103</span></a>    <span class="k">return</span> <span class="n">setup_logging</span><span class="p">()</span>
 </span></pre></div>
 
 
@@ -360,82 +517,155 @@ app    </h1>
 
     </div>
     <a class="headerlink" href="#create_app"></a>
-            <div class="pdoc-code codehilite"><pre><span></span><span id="create_app-77"><a href="#create_app-77"><span class="linenos"> 77</span></a><span class="k">def</span><span class="w"> </span><span class="nf">create_app</span><span class="p">():</span>
-</span><span id="create_app-78"><a href="#create_app-78"><span class="linenos"> 78</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;🌟 Factory function to create and configure the Flask application.</span>
-</span><span id="create_app-79"><a href="#create_app-79"><span class="linenos"> 79</span></a>
-</span><span id="create_app-80"><a href="#create_app-80"><span class="linenos"> 80</span></a><span class="sd">    Returns:</span>
-</span><span id="create_app-81"><a href="#create_app-81"><span class="linenos"> 81</span></a><span class="sd">        Flask: The configured Flask application instance.</span>
-</span><span id="create_app-82"><a href="#create_app-82"><span class="linenos"> 82</span></a><span class="sd">    &quot;&quot;&quot;</span>
-</span><span id="create_app-83"><a href="#create_app-83"><span class="linenos"> 83</span></a>    <span class="n">app</span> <span class="o">=</span> <span class="n">Flask</span><span class="p">(</span><span class="vm">__name__</span><span class="p">,</span> <span class="n">static_folder</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
-</span><span id="create_app-84"><a href="#create_app-84"><span class="linenos"> 84</span></a>    <span class="n">app</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">from_object</span><span class="p">(</span><span class="n">Config</span><span class="p">)</span>
-</span><span id="create_app-85"><a href="#create_app-85"><span class="linenos"> 85</span></a>
-</span><span id="create_app-86"><a href="#create_app-86"><span class="linenos"> 86</span></a>    <span class="c1"># Set template folder based on config theme</span>
-</span><span id="create_app-87"><a href="#create_app-87"><span class="linenos"> 87</span></a>    <span class="n">theme</span> <span class="o">=</span> <span class="n">Config</span><span class="o">.</span><span class="n">THEME</span>
-</span><span id="create_app-88"><a href="#create_app-88"><span class="linenos"> 88</span></a>    <span class="n">template_folder</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">app</span><span class="o">.</span><span class="n">root_path</span><span class="p">,</span> <span class="s2">&quot;templates&quot;</span><span class="p">,</span> <span class="n">theme</span><span class="p">)</span>
-</span><span id="create_app-89"><a href="#create_app-89"><span class="linenos"> 89</span></a>    <span class="n">app</span><span class="o">.</span><span class="n">template_folder</span> <span class="o">=</span> <span class="n">template_folder</span>
-</span><span id="create_app-90"><a href="#create_app-90"><span class="linenos"> 90</span></a>
-</span><span id="create_app-91"><a href="#create_app-91"><span class="linenos"> 91</span></a>
-</span><span id="create_app-92"><a href="#create_app-92"><span class="linenos"> 92</span></a>    <span class="c1"># Initialize extensions and blueprints</span>
-</span><span id="create_app-93"><a href="#create_app-93"><span class="linenos"> 93</span></a>    <span class="n">init_extensions</span><span class="p">(</span><span class="n">app</span><span class="p">)</span>
-</span><span id="create_app-94"><a href="#create_app-94"><span class="linenos"> 94</span></a>    <span class="n">register_blueprints</span><span class="p">(</span><span class="n">app</span><span class="p">)</span>
-</span><span id="create_app-95"><a href="#create_app-95"><span class="linenos"> 95</span></a>
-</span><span id="create_app-96"><a href="#create_app-96"><span class="linenos"> 96</span></a>    <span class="c1"># Configure logging and error handling</span>
-</span><span id="create_app-97"><a href="#create_app-97"><span class="linenos"> 97</span></a>    <span class="n">logger</span> <span class="o">=</span> <span class="n">configure_logging</span><span class="p">()</span>
-</span><span id="create_app-98"><a href="#create_app-98"><span class="linenos"> 98</span></a>    <span class="n">error_handler</span><span class="p">(</span><span class="n">app</span><span class="p">,</span> <span class="n">logger</span><span class="p">)</span>
-</span><span id="create_app-99"><a href="#create_app-99"><span class="linenos"> 99</span></a>
-</span><span id="create_app-100"><a href="#create_app-100"><span class="linenos">100</span></a>    <span class="c1"># flask url for user refresh token, is very important, the route most be exist</span>
-</span><span id="create_app-101"><a href="#create_app-101"><span class="linenos">101</span></a>    <span class="n">app</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="s2">&quot;JWT_REFRESH_COOKIE_PATH&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;/api/core/refresh&quot;</span>
-</span><span id="create_app-102"><a href="#create_app-102"><span class="linenos">102</span></a>
-</span><span id="create_app-103"><a href="#create_app-103"><span class="linenos">103</span></a>    <span class="c1"># from app.core.controller import initialize_system</span>
-</span><span id="create_app-104"><a href="#create_app-104"><span class="linenos">104</span></a>
-</span><span id="create_app-105"><a href="#create_app-105"><span class="linenos">105</span></a>    <span class="c1"># @app.before_request</span>
-</span><span id="create_app-106"><a href="#create_app-106"><span class="linenos">106</span></a>    <span class="c1"># def before_request():</span>
-</span><span id="create_app-107"><a href="#create_app-107"><span class="linenos">107</span></a>    <span class="c1">#     db.create_all()</span>
-</span><span id="create_app-108"><a href="#create_app-108"><span class="linenos">108</span></a>    <span class="c1">#     initialize_system()</span>
-</span><span id="create_app-109"><a href="#create_app-109"><span class="linenos">109</span></a>
-</span><span id="create_app-110"><a href="#create_app-110"><span class="linenos">110</span></a>    <span class="nd">@app</span><span class="o">.</span><span class="n">context_processor</span>
-</span><span id="create_app-111"><a href="#create_app-111"><span class="linenos">111</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">inject_debug</span><span class="p">():</span>
-</span><span id="create_app-112"><a href="#create_app-112"><span class="linenos">112</span></a>        <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span><span class="n">DEBUG</span><span class="o">=</span><span class="n">app</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="s2">&quot;DEBUG&quot;</span><span class="p">])</span>
-</span><span id="create_app-113"><a href="#create_app-113"><span class="linenos">113</span></a>
-</span><span id="create_app-114"><a href="#create_app-114"><span class="linenos">114</span></a>    <span class="n">app</span><span class="o">.</span><span class="n">jinja_env</span><span class="o">.</span><span class="n">filters</span><span class="p">[</span><span class="s2">&quot;merge&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">merge_dicts</span>
-</span><span id="create_app-115"><a href="#create_app-115"><span class="linenos">115</span></a>    <span class="n">app</span><span class="o">.</span><span class="n">jinja_env</span><span class="o">.</span><span class="n">filters</span><span class="p">[</span><span class="s2">&quot;merge_dicts&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">merge_dicts</span>
-</span><span id="create_app-116"><a href="#create_app-116"><span class="linenos">116</span></a>
-</span><span id="create_app-117"><a href="#create_app-117"><span class="linenos">117</span></a>    <span class="nd">@app</span><span class="o">.</span><span class="n">context_processor</span>
-</span><span id="create_app-118"><a href="#create_app-118"><span class="linenos">118</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">inject_context</span><span class="p">():</span>
-</span><span id="create_app-119"><a href="#create_app-119"><span class="linenos">119</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;Agrega múltiples funciones al contexto de Jinja2.&quot;&quot;&quot;</span>
-</span><span id="create_app-120"><a href="#create_app-120"><span class="linenos">120</span></a>        <span class="n">context</span> <span class="o">=</span> <span class="p">{}</span>
-</span><span id="create_app-121"><a href="#create_app-121"><span class="linenos">121</span></a>        <span class="n">context</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">inject_user</span><span class="p">())</span>
-</span><span id="create_app-122"><a href="#create_app-122"><span class="linenos">122</span></a>        <span class="k">return</span> <span class="n">context</span>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="create_app-106"><a href="#create_app-106"><span class="linenos">106</span></a><span class="k">def</span><span class="w"> </span><span class="nf">create_app</span><span class="p">():</span>
+</span><span id="create_app-107"><a href="#create_app-107"><span class="linenos">107</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;🌟 Factory function to create and configure the Flask application.</span>
+</span><span id="create_app-108"><a href="#create_app-108"><span class="linenos">108</span></a>
+</span><span id="create_app-109"><a href="#create_app-109"><span class="linenos">109</span></a><span class="sd">    Returns:</span>
+</span><span id="create_app-110"><a href="#create_app-110"><span class="linenos">110</span></a><span class="sd">        Flask: The configured Flask application instance.</span>
+</span><span id="create_app-111"><a href="#create_app-111"><span class="linenos">111</span></a><span class="sd">    &quot;&quot;&quot;</span>
+</span><span id="create_app-112"><a href="#create_app-112"><span class="linenos">112</span></a>    <span class="n">app</span> <span class="o">=</span> <span class="n">Flask</span><span class="p">(</span><span class="vm">__name__</span><span class="p">,</span> <span class="n">static_folder</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+</span><span id="create_app-113"><a href="#create_app-113"><span class="linenos">113</span></a>    <span class="n">app</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">from_object</span><span class="p">(</span><span class="n">Config</span><span class="p">)</span>
+</span><span id="create_app-114"><a href="#create_app-114"><span class="linenos">114</span></a>
+</span><span id="create_app-115"><a href="#create_app-115"><span class="linenos">115</span></a>    <span class="c1"># Set template folder based on config theme</span>
+</span><span id="create_app-116"><a href="#create_app-116"><span class="linenos">116</span></a>    <span class="n">theme</span> <span class="o">=</span> <span class="n">Config</span><span class="o">.</span><span class="n">THEME</span>
+</span><span id="create_app-117"><a href="#create_app-117"><span class="linenos">117</span></a>    <span class="n">template_folder</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">app</span><span class="o">.</span><span class="n">root_path</span><span class="p">,</span> <span class="s2">&quot;templates&quot;</span><span class="p">,</span> <span class="n">theme</span><span class="p">)</span>
+</span><span id="create_app-118"><a href="#create_app-118"><span class="linenos">118</span></a>    <span class="n">app</span><span class="o">.</span><span class="n">template_folder</span> <span class="o">=</span> <span class="n">template_folder</span>
+</span><span id="create_app-119"><a href="#create_app-119"><span class="linenos">119</span></a>
+</span><span id="create_app-120"><a href="#create_app-120"><span class="linenos">120</span></a>    <span class="c1"># Initialize extensions and blueprints</span>
+</span><span id="create_app-121"><a href="#create_app-121"><span class="linenos">121</span></a>    <span class="n">init_extensions</span><span class="p">(</span><span class="n">app</span><span class="p">)</span>
+</span><span id="create_app-122"><a href="#create_app-122"><span class="linenos">122</span></a>    <span class="n">register_blueprints</span><span class="p">(</span><span class="n">app</span><span class="p">)</span>
 </span><span id="create_app-123"><a href="#create_app-123"><span class="linenos">123</span></a>
-</span><span id="create_app-124"><a href="#create_app-124"><span class="linenos">124</span></a>    <span class="c1">###############################################################</span>
-</span><span id="create_app-125"><a href="#create_app-125"><span class="linenos">125</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-</span><span id="create_app-126"><a href="#create_app-126"><span class="linenos">126</span></a><span class="sd">    List all the routes in the application for debugging and api documentation purposes</span>
-</span><span id="create_app-127"><a href="#create_app-127"><span class="linenos">127</span></a><span class="sd">    &quot;&quot;&quot;</span>
-</span><span id="create_app-128"><a href="#create_app-128"><span class="linenos">128</span></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">flask</span><span class="w"> </span><span class="kn">import</span> <span class="n">render_template</span>
-</span><span id="create_app-129"><a href="#create_app-129"><span class="linenos">129</span></a>
-</span><span id="create_app-130"><a href="#create_app-130"><span class="linenos">130</span></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">.helpers.route_lister</span><span class="w"> </span><span class="kn">import</span> <span class="n">RouteLister</span>
+</span><span id="create_app-124"><a href="#create_app-124"><span class="linenos">124</span></a>    <span class="c1"># Register breadcrumbs context processor (local import avoids circular dependency)</span>
+</span><span id="create_app-125"><a href="#create_app-125"><span class="linenos">125</span></a>    <span class="k">try</span><span class="p">:</span>
+</span><span id="create_app-126"><a href="#create_app-126"><span class="linenos">126</span></a>        <span class="kn">from</span><span class="w"> </span><span class="nn">.core.navigation</span><span class="w"> </span><span class="kn">import</span> <span class="n">register_breadcrumbs_context</span>
+</span><span id="create_app-127"><a href="#create_app-127"><span class="linenos">127</span></a>
+</span><span id="create_app-128"><a href="#create_app-128"><span class="linenos">128</span></a>        <span class="n">register_breadcrumbs_context</span><span class="p">(</span><span class="n">app</span><span class="p">)</span>
+</span><span id="create_app-129"><a href="#create_app-129"><span class="linenos">129</span></a>    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+</span><span id="create_app-130"><a href="#create_app-130"><span class="linenos">130</span></a>        <span class="n">logging</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Could not register breadcrumbs context processor: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 </span><span id="create_app-131"><a href="#create_app-131"><span class="linenos">131</span></a>
-</span><span id="create_app-132"><a href="#create_app-132"><span class="linenos">132</span></a>    <span class="n">view</span> <span class="o">=</span> <span class="n">RouteLister</span><span class="o">.</span><span class="n">as_view</span><span class="p">(</span><span class="s2">&quot;list_routes&quot;</span><span class="p">)</span>
-</span><span id="create_app-133"><a href="#create_app-133"><span class="linenos">133</span></a>    <span class="n">app</span><span class="o">.</span><span class="n">add_url_rule</span><span class="p">(</span><span class="s2">&quot;/list_endpoints&quot;</span><span class="p">,</span> <span class="n">view_func</span><span class="o">=</span><span class="n">view</span><span class="p">)</span>
+</span><span id="create_app-132"><a href="#create_app-132"><span class="linenos">132</span></a>    <span class="c1"># Initialize avatar storage directory</span>
+</span><span id="create_app-133"><a href="#create_app-133"><span class="linenos">133</span></a>    <span class="n">init_avatar_storage</span><span class="p">(</span><span class="n">app</span><span class="p">)</span>
 </span><span id="create_app-134"><a href="#create_app-134"><span class="linenos">134</span></a>
-</span><span id="create_app-135"><a href="#create_app-135"><span class="linenos">135</span></a>    <span class="nd">@app</span><span class="o">.</span><span class="n">route</span><span class="p">(</span><span class="s2">&quot;/info&quot;</span><span class="p">)</span>
-</span><span id="create_app-136"><a href="#create_app-136"><span class="linenos">136</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">info</span><span class="p">():</span>
-</span><span id="create_app-137"><a href="#create_app-137"><span class="linenos">137</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;Página: Información general del proyecto</span>
-</span><span id="create_app-138"><a href="#create_app-138"><span class="linenos">138</span></a><span class="sd">        :param None: No requiere parámetros</span>
-</span><span id="create_app-139"><a href="#create_app-139"><span class="linenos">139</span></a><span class="sd">        :status 200: Retorna el contenido</span>
-</span><span id="create_app-140"><a href="#create_app-140"><span class="linenos">140</span></a><span class="sd">        &quot;&quot;&quot;</span>
-</span><span id="create_app-141"><a href="#create_app-141"><span class="linenos">141</span></a>        <span class="n">context</span> <span class="o">=</span> <span class="p">{</span>
-</span><span id="create_app-142"><a href="#create_app-142"><span class="linenos">142</span></a>            <span class="s2">&quot;title&quot;</span><span class="p">:</span> <span class="s2">&quot;About Us&quot;</span><span class="p">,</span>
-</span><span id="create_app-143"><a href="#create_app-143"><span class="linenos">143</span></a>            <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Descripción general del proyecto.&quot;</span><span class="p">,</span>
-</span><span id="create_app-144"><a href="#create_app-144"><span class="linenos">144</span></a>            <span class="s2">&quot;author&quot;</span><span class="p">:</span> <span class="s2">&quot;Johnny De Castro&quot;</span><span class="p">,</span>
-</span><span id="create_app-145"><a href="#create_app-145"><span class="linenos">145</span></a>            <span class="s2">&quot;site_title&quot;</span><span class="p">:</span> <span class="s2">&quot;Descripción&quot;</span><span class="p">,</span>
-</span><span id="create_app-146"><a href="#create_app-146"><span class="linenos">146</span></a>        <span class="p">}</span>
-</span><span id="create_app-147"><a href="#create_app-147"><span class="linenos">147</span></a>
-</span><span id="create_app-148"><a href="#create_app-148"><span class="linenos">148</span></a>        <span class="k">return</span> <span class="n">render_template</span><span class="p">(</span><span class="s2">&quot;router_lister.j2&quot;</span><span class="p">,</span> <span class="o">**</span><span class="n">context</span><span class="p">)</span>
-</span><span id="create_app-149"><a href="#create_app-149"><span class="linenos">149</span></a>
-</span><span id="create_app-150"><a href="#create_app-150"><span class="linenos">150</span></a>    <span class="c1">###############################################################</span>
-</span><span id="create_app-151"><a href="#create_app-151"><span class="linenos">151</span></a>
-</span><span id="create_app-152"><a href="#create_app-152"><span class="linenos">152</span></a>    <span class="k">return</span> <span class="n">app</span>
+</span><span id="create_app-135"><a href="#create_app-135"><span class="linenos">135</span></a>    <span class="c1"># Configure logging and error handling</span>
+</span><span id="create_app-136"><a href="#create_app-136"><span class="linenos">136</span></a>    <span class="n">logger</span> <span class="o">=</span> <span class="n">configure_logging</span><span class="p">()</span>
+</span><span id="create_app-137"><a href="#create_app-137"><span class="linenos">137</span></a>    <span class="n">error_handler</span><span class="p">(</span><span class="n">app</span><span class="p">,</span> <span class="n">logger</span><span class="p">)</span>
+</span><span id="create_app-138"><a href="#create_app-138"><span class="linenos">138</span></a>
+</span><span id="create_app-139"><a href="#create_app-139"><span class="linenos">139</span></a>    <span class="c1"># flask url for user refresh token, is very important, the route most be exist</span>
+</span><span id="create_app-140"><a href="#create_app-140"><span class="linenos">140</span></a>    <span class="n">app</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="s2">&quot;JWT_REFRESH_COOKIE_PATH&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;/api/core/refresh&quot;</span>
+</span><span id="create_app-141"><a href="#create_app-141"><span class="linenos">141</span></a>
+</span><span id="create_app-142"><a href="#create_app-142"><span class="linenos">142</span></a>    <span class="c1"># ── Inject CSRF meta tag into HTML responses ──────────────</span>
+</span><span id="create_app-143"><a href="#create_app-143"><span class="linenos">143</span></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">flask_jwt_extended</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_csrf_token</span> <span class="k">as</span> <span class="n">jwt_get_csrf</span>
+</span><span id="create_app-144"><a href="#create_app-144"><span class="linenos">144</span></a>
+</span><span id="create_app-145"><a href="#create_app-145"><span class="linenos">145</span></a>    <span class="nd">@app</span><span class="o">.</span><span class="n">after_request</span>
+</span><span id="create_app-146"><a href="#create_app-146"><span class="linenos">146</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">inject_csrf_meta</span><span class="p">(</span><span class="n">response</span><span class="p">):</span>
+</span><span id="create_app-147"><a href="#create_app-147"><span class="linenos">147</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="create_app-148"><a href="#create_app-148"><span class="linenos">148</span></a><span class="sd">        Insert &lt;meta name=&quot;csrf-token&quot; content=&quot;...&quot;&gt; into HTML &lt;head&gt;.</span>
+</span><span id="create_app-149"><a href="#create_app-149"><span class="linenos">149</span></a><span class="sd">        The token comes from the JWT access cookie (csrf_access_token).</span>
+</span><span id="create_app-150"><a href="#create_app-150"><span class="linenos">150</span></a><span class="sd">        If no JWT is present (anonymous user), the meta tag is omitted —</span>
+</span><span id="create_app-151"><a href="#create_app-151"><span class="linenos">151</span></a><span class="sd">        the JS fallback reads the cookie directly.</span>
+</span><span id="create_app-152"><a href="#create_app-152"><span class="linenos">152</span></a><span class="sd">        &quot;&quot;&quot;</span>
+</span><span id="create_app-153"><a href="#create_app-153"><span class="linenos">153</span></a>        <span class="n">ct</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">content_type</span> <span class="ow">or</span> <span class="s2">&quot;&quot;</span>
+</span><span id="create_app-154"><a href="#create_app-154"><span class="linenos">154</span></a>        <span class="k">if</span> <span class="s2">&quot;text/html&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">ct</span><span class="p">:</span>
+</span><span id="create_app-155"><a href="#create_app-155"><span class="linenos">155</span></a>            <span class="k">return</span> <span class="n">response</span>
+</span><span id="create_app-156"><a href="#create_app-156"><span class="linenos">156</span></a>
+</span><span id="create_app-157"><a href="#create_app-157"><span class="linenos">157</span></a>        <span class="c1"># Try to get CSRF token from the JWT cookie set by flask-jwt-extended</span>
+</span><span id="create_app-158"><a href="#create_app-158"><span class="linenos">158</span></a>        <span class="n">csrf_cookie</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">cookies</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;csrf_access_token&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+</span><span id="create_app-159"><a href="#create_app-159"><span class="linenos">159</span></a>        <span class="k">if</span> <span class="ow">not</span> <span class="n">csrf_cookie</span><span class="p">:</span>
+</span><span id="create_app-160"><a href="#create_app-160"><span class="linenos">160</span></a>            <span class="c1"># Also check flask-wtf style cookie</span>
+</span><span id="create_app-161"><a href="#create_app-161"><span class="linenos">161</span></a>            <span class="n">csrf_cookie</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">cookies</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;csrf_token&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+</span><span id="create_app-162"><a href="#create_app-162"><span class="linenos">162</span></a>
+</span><span id="create_app-163"><a href="#create_app-163"><span class="linenos">163</span></a>        <span class="k">if</span> <span class="n">csrf_cookie</span> <span class="ow">and</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">&lt;</span> <span class="mi">400</span><span class="p">:</span>
+</span><span id="create_app-164"><a href="#create_app-164"><span class="linenos">164</span></a>            <span class="n">meta_tag</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;&lt;meta name=&quot;csrf-token&quot; content=&quot;</span><span class="si">{</span><span class="n">csrf_cookie</span><span class="si">}</span><span class="s1">&quot;&gt;&#39;</span>
+</span><span id="create_app-165"><a href="#create_app-165"><span class="linenos">165</span></a>            <span class="c1"># Insert before &lt;/head&gt;</span>
+</span><span id="create_app-166"><a href="#create_app-166"><span class="linenos">166</span></a>            <span class="n">body</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">get_data</span><span class="p">(</span><span class="n">as_text</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span><span id="create_app-167"><a href="#create_app-167"><span class="linenos">167</span></a>            <span class="n">marker</span> <span class="o">=</span> <span class="s2">&quot;&lt;/head&gt;&quot;</span>
+</span><span id="create_app-168"><a href="#create_app-168"><span class="linenos">168</span></a>            <span class="k">if</span> <span class="n">marker</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="ow">in</span> <span class="n">body</span><span class="o">.</span><span class="n">lower</span><span class="p">():</span>
+</span><span id="create_app-169"><a href="#create_app-169"><span class="linenos">169</span></a>                <span class="c1"># Case-insensitive replace</span>
+</span><span id="create_app-170"><a href="#create_app-170"><span class="linenos">170</span></a>                <span class="n">idx</span> <span class="o">=</span> <span class="n">body</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">marker</span><span class="p">)</span>
+</span><span id="create_app-171"><a href="#create_app-171"><span class="linenos">171</span></a>                <span class="n">body</span> <span class="o">=</span> <span class="n">body</span><span class="p">[:</span><span class="n">idx</span><span class="p">]</span> <span class="o">+</span> <span class="sa">f</span><span class="s2">&quot;    </span><span class="si">{</span><span class="n">meta_tag</span><span class="si">}</span><span class="se">\n</span><span class="s2">&quot;</span> <span class="o">+</span> <span class="n">body</span><span class="p">[</span><span class="n">idx</span><span class="p">:]</span>
+</span><span id="create_app-172"><a href="#create_app-172"><span class="linenos">172</span></a>                <span class="n">response</span><span class="o">.</span><span class="n">set_data</span><span class="p">(</span><span class="n">body</span><span class="p">)</span>
+</span><span id="create_app-173"><a href="#create_app-173"><span class="linenos">173</span></a>
+</span><span id="create_app-174"><a href="#create_app-174"><span class="linenos">174</span></a>        <span class="k">return</span> <span class="n">response</span>
+</span><span id="create_app-175"><a href="#create_app-175"><span class="linenos">175</span></a>
+</span><span id="create_app-176"><a href="#create_app-176"><span class="linenos">176</span></a>    <span class="c1"># from app.core.controller import initialize_system</span>
+</span><span id="create_app-177"><a href="#create_app-177"><span class="linenos">177</span></a>
+</span><span id="create_app-178"><a href="#create_app-178"><span class="linenos">178</span></a>    <span class="c1"># @app.before_request</span>
+</span><span id="create_app-179"><a href="#create_app-179"><span class="linenos">179</span></a>    <span class="c1"># def before_request():</span>
+</span><span id="create_app-180"><a href="#create_app-180"><span class="linenos">180</span></a>    <span class="c1">#     db.create_all()</span>
+</span><span id="create_app-181"><a href="#create_app-181"><span class="linenos">181</span></a>    <span class="c1">#     initialize_system()</span>
+</span><span id="create_app-182"><a href="#create_app-182"><span class="linenos">182</span></a>
+</span><span id="create_app-183"><a href="#create_app-183"><span class="linenos">183</span></a>    <span class="nd">@app</span><span class="o">.</span><span class="n">context_processor</span>
+</span><span id="create_app-184"><a href="#create_app-184"><span class="linenos">184</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">inject_debug</span><span class="p">():</span>
+</span><span id="create_app-185"><a href="#create_app-185"><span class="linenos">185</span></a>        <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span><span class="n">DEBUG</span><span class="o">=</span><span class="n">app</span><span class="o">.</span><span class="n">config</span><span class="p">[</span><span class="s2">&quot;DEBUG&quot;</span><span class="p">])</span>
+</span><span id="create_app-186"><a href="#create_app-186"><span class="linenos">186</span></a>
+</span><span id="create_app-187"><a href="#create_app-187"><span class="linenos">187</span></a>    <span class="n">app</span><span class="o">.</span><span class="n">jinja_env</span><span class="o">.</span><span class="n">filters</span><span class="p">[</span><span class="s2">&quot;merge&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">merge_dicts</span>
+</span><span id="create_app-188"><a href="#create_app-188"><span class="linenos">188</span></a>    <span class="n">app</span><span class="o">.</span><span class="n">jinja_env</span><span class="o">.</span><span class="n">filters</span><span class="p">[</span><span class="s2">&quot;merge_dicts&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">merge_dicts</span>
+</span><span id="create_app-189"><a href="#create_app-189"><span class="linenos">189</span></a>
+</span><span id="create_app-190"><a href="#create_app-190"><span class="linenos">190</span></a>    <span class="nd">@app</span><span class="o">.</span><span class="n">context_processor</span>
+</span><span id="create_app-191"><a href="#create_app-191"><span class="linenos">191</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">inject_context</span><span class="p">():</span>
+</span><span id="create_app-192"><a href="#create_app-192"><span class="linenos">192</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;Agrega múltiples funciones al contexto de Jinja2.&quot;&quot;&quot;</span>
+</span><span id="create_app-193"><a href="#create_app-193"><span class="linenos">193</span></a>        <span class="n">context</span> <span class="o">=</span> <span class="p">{}</span>
+</span><span id="create_app-194"><a href="#create_app-194"><span class="linenos">194</span></a>        <span class="n">context</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">inject_user</span><span class="p">())</span>
+</span><span id="create_app-195"><a href="#create_app-195"><span class="linenos">195</span></a>        <span class="k">return</span> <span class="n">context</span>
+</span><span id="create_app-196"><a href="#create_app-196"><span class="linenos">196</span></a>
+</span><span id="create_app-197"><a href="#create_app-197"><span class="linenos">197</span></a>    <span class="c1">###############################################################</span>
+</span><span id="create_app-198"><a href="#create_app-198"><span class="linenos">198</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+</span><span id="create_app-199"><a href="#create_app-199"><span class="linenos">199</span></a><span class="sd">    List all the routes in the application for debugging and api documentation purposes</span>
+</span><span id="create_app-200"><a href="#create_app-200"><span class="linenos">200</span></a><span class="sd">    &quot;&quot;&quot;</span>
+</span><span id="create_app-201"><a href="#create_app-201"><span class="linenos">201</span></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">flask</span><span class="w"> </span><span class="kn">import</span> <span class="n">render_template</span>
+</span><span id="create_app-202"><a href="#create_app-202"><span class="linenos">202</span></a>
+</span><span id="create_app-203"><a href="#create_app-203"><span class="linenos">203</span></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">.helpers.route_lister</span><span class="w"> </span><span class="kn">import</span> <span class="n">RouteLister</span>
+</span><span id="create_app-204"><a href="#create_app-204"><span class="linenos">204</span></a>
+</span><span id="create_app-205"><a href="#create_app-205"><span class="linenos">205</span></a>    <span class="n">view</span> <span class="o">=</span> <span class="n">RouteLister</span><span class="o">.</span><span class="n">as_view</span><span class="p">(</span><span class="s2">&quot;list_routes&quot;</span><span class="p">)</span>
+</span><span id="create_app-206"><a href="#create_app-206"><span class="linenos">206</span></a>    <span class="n">app</span><span class="o">.</span><span class="n">add_url_rule</span><span class="p">(</span><span class="s2">&quot;/list_endpoints&quot;</span><span class="p">,</span> <span class="n">view_func</span><span class="o">=</span><span class="n">view</span><span class="p">)</span>
+</span><span id="create_app-207"><a href="#create_app-207"><span class="linenos">207</span></a>
+</span><span id="create_app-208"><a href="#create_app-208"><span class="linenos">208</span></a>    <span class="nd">@app</span><span class="o">.</span><span class="n">route</span><span class="p">(</span><span class="s2">&quot;/info&quot;</span><span class="p">)</span>
+</span><span id="create_app-209"><a href="#create_app-209"><span class="linenos">209</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">info</span><span class="p">():</span>
+</span><span id="create_app-210"><a href="#create_app-210"><span class="linenos">210</span></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;Página: Información general del proyecto</span>
+</span><span id="create_app-211"><a href="#create_app-211"><span class="linenos">211</span></a>
+</span><span id="create_app-212"><a href="#create_app-212"><span class="linenos">212</span></a><span class="sd">        Acceso controlado por modo DEBUG:</span>
+</span><span id="create_app-213"><a href="#create_app-213"><span class="linenos">213</span></a><span class="sd">        - DEBUG=True: acceso público (desarrollo)</span>
+</span><span id="create_app-214"><a href="#create_app-214"><span class="linenos">214</span></a><span class="sd">        - DEBUG=False: solo usuarios administradores (producción)</span>
+</span><span id="create_app-215"><a href="#create_app-215"><span class="linenos">215</span></a>
+</span><span id="create_app-216"><a href="#create_app-216"><span class="linenos">216</span></a><span class="sd">        :param None: No requiere parámetros</span>
+</span><span id="create_app-217"><a href="#create_app-217"><span class="linenos">217</span></a><span class="sd">        :status 200: Retorna el contenido</span>
+</span><span id="create_app-218"><a href="#create_app-218"><span class="linenos">218</span></a><span class="sd">        :status 403: Acceso denegado en producción para no-administradores</span>
+</span><span id="create_app-219"><a href="#create_app-219"><span class="linenos">219</span></a><span class="sd">        &quot;&quot;&quot;</span>
+</span><span id="create_app-220"><a href="#create_app-220"><span class="linenos">220</span></a>        <span class="kn">from</span><span class="w"> </span><span class="nn">flask</span><span class="w"> </span><span class="kn">import</span> <span class="n">abort</span>
+</span><span id="create_app-221"><a href="#create_app-221"><span class="linenos">221</span></a>        <span class="kn">from</span><span class="w"> </span><span class="nn">flask_jwt_extended</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_jwt_identity</span>
+</span><span id="create_app-222"><a href="#create_app-222"><span class="linenos">222</span></a>
+</span><span id="create_app-223"><a href="#create_app-223"><span class="linenos">223</span></a>        <span class="kn">from</span><span class="w"> </span><span class="nn">app.core.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">User</span>
+</span><span id="create_app-224"><a href="#create_app-224"><span class="linenos">224</span></a>
+</span><span id="create_app-225"><a href="#create_app-225"><span class="linenos">225</span></a>        <span class="c1"># Si DEBUG está activado, acceso público</span>
+</span><span id="create_app-226"><a href="#create_app-226"><span class="linenos">226</span></a>        <span class="k">if</span> <span class="n">app</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;DEBUG&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
+</span><span id="create_app-227"><a href="#create_app-227"><span class="linenos">227</span></a>            <span class="n">context</span> <span class="o">=</span> <span class="p">{</span>
+</span><span id="create_app-228"><a href="#create_app-228"><span class="linenos">228</span></a>                <span class="s2">&quot;title&quot;</span><span class="p">:</span> <span class="s2">&quot;About Us&quot;</span><span class="p">,</span>
+</span><span id="create_app-229"><a href="#create_app-229"><span class="linenos">229</span></a>                <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Descripción general del proyecto.&quot;</span><span class="p">,</span>
+</span><span id="create_app-230"><a href="#create_app-230"><span class="linenos">230</span></a>                <span class="s2">&quot;author&quot;</span><span class="p">:</span> <span class="s2">&quot;Johnny De Castro&quot;</span><span class="p">,</span>
+</span><span id="create_app-231"><a href="#create_app-231"><span class="linenos">231</span></a>                <span class="s2">&quot;site_title&quot;</span><span class="p">:</span> <span class="s2">&quot;Descripción&quot;</span><span class="p">,</span>
+</span><span id="create_app-232"><a href="#create_app-232"><span class="linenos">232</span></a>            <span class="p">}</span>
+</span><span id="create_app-233"><a href="#create_app-233"><span class="linenos">233</span></a>            <span class="k">return</span> <span class="n">render_template</span><span class="p">(</span><span class="s2">&quot;router_lister.j2&quot;</span><span class="p">,</span> <span class="o">**</span><span class="n">context</span><span class="p">)</span>
+</span><span id="create_app-234"><a href="#create_app-234"><span class="linenos">234</span></a>
+</span><span id="create_app-235"><a href="#create_app-235"><span class="linenos">235</span></a>        <span class="c1"># En producción, verificar que el usuario sea administrador</span>
+</span><span id="create_app-236"><a href="#create_app-236"><span class="linenos">236</span></a>        <span class="n">user_id</span> <span class="o">=</span> <span class="n">get_jwt_identity</span><span class="p">()</span>
+</span><span id="create_app-237"><a href="#create_app-237"><span class="linenos">237</span></a>        <span class="k">if</span> <span class="ow">not</span> <span class="n">user_id</span><span class="p">:</span>
+</span><span id="create_app-238"><a href="#create_app-238"><span class="linenos">238</span></a>            <span class="n">abort</span><span class="p">(</span><span class="mi">403</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Authentication required in production mode&quot;</span><span class="p">)</span>
+</span><span id="create_app-239"><a href="#create_app-239"><span class="linenos">239</span></a>
+</span><span id="create_app-240"><a href="#create_app-240"><span class="linenos">240</span></a>        <span class="n">user</span> <span class="o">=</span> <span class="n">User</span><span class="o">.</span><span class="n">query</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">user_id</span><span class="p">)</span>
+</span><span id="create_app-241"><a href="#create_app-241"><span class="linenos">241</span></a>        <span class="k">if</span> <span class="ow">not</span> <span class="n">user</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">user</span><span class="o">.</span><span class="n">is_admin</span><span class="p">():</span>
+</span><span id="create_app-242"><a href="#create_app-242"><span class="linenos">242</span></a>            <span class="n">abort</span><span class="p">(</span><span class="mi">403</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Admin privileges required in production mode&quot;</span><span class="p">)</span>
+</span><span id="create_app-243"><a href="#create_app-243"><span class="linenos">243</span></a>
+</span><span id="create_app-244"><a href="#create_app-244"><span class="linenos">244</span></a>        <span class="n">context</span> <span class="o">=</span> <span class="p">{</span>
+</span><span id="create_app-245"><a href="#create_app-245"><span class="linenos">245</span></a>            <span class="s2">&quot;title&quot;</span><span class="p">:</span> <span class="s2">&quot;About Us&quot;</span><span class="p">,</span>
+</span><span id="create_app-246"><a href="#create_app-246"><span class="linenos">246</span></a>            <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="s2">&quot;Descripción general del proyecto.&quot;</span><span class="p">,</span>
+</span><span id="create_app-247"><a href="#create_app-247"><span class="linenos">247</span></a>            <span class="s2">&quot;author&quot;</span><span class="p">:</span> <span class="s2">&quot;Johnny De Castro&quot;</span><span class="p">,</span>
+</span><span id="create_app-248"><a href="#create_app-248"><span class="linenos">248</span></a>            <span class="s2">&quot;site_title&quot;</span><span class="p">:</span> <span class="s2">&quot;Descripción&quot;</span><span class="p">,</span>
+</span><span id="create_app-249"><a href="#create_app-249"><span class="linenos">249</span></a>        <span class="p">}</span>
+</span><span id="create_app-250"><a href="#create_app-250"><span class="linenos">250</span></a>        <span class="k">return</span> <span class="n">render_template</span><span class="p">(</span><span class="s2">&quot;router_lister.j2&quot;</span><span class="p">,</span> <span class="o">**</span><span class="n">context</span><span class="p">)</span>
+</span><span id="create_app-251"><a href="#create_app-251"><span class="linenos">251</span></a>
+</span><span id="create_app-252"><a href="#create_app-252"><span class="linenos">252</span></a>    <span class="c1">###############################################################</span>
+</span><span id="create_app-253"><a href="#create_app-253"><span class="linenos">253</span></a>
+</span><span id="create_app-254"><a href="#create_app-254"><span class="linenos">254</span></a>    <span class="k">return</span> <span class="n">app</span>
 </span></pre></div>
 
 

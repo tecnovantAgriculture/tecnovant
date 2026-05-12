@@ -28,7 +28,7 @@ def init_extensions(app):
     db.init_app(app)
     migrate.init_app(app, db)
     cache.init_app(app)
-    
+
     # Configure rate limiter storage (Redis if available, else memory)
     # RATELIMIT_STORAGE_URI must be set in app.config BEFORE init_app
     if app.config.get("CACHE_REDIS_URL"):
@@ -80,6 +80,7 @@ def init_avatar_storage(app):
     """
     try:
         from app.core.services.avatar_service import AvatarService
+
         # Usar app context para que current_app esté disponible
         # (necesario para acceder a app.config durante flask db migrate)
         with app.app_context():
@@ -115,7 +116,6 @@ def create_app():
     template_folder = os.path.join(app.root_path, "templates", theme)
     app.template_folder = template_folder
 
-
     # Initialize extensions and blueprints
     init_extensions(app)
     register_blueprints(app)
@@ -123,6 +123,7 @@ def create_app():
     # Register breadcrumbs context processor (local import avoids circular dependency)
     try:
         from .core.navigation import register_breadcrumbs_context
+
         register_breadcrumbs_context(app)
     except Exception as e:
         logging.warning(f"Could not register breadcrumbs context processor: {e}")
@@ -206,21 +207,22 @@ def create_app():
     @app.route("/info")
     def info():
         """Página: Información general del proyecto
-        
+
         Acceso controlado por modo DEBUG:
         - DEBUG=True: acceso público (desarrollo)
         - DEBUG=False: solo usuarios administradores (producción)
-        
+
         :param None: No requiere parámetros
         :status 200: Retorna el contenido
         :status 403: Acceso denegado en producción para no-administradores
         """
         from flask import abort
         from flask_jwt_extended import get_jwt_identity
+
         from app.core.models import User
-        
+
         # Si DEBUG está activado, acceso público
-        if app.config.get('DEBUG', False):
+        if app.config.get("DEBUG", False):
             context = {
                 "title": "About Us",
                 "description": "Descripción general del proyecto.",
@@ -228,16 +230,16 @@ def create_app():
                 "site_title": "Descripción",
             }
             return render_template("router_lister.j2", **context)
-        
+
         # En producción, verificar que el usuario sea administrador
         user_id = get_jwt_identity()
         if not user_id:
             abort(403, description="Authentication required in production mode")
-        
+
         user = User.query.get(user_id)
         if not user or not user.is_admin():
             abort(403, description="Admin privileges required in production mode")
-        
+
         context = {
             "title": "About Us",
             "description": "Descripción general del proyecto.",

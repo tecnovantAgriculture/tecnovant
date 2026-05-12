@@ -13,6 +13,7 @@ import rasterio
 from werkzeug.utils import secure_filename
 
 from app.extensions import db
+
 from .helpers import (
     DATA_DIR,
     allowed_file,
@@ -22,8 +23,7 @@ from .helpers import (
 )
 from .models import NDVIImage
 
-
-VISIBLE_INDEX_KEYS = ("vari", "gli", "ngrdi", "exg")
+VISIBLE_INDEX_KEYS = ("vari", "gli", "ngrdi", "exg", "nbi")
 
 CACHE_DIR = DATA_DIR / "cache"
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
@@ -128,10 +128,18 @@ def load_indices(img_id: str) -> Dict[str, np.ndarray]:
     return out
 
 
-def _compute_stats_from_indices(ndvi: np.ndarray, indices: Dict[str, np.ndarray]) -> Dict[str, float | None]:
+def _compute_stats_from_indices(
+    ndvi: np.ndarray, indices: Dict[str, np.ndarray]
+) -> Dict[str, float | None]:
     """Derive summary statistics from NDVI and visible indices."""
     stats = {"vi": _nanmean(ndvi)}
-    for key, name in (("VARI", "vari"), ("GLI", "gli"), ("NGRDI", "ngrdi"), ("ExG", "exg")):
+    for key, name in (
+        ("VARI", "vari"),
+        ("GLI", "gli"),
+        ("NGRDI", "ngrdi"),
+        ("ExG", "exg"),
+        ("NBI", "nbi"),
+    ):
         arr = indices.get(key)
         if arr is None:
             stats[name] = None
@@ -257,7 +265,9 @@ def process_upload(file_storage) -> dict:
         visible_method = "combined"
         has_nir: bool | None = False
         indices_paths: Dict[str, str] = {}
-        stats: Dict[str, float | None] = {k: None for k in ("vi", "vari", "gli", "ngrdi", "exg")}
+        stats: Dict[str, float | None] = {
+            k: None for k in ("vi", "vari", "gli", "ngrdi", "exg", "nbi")
+        }
         width = height = 0
         mpp: float | None = None
         stamp = int(time.time())
@@ -266,7 +276,9 @@ def process_upload(file_storage) -> dict:
             processed = True
             method = cached.get("method") or method
             visible_method = cached.get("visible_method") or visible_method
-            has_nir = cached.get("has_nir") if cached.get("has_nir") is not None else has_nir
+            has_nir = (
+                cached.get("has_nir") if cached.get("has_nir") is not None else has_nir
+            )
             stats.update({k: cached.get("stats", {}).get(k) for k in stats})
             indices_paths = cached.get("indices_paths", {})
             stamp = cached.get("stamp", stamp)
@@ -405,7 +417,11 @@ def ensure_processed(img_id: str) -> Dict[str, object]:
 
     # TODO: cuando se habilite NIR real, quitar este override y respetar result.method/result.has_nir.
     method = "ndvi_approx"
-    visible_method = (result.meta or {}).get("visible_method") if isinstance(result.meta, dict) else None
+    visible_method = (
+        (result.meta or {}).get("visible_method")
+        if isinstance(result.meta, dict)
+        else None
+    )
     if not visible_method:
         visible_method = "combined"
     has_nir = False
@@ -432,24 +448,25 @@ def ensure_processed(img_id: str) -> Dict[str, object]:
         record.height = int(ndvi.shape[0])
         db.session.commit()
 
-    meta.update({
-        "processed": True,
-        "method": method,
-        "visible_method": visible_method,
-        "has_nir": has_nir,
-        "indices_paths": indices_paths,
-        "stats": stats,
-        "stamp": stamp,
-        "width": int(ndvi.shape[1]),
-        "height": int(ndvi.shape[0]),
-        "png_path": str(ndvi_png_path),
-        "npy_path": str(npy_path),
-    })
+    meta.update(
+        {
+            "processed": True,
+            "method": method,
+            "visible_method": visible_method,
+            "has_nir": has_nir,
+            "indices_paths": indices_paths,
+            "stats": stats,
+            "stamp": stamp,
+            "width": int(ndvi.shape[1]),
+            "height": int(ndvi.shape[0]),
+            "png_path": str(ndvi_png_path),
+            "npy_path": str(npy_path),
+        }
+    )
     _save_meta(img_id, meta)
     _update_cache(meta)
 
     return meta
-
 
 
 def load_ndvi(img_id: str) -> np.ndarray:

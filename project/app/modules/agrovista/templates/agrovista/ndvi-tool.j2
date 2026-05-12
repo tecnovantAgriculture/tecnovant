@@ -42,6 +42,15 @@
     }
     #foliar-analysis-modal {z-index:999999 !important}
     #farm-picker-modal {z-index:999999 !important}
+
+    /* Fullscreen: right sidebar must not overflow viewport and must scroll independently */
+    #workzone:fullscreen aside,
+    #workzone:-webkit-full-screen aside,
+    #workzone:-moz-full-screen aside {
+      max-height: 100vh;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+    }
   </style>
 {% endblock %}
 
@@ -294,9 +303,20 @@
             </div>
 
             <div id="protein-box" class="rounded-lg bg-gray-50 dark:bg-gray-700 px-3 py-2 text-xs text-gray-600 dark:text-gray-400">
-               <div><i class="fas fa-flask mr-2"></i>Promedio de proteína: <span id="protein-value">--</span>%</div>
+              <div><i class="fas fa-flask mr-2"></i>Proteína: <span id="protein-value">--</span>%</div>
               <div>Nitrógeno estimado: <span id="nitrogen-value">--</span>%</div>
               <p id="protein-message" class="mt-1 text-[11px] text-gray-500 dark:text-gray-400"></p>
+            </div>
+
+            <div id="bromatologia-box" class="hidden rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2 text-xs">
+              <p class="mb-2 font-semibold text-gray-700 dark:text-gray-300"><i class="fas fa-seedling mr-1"></i>Perfil bromatológico</p>
+              <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-gray-600 dark:text-gray-400">
+                <div>FDA: <span id="broma-fda" class="font-medium text-gray-800 dark:text-gray-200">--</span>%</div>
+                <div>FDN: <span id="broma-fdn" class="font-medium text-gray-800 dark:text-gray-200">--</span>%</div>
+                <div>Energía: <span id="broma-mcal" class="font-medium text-gray-800 dark:text-gray-200">--</span> Mcal/kg</div>
+                <div>Energía: <span id="broma-mj" class="font-medium text-gray-800 dark:text-gray-200">--</span> MJ/kg</div>
+              </div>
+              <p id="broma-warning" class="hidden mt-1 text-[11px] text-amber-600 dark:text-amber-400"></p>
             </div>
 
             <details class="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2">
@@ -611,6 +631,7 @@
       protein:"/api/agrovista/protein",
       kmz:"/api/agrovista/polygon-kmz",
       mediaMeta:(id) => `/api/media/assets/${id}/agrovista-meta`,
+      displayInfo:(id) => `/api/media/assets/${id}/display-info`,
       analysisCrops:"/api/agrovista/analysis-crops",
       secondaryObjectives:"/api/agrovista/secondary-objectives",
       cropObjectives:"/api/foliage/objectives/",
@@ -655,6 +676,12 @@
       proteinValue: document.getElementById("protein-value"),
       nitrogenValue: document.getElementById("nitrogen-value"),
       proteinMessage: document.getElementById("protein-message"),
+      bromatologiaBox: document.getElementById("bromatologia-box"),
+      bromaFda: document.getElementById("broma-fda"),
+      bromaFdn: document.getElementById("broma-fdn"),
+      bromaMcal: document.getElementById("broma-mcal"),
+      bromaMj: document.getElementById("broma-mj"),
+      bromaWarning: document.getElementById("broma-warning"),
       uploader: document.getElementById("uploader"),
       uploadTrigger: document.getElementById("upload-trigger"),
       btnFit:   document.getElementById("fit-bounds"),
@@ -914,18 +941,31 @@
         el.nutrientsList.appendChild(li);
         return;
       }
-      for(const item of data){
+      // Filtrar Cl/cloro cuando no hay datos calibrados (target_value === 0)
+      const nutrientesAMostrar = data.filter(function(n) {
+        const sym = (n.nutrient_symbol || n.symbol || "").toLowerCase();
+        return !(sym === "cl" || sym === "cloro") || n.target_value !== 0;
+      });
+      // Símbolos con valor bibliográfico (constante, no calibrado localmente)
+      const BIBLIOGRAPHIC_SYMBOLS = new Set(["mo", "molibdeno", "si", "silicio"]);
+      for(const item of nutrientesAMostrar){
         const name = item?.nutrient_name || item?.nutrient_symbol || "Nutriente";
         const symbol = item?.nutrient_symbol ? ` (${item.nutrient_symbol})` : "";
         const unit = item?.nutrient_unit ? ` ${item.nutrient_unit}` : "";
         const value = formatNutrientValue(item?.target_value);
+        const sym = (item?.nutrient_symbol || "").toLowerCase();
+        const isBibliographic = BIBLIOGRAPHIC_SYMBOLS.has(sym);
         const li = document.createElement("li");
         li.className = "flex justify-between gap-2 text-sm";
         const label = document.createElement("span");
-        label.className = "font-medium";
+        label.className = isBibliographic
+          ? "font-medium text-emerald-600 dark:text-emerald-400"
+          : "font-medium";
         label.textContent = `${name}${symbol}`;
         const val = document.createElement("span");
-        val.className = "tabular-nums";
+        val.className = isBibliographic
+          ? "tabular-nums text-emerald-600 dark:text-emerald-400"
+          : "tabular-nums";
         val.textContent = `${value}${unit}`;
         li.appendChild(label);
         li.appendChild(val);
@@ -1532,6 +1572,14 @@
           el.analysisProteinInput.value = "";
         }
       }
+      if(el.analysisEnergyInput){
+        const energyMcal = lastAreaStats?.bromatologia?.energia_mcal;
+        if(energyMcal != null && isFinite(energyMcal)){
+          el.analysisEnergyInput.value = Number(energyMcal).toFixed(2);
+        }else{
+          el.analysisEnergyInput.value = "";
+        }
+      }
       if(el.analysisLotAreaInput){
         el.analysisLotAreaInput.dataset.manual = "0";
       }
@@ -2059,8 +2107,30 @@
       }
     }
 
+    function setBromatologiaBox(broma){
+      if(!el.bromatologiaBox) return;
+      if(!broma){
+        el.bromatologiaBox.classList.add("hidden");
+        return;
+      }
+      el.bromatologiaBox.classList.remove("hidden");
+      if(el.bromaFda)  el.bromaFda.textContent  = broma.fda_pct   != null ? Number(broma.fda_pct).toFixed(2)   : "--";
+      if(el.bromaFdn)  el.bromaFdn.textContent  = broma.fdn_pct   != null ? Number(broma.fdn_pct).toFixed(2)   : "--";
+      if(el.bromaMcal) el.bromaMcal.textContent = broma.energia_mcal != null ? Number(broma.energia_mcal).toFixed(2) : "--";
+      if(el.bromaMj)   el.bromaMj.textContent   = broma.energia_mj != null ? Number(broma.energia_mj).toFixed(2)  : "--";
+      if(el.bromaWarning){
+        if(broma.en_rango === false){
+          el.bromaWarning.textContent = "Índice fuera del rango calibrado — estimación aproximada";
+          el.bromaWarning.classList.remove("hidden");
+        } else {
+          el.bromaWarning.classList.add("hidden");
+        }
+      }
+    }
+
     resetVariableValues();
     setProteinBox(null, null, "Selecciona un polígono");
+    setBromatologiaBox(null);
     if(el.saveLotAnalysisBtn){
       el.saveLotAnalysisBtn.disabled = true;
     }
@@ -2173,6 +2243,7 @@
       });
       setPrimaryMetrics(data);
       setProteinBox(data.protein, data.nitrogen, "");
+      setBromatologiaBox(data.bromatologia || null);
       const nutrientList = Array.isArray(data.nutrients)
         ? data.nutrients.map(item => ({ ...item }))
         : [];
@@ -2387,23 +2458,57 @@
         }
         loader.hidden = false;
         try{
-          const metaUrl = ENDPOINTS.mediaMeta(asset.id);
-          const resp = await fetch(metaUrl, { credentials: 'include' });
-          if(resp.status === 202){
+          // Phase 1 — fast: only display PNG dimensions from DB (< 200ms).
+          const dispResp = await fetch(ENDPOINTS.displayInfo(asset.id), { credentials: 'include' });
+          if(dispResp.status === 202){
             throw new Error('La imagen aún está siendo procesada. Espera unos momentos e intenta de nuevo.');
           }
-          if(!resp.ok){
-            throw new Error(await resp.text());
+          if(!dispResp.ok){
+            throw new Error(await dispResp.text());
           }
-          const meta = await resp.json();
-          await onPick({ meta, asset });
+          const displayMeta = await dispResp.json();
+          await onPick({ meta: displayMeta, asset });
           hide();
         }catch(err){
           console.error(err);
           alert('Error al cargar la metadata del activo seleccionado');
+          return;
         }finally{
           loader.hidden = true;
         }
+
+        // Phase 2 — lazy: load analysis layers in background, update previews when ready.
+        _loadAnalysisLayersLazy(asset.id);
+      }
+
+      async function _loadAnalysisLayersLazy(assetId){
+        try{
+          const resp = await fetch(ENDPOINTS.mediaMeta(assetId), { credentials: 'include' });
+          if(!resp.ok) return;
+          const fullMeta = await resp.json();
+          // Abort if the user has already switched to a different image.
+          if(!imageMeta || imageMeta.asset_id !== assetId) return;
+          // Merge analysis previews into current imageMeta.
+          if(fullMeta.previews && typeof fullMeta.previews === 'object'){
+            Object.assign(imageMeta.previews, fullMeta.previews);
+          }
+          if(fullMeta.cache_npy_key) imageMeta.cache_npy_key = fullMeta.cache_npy_key;
+          if(fullMeta.cache_wb_key) imageMeta.cache_wb_key = fullMeta.cache_wb_key;
+          // Enable layer selector options that are now available.
+          const availableKeys = Object.keys(imageMeta.previews).filter(k => !!imageMeta.previews[k]);
+          if(el.previewSelector){
+            el.previewSelector.querySelectorAll('option').forEach(opt => {
+              opt.disabled = !availableKeys.includes(opt.value);
+            });
+          }
+          // Auto-switch to nd_index_rgba (Índice espectral) if the user hasn't
+          // manually changed the layer (still on the rgb fallback set by applyMeta).
+          if(currentPreviewKey === 'rgb' && imageMeta.previews['nd_index_rgba']){
+            currentPreviewKey = 'nd_index_rgba';
+            if(el.previewSelector) el.previewSelector.value = 'nd_index_rgba';
+            if(overlay) overlay.setUrl(getOverlayUrl());
+          }
+        }catch(_){ /* silent — layers will remain unavailable */ }
       }
 
       function handleMessage(event){
@@ -2564,7 +2669,7 @@
         if(sx > rulerTop.width) break;
         if(sx < 0) { if(u > x0) break; else continue; }
         ctxT.beginPath(); ctxT.moveTo(Math.round(sx)+0.5, TOP_RULER_H - 12); ctxT.lineTo(Math.round(sx)+0.5, TOP_RULER_H); ctxT.stroke();
-        ctxT.fillText(labelXFn(stepUX), Math.round(sx), 2);
+        ctxT.fillText(labelXFn(u), Math.round(sx), 2);
       }
 
       // Right ticks
@@ -2582,16 +2687,16 @@
         labelYFn = (units) => fmtPixels(units);
       }
       const y0 = a.lat;
-      const firstY = Math.ceil(y0 / stepUY) * stepUY;
+      const firstY = Math.floor(y0 / stepUY) * stepUY;
       ctxR.font = "11px system-ui"; ctxR.textAlign = "right"; ctxR.textBaseline = "middle";
-      const textPad = 8; // left padding for text inside RIGHT_RULER_W
-      for(let u = firstY;; u += stepUY){
-        const sy = (u - y0) / unitPerPxY;
+      const textPad = 8;
+      for(let u = firstY;; u -= stepUY){
+        const sy = (y0 - u) / unitPerPxY;
         if(sy > rulerRight.height) break;
-        if(sy < 0) { if(u > y0) break; else continue; }
+        if(sy < 0) continue;
         ctxR.beginPath(); ctxR.moveTo(RIGHT_RULER_W - 12, Math.round(sy)+0.5);
         ctxR.lineTo(RIGHT_RULER_W, Math.round(sy)+0.5); ctxR.stroke();
-        ctxR.fillText(labelYFn(stepUY), RIGHT_RULER_W - textPad, Math.round(sy));
+        ctxR.fillText(labelYFn(u), RIGHT_RULER_W - textPad, Math.round(sy));
       }
     }
     function scheduleRulersRedraw(){ requestAnimationFrame(drawRulers); }
@@ -2653,6 +2758,7 @@
       statsRequestToken += 1;
       areaStatsCache.clear();
       lotState.clear();
+      lotCounter = 0;
       activeLayerId = null;
       renderLotsList();
       setText(el.activeLotName, "Sin lote seleccionado");

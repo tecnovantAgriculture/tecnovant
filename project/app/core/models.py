@@ -26,9 +26,10 @@ from sqlalchemy.orm import joinedload
 # Third party imports
 from werkzeug.security import check_password_hash, generate_password_hash
 
+from app.core.constants import ProfileDataKeys
+
 # Local application imports
 from app.extensions import db
-from app.core.constants import ProfileDataKeys
 
 __doc__ = """
 Documentation of the model:
@@ -421,16 +422,17 @@ class User(db.Model):
     def avatar_url(self) -> str:
         """Get full avatar URL (or default if no avatar)."""
         from flask import current_app
+
         from app.core.services.avatar_service import AvatarService
-        
+
         avatar_path = self.avatar_path
         if not avatar_path:
             try:
-                return current_app.config.get('AVATAR_DEFAULT', '/img/avatar.png')
+                return current_app.config.get("AVATAR_DEFAULT", "/img/avatar.png")
             except RuntimeError:
                 # No app context
-                return '/img/avatar.png'
-        
+                return "/img/avatar.png"
+
         # Use AvatarService to generate URL
         try:
             url = AvatarService.get_avatar_url(avatar_path)
@@ -439,16 +441,17 @@ class User(db.Model):
         except RuntimeError:
             # Fallback if no app context
             pass
-        
+
         # Fallback default
         try:
-            return current_app.config.get('AVATAR_DEFAULT', '/img/avatar.png')
+            return current_app.config.get("AVATAR_DEFAULT", "/img/avatar.png")
         except RuntimeError:
-            return '/img/avatar.png'
+            return "/img/avatar.png"
 
     def update_last_access(self):
         """Update last_access timestamp to current UTC time."""
         from datetime import datetime
+
         self.last_access = datetime.utcnow().isoformat()
 
 

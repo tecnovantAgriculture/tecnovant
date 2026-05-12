@@ -788,8 +788,10 @@ class RecommendationGenerator(MethodView):
 
         # Check 2: No products with valid prices
         products_without_price = [
-            prod for prod in productos_contribuciones_data
-            if prod not in productos_precios_data or productos_precios_data.get(prod, 0) == 0
+            prod
+            for prod in productos_contribuciones_data
+            if prod not in productos_precios_data
+            or productos_precios_data.get(prod, 0) == 0
         ]
         if products_without_price:
             sanity_warnings.append(
@@ -811,7 +813,9 @@ class RecommendationGenerator(MethodView):
 
         # Log sanity warnings
         for warning in sanity_warnings:
-            current_app.logger.warning(f"[recommendation:sanity] lote={lot_id}, {warning}")
+            current_app.logger.warning(
+                f"[recommendation:sanity] lote={lot_id}, {warning}"
+            )
 
         # --- Preparar datos para guardar en Recommendation ---
         report_creator = ReportView()

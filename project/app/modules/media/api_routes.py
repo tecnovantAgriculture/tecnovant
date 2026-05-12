@@ -8,8 +8,8 @@ import shutil
 from pathlib import Path
 
 import numpy as np
-from PIL import Image
 from flask import current_app, jsonify, request, url_for
+from PIL import Image
 from sqlalchemy.orm import selectinload
 
 from app.core.controller import api_login_required
@@ -17,9 +17,14 @@ from app.extensions import db
 
 from . import media_api as api
 from .controller import MediaController
-from .helpers import PreprocessConfig, _media_root, preprocess_rgb_once, generate_nd_index_rgba
+from .helpers import (
+    PreprocessConfig,
+    _media_root,
+    generate_nd_index_rgba,
+    preprocess_rgb_once,
+)
 from .models import Asset, StorageLocation
-from .tasks import enqueue_preprocess_asset, _resolve_cache_dir
+from .tasks import _resolve_cache_dir, enqueue_preprocess_asset
 
 
 @api.route("/ping", methods=["GET"])
@@ -49,16 +54,21 @@ def reprocess_asset(uuid: str):
         enqueue_preprocess_asset(asset.id)
     except Exception as e:
         current_app.logger.exception("media: failed to enqueue reprocess for %s", uuid)
-        return jsonify({
-            "success": False,
-            "message": f"No se pudo encolar la tarea: {e}"
-        }), 500
+        return (
+            jsonify({"success": False, "message": f"No se pudo encolar la tarea: {e}"}),
+            500,
+        )
 
-    return jsonify({
-        "success": True,
-        "message": f"Reprocesamiento de {asset.original_name} encolado",
-        "asset_uuid": asset.uuid,
-    }), 202
+    return (
+        jsonify(
+            {
+                "success": True,
+                "message": f"Reprocesamiento de {asset.original_name} encolado",
+                "asset_uuid": asset.uuid,
+            }
+        ),
+        202,
+    )
 
 
 @api.route("/assets/<uuid>/preprocess-status", methods=["GET"])
@@ -66,18 +76,18 @@ def reprocess_asset(uuid: str):
 def get_preprocess_status(uuid: str):
     """Obtener estado detallado del preprocesamiento de un asset."""
     asset = Asset.query.filter_by(uuid=uuid).first_or_404()
-    
+
     cache_dir = _resolve_cache_dir(current_app._get_current_object(), asset.uuid)
     processing_flag = cache_dir / ".processing"
     status_file = cache_dir / ".status.json"
     error_flag = cache_dir / ".error"
-    
+
     response = {
         "asset_uuid": asset.uuid,
         "is_processing": processing_flag.exists(),
         "has_error": error_flag.exists(),
     }
-    
+
     # Read error if exists
     if error_flag.exists():
         try:
@@ -85,7 +95,7 @@ def get_preprocess_status(uuid: str):
                 response["error"] = fh.read().strip()
         except Exception:
             response["error"] = "No se pudo leer el error"
-    
+
     # Read detailed status if available
     if status_file.exists():
         try:
@@ -93,15 +103,16 @@ def get_preprocess_status(uuid: str):
                 response["status"] = json.load(fh)
         except Exception:
             response["status"] = None
-    
+
     rel_cache_dir = os.path.join("cache", uuid)
     artifact_patterns = [
-        ("npz",          f"{uuid}__rgb_preproc_linear.npz",   False),
-        ("rgb_preview",  f"{uuid}__rgb_preproc_preview.png",  True),
-        ("vi_gray",      f"{uuid}__vi_gr_ratio.png",          True),
-        ("vi_heat",      f"{uuid}__vi_gr_heat.png",           True),
-        ("heatmap",      f"{uuid}__vi_heatmap.png",           True),
-        ("nd_index_rgba",f"{uuid}__nd_index_rgba.png",        True),
+        ("npy", f"{uuid}__rgb_preproc_linear.npy", False),
+        ("wb", f"{uuid}.wb.json", False),
+        ("rgb_preview", f"{uuid}__rgb_preproc_preview.png", True),
+        ("vi_gray", f"{uuid}__vi_gr_ratio.png", True),
+        ("vi_heat", f"{uuid}__vi_gr_heat.png", True),
+        ("heatmap", f"{uuid}__vi_heatmap.png", True),
+        ("nd_index_rgba", f"{uuid}__nd_index_rgba.png", True),
     ]
     artifacts = {}
     previews = {}
@@ -109,11 +120,13 @@ def get_preprocess_status(uuid: str):
         exists = (cache_dir / pattern).exists()
         artifacts[key] = exists
         if is_image and exists:
-            previews[key] = url_for("media.serve_file", key=os.path.join(rel_cache_dir, pattern))
+            previews[key] = url_for(
+                "media.serve_file", key=os.path.join(rel_cache_dir, pattern)
+            )
 
     response["artifacts"] = artifacts
     response["previews"] = previews
-    
+
     return jsonify(response)
 
 
@@ -197,7 +210,9 @@ def upload_local_api():
                         "height": asset.height,
                         "size_bytes": asset.size_bytes,
                         "serve_url": url_for("media.serve_file", key=asset.storage_key),
-                        "download_url": url_for("media.download_file", key=asset.storage_key),
+                        "download_url": url_for(
+                            "media.download_file", key=asset.storage_key
+                        ),
                     },
                 }
             ),
@@ -227,6 +242,117 @@ def delete_asset(asset_id: int):
         return jsonify({"message": "Delete failed"}), 500
 
 
+@api.route("/assets/<int:asset_id>/display-info", methods=["GET"])
+@api_login_required
+def asset_display_info(asset_id: int):
+    """Return only what's needed to place the image on the Leaflet map immediately.
+
+    Reads from DB + existing display artefacts on disk — no rasterio, no PIL,
+    no numpy computation. The heavy agrovista-meta endpoint is called lazily
+    by the frontend after the image is already visible.
+
+    Args:
+        asset_id: Numeric primary key of the Asset record.
+
+    Returns:
+        JSON with display PNG dimensions, URL, and stub meta fields compatible
+        with ``applyMeta``. HTTP 202 when the display PNG is not yet ready.
+
+    Raises:
+        400: If the asset is not stored locally.
+        404: If the asset record does not exist.
+    """
+    import json as _json
+
+    from app.modules.agrovista.services.display_assets import _resolve_display_dir
+
+    asset = Asset.query.get_or_404(asset_id)
+    if asset.storage != StorageLocation.LOCAL.value:
+        return jsonify({"message": "Solo se soportan assets locales."}), 400
+
+    # Resolve display PNG path — no computation, just path resolution.
+    display_dir = _resolve_display_dir(asset.uuid)
+    display_png = display_dir / "display.png"
+    metadata_json = display_dir / "metadata.json"
+
+    # Check processing status.
+    app = current_app._get_current_object()
+    cache_dir = _resolve_cache_dir(app, asset.uuid)
+    processing_flag = cache_dir / ".processing"
+
+    if not display_png.exists():
+        if processing_flag.exists():
+            return (
+                jsonify({"message": "El asset aún está siendo procesado."}),
+                202,
+            )
+        # Enqueue if nothing is happening.
+        try:
+            enqueue_preprocess_asset(asset.id)
+        except Exception:
+            pass
+        return (
+            jsonify({"message": "Procesamiento encolado. Intenta en unos momentos."}),
+            202,
+        )
+
+    # Read display dimensions from metadata.json — no Pillow, no rasterio.
+    display_w: int | None = asset.width
+    display_h: int | None = asset.height
+    if metadata_json.exists():
+        try:
+            with metadata_json.open("r", encoding="utf-8") as fh:
+                meta_data = _json.load(fh)
+            png_size = meta_data.get("display_png_size", {})
+            display_w = png_size.get("width") or display_w
+            display_h = png_size.get("height") or display_h
+        except Exception:
+            pass
+
+    display_key = os.path.join("display", asset.uuid, "display.png")
+    display_url = url_for("media.serve_file", key=display_key)
+
+    return (
+        jsonify(
+            {
+                "id": asset.uuid,
+                "uuid": asset.uuid,
+                "asset_id": asset.id,
+                "width": display_w,
+                "height": display_h,
+                "width_preview": display_w,
+                "height_preview": display_h,
+                "width_full": asset.width,
+                "height_full": asset.height,
+                "mppX": asset.mpp,
+                "mppY": asset.mpp,
+                "display_ready": True,
+                "processed": False,
+                "preview_only": True,
+                "method": "ndvi_approx",
+                "visible_method": "combined",
+                "has_nir": False,
+                "source": "media",
+                "preview_url": display_url,
+                "previews": {"rgb": display_url},
+                "variables": {
+                    "vi": None,
+                    "vari": None,
+                    "gli": None,
+                    "ngrdi": None,
+                    "exg": None,
+                },
+                "ndvi_stamp": (
+                    int(asset.created_at.timestamp()) if asset.created_at else None
+                ),
+                "cache_npy_key": None,
+                "cache_wb_key": None,
+            }
+        ),
+        200,
+    )
+
+
 @api.route("/assets/<int:asset_id>/agrovista-meta", methods=["GET"])
 @api_login_required
 def asset_agrovista_meta(asset_id: int):
@@ -241,12 +367,18 @@ def asset_agrovista_meta(asset_id: int):
 
     asset = Asset.query.get_or_404(asset_id)
     if asset.storage != StorageLocation.LOCAL.value:
-        return jsonify({"message": "Solo se soportan assets locales en este flujo."}), 400
+        return (
+            jsonify({"message": "Solo se soportan assets locales en este flujo."}),
+            400,
+        )
 
     try:
         media_root = Path(_media_root())
     except Exception:
-        return jsonify({"message": "No se pudo resolver el almacenamiento de media."}), 500
+        return (
+            jsonify({"message": "No se pudo resolver el almacenamiento de media."}),
+            500,
+        )
 
     source_path = media_root / asset.storage_key
     if not source_path.exists():
@@ -260,29 +392,46 @@ def asset_agrovista_meta(asset_id: int):
     )
 
     in_key = source_path.stem
-    npz_path = cache_dir / f"{in_key}__rgb_preproc_linear.npz"
+    wb_path = cache_dir / f"{in_key}.wb.json"
     preview_path = cache_dir / f"{in_key}__rgb_preproc_preview.png"
 
-    if not npz_path.exists():
-        # Cache aún no existe — puede estar procesando en background
+    if not wb_path.exists():
+        # Sidecar WB aún no existe — preprocessing pendiente o en curso.
         processing_flag = cache_dir / ".processing"
         if processing_flag.exists():
-            return jsonify({"message": "El asset aún está siendo procesado. Intenta en unos momentos."}), 202
+            return (
+                jsonify(
+                    {
+                        "message": "El asset aún está siendo procesado. Intenta en unos momentos."
+                    }
+                ),
+                202,
+            )
         # No existe ni está procesando: encolar
         try:
             enqueue_preprocess_asset(asset.id)
         except Exception:
             pass
-        return jsonify({"message": "Procesamiento encolado. Intenta en unos momentos."}), 202
-    # Generate missing previews if NPZ exists but previews missing
-    missing_previews = []
+        return (
+            jsonify({"message": "Procesamiento encolado. Intenta en unos momentos."}),
+            202,
+        )
+
+    # Regenerar previews faltantes si el sidecar existe pero faltan PNGs.
     vi_gray_path = cache_dir / f"{in_key}__vi_gr_ratio.png"
     vi_heat_path = cache_dir / f"{in_key}__vi_gr_heat.png"
     vi_heatmap_path = cache_dir / f"{in_key}__vi_heatmap.png"
-    for name, path in [("rgb", preview_path), ("vi_gray", vi_gray_path), ("vi_heat", vi_heat_path), ("vi_heatmap", vi_heatmap_path)]:
-        if path and not path.exists():
-            missing_previews.append(name)
-    if missing_previews and npz_path.exists():
+    missing_previews = [
+        name
+        for name, path in [
+            ("rgb", preview_path),
+            ("vi_gray", vi_gray_path),
+            ("vi_heat", vi_heat_path),
+            ("vi_heatmap", vi_heatmap_path),
+        ]
+        if not path.exists()
+    ]
+    if missing_previews:
         try:
             preprocess_rgb_once(source_path, cfg)
         except Exception:
@@ -301,13 +450,6 @@ def asset_agrovista_meta(asset_id: int):
 
     width_full = asset.width or None
     height_full = asset.height or None
-    if (width_full is None or height_full is None) and npz_path and npz_path.exists():
-        try:
-            arr = np.load(npz_path, mmap_mode="r")["rgb"]
-            height_full, width_full = int(arr.shape[0]), int(arr.shape[1])
-        except Exception:
-            width_full = width_full or None
-            height_full = height_full or None
 
     def _url(path: Path | None):
         if not path or not path.exists():
@@ -316,7 +458,9 @@ def asset_agrovista_meta(asset_id: int):
         return url_for("media.serve_file", key=key)
 
     preview_url = _url(preview_path)
-    npz_key = os.path.join(rel_cache_dir, npz_path.name) if npz_path and npz_path.exists() else None
+    npy_path = cache_dir / f"{in_key}__rgb_preproc_linear.npy"
+    npy_key = os.path.join(rel_cache_dir, npy_path.name) if npy_path.exists() else None
+    wb_key = os.path.join(rel_cache_dir, wb_path.name) if wb_path.exists() else None
     # Generate nd_index_rgba on-demand if not yet cached
     nd_index_path = cache_dir / f"{asset.uuid}__nd_index_rgba.png"
     if not nd_index_path.exists():
@@ -381,7 +525,8 @@ def asset_agrovista_meta(asset_id: int):
         },
         "ndvi_stamp": int(asset.created_at.timestamp()) if asset.created_at else None,
         "preview_url": preview_url,
-        "cache_npz_key": npz_key,
+        "cache_npy_key": npy_key,
+        "cache_wb_key": wb_key,
         "cache_dir": rel_cache_dir,
         "source": "media",
     }
@@ -392,44 +537,46 @@ def asset_agrovista_meta(asset_id: int):
 @api_login_required
 def cleanup_orphaned_processing():
     """Clean up orphaned .processing flags from cache directories."""
-    from pathlib import Path
     import json
     import time
-    
+    from pathlib import Path
+
     app = current_app._get_current_object()
-    
+
     # Get cache root directory
     root_cfg = app.config.get("MEDIA_PREPROCESS_CACHE_DIR")
     if root_cfg:
         cache_root = Path(root_cfg)
     else:
         from .helpers import _media_root
+
         cache_root = Path(_media_root()) / "cache"
-    
+
     if not cache_root.exists():
-        return jsonify({
-            "success": True,
-            "message": "Cache root does not exist",
-            "cleaned": 0
-        }), 200
-    
+        return (
+            jsonify(
+                {"success": True, "message": "Cache root does not exist", "cleaned": 0}
+            ),
+            200,
+        )
+
     cleaned = 0
     errors = []
-    
+
     # Look for orphaned .processing flags
     for cache_dir in cache_root.iterdir():
         if not cache_dir.is_dir():
             continue
-            
+
         processing_flag = cache_dir / ".processing"
         status_file = cache_dir / ".status.json"
-        
+
         if processing_flag.exists():
             try:
                 # Check if processing is actually stuck
                 # If status file exists and is old (> 30 minutes), clean it
                 should_clean = False
-                
+
                 if status_file.exists():
                     try:
                         status_data = json.loads(status_file.read_text())
@@ -437,10 +584,13 @@ def cleanup_orphaned_processing():
                         if updated_at_str:
                             # Parse timestamp
                             from datetime import datetime
-                            updated_at = datetime.fromisoformat(updated_at_str.replace("Z", "+00:00"))
+
+                            updated_at = datetime.fromisoformat(
+                                updated_at_str.replace("Z", "+00:00")
+                            )
                             now = datetime.utcnow()
                             age_minutes = (now - updated_at).total_seconds() / 60
-                            
+
                             if age_minutes > 30:  # 30 minutes old
                                 should_clean = True
                     except Exception:
@@ -453,27 +603,27 @@ def cleanup_orphaned_processing():
                     file_age = time.time() - processing_flag.stat().st_mtime
                     if file_age > 1800:  # 30 minutes in seconds
                         should_clean = True
-                
+
                 if should_clean:
                     processing_flag.unlink()
                     if status_file.exists():
                         status_file.unlink()
                     cleaned += 1
-                    
+
             except PermissionError as e:
                 errors.append(f"Permission error cleaning {cache_dir.name}: {e}")
             except Exception as e:
                 errors.append(f"Error cleaning {cache_dir.name}: {e}")
-    
+
     response = {
         "success": True,
         "message": f"Cleaned {cleaned} orphaned processing flags",
-        "cleaned": cleaned
+        "cleaned": cleaned,
     }
-    
+
     if errors:
         response["errors"] = errors[:10]  # Limit errors in response
-    
+
     return jsonify(response), 200
 
 
@@ -482,34 +632,49 @@ def cleanup_orphaned_processing():
 def cleanup_asset_cache(uuid: str):
     """Clean up cache for a specific asset."""
     import shutil
-    
+
     app = current_app._get_current_object()
-    
+
     # Resolve cache directory
     from .tasks import _resolve_cache_dir
+
     cache_dir = _resolve_cache_dir(app, uuid)
-    
+
     try:
         if cache_dir.exists():
             shutil.rmtree(cache_dir)
-            return jsonify({
-                "success": True,
-                "message": f"Cache cleaned for asset {uuid}"
-            }), 200
+            return (
+                jsonify(
+                    {"success": True, "message": f"Cache cleaned for asset {uuid}"}
+                ),
+                200,
+            )
         else:
-            return jsonify({
-                "success": True,
-                "message": f"No cache found for asset {uuid}"
-            }), 200
+            return (
+                jsonify(
+                    {"success": True, "message": f"No cache found for asset {uuid}"}
+                ),
+                200,
+            )
     except PermissionError as e:
-        return jsonify({
-            "success": False,
-            "message": f"Permission error cleaning cache for {uuid}",
-            "error": str(e)
-        }), 403
+        return (
+            jsonify(
+                {
+                    "success": False,
+                    "message": f"Permission error cleaning cache for {uuid}",
+                    "error": str(e),
+                }
+            ),
+            403,
+        )
     except Exception as e:
-        return jsonify({
-            "success": False,
-            "message": f"Error cleaning cache for {uuid}",
-            "error": str(e)
-        }), 500
+        return (
+            jsonify(
+                {
+                    "success": False,
+                    "message": f"Error cleaning cache for {uuid}",
+                    "error": str(e),
+                }
+            ),
+            500,
+        )

@@ -19,6 +19,7 @@ from app.modules.foliage.models import Farm
 from . import agrovista as web
 from .models import NDVIImage
 
+
 @web.route("/", methods=["GET"])
 @login_required
 def hello():
@@ -52,7 +53,7 @@ def hello():
 @login_required
 def secondary_objectives():
     """Vista web GET-only para objetivos secundarios.
-    
+
     NOTA: Este endpoint es solo para la interfaz web (renderiza template).
     Para operaciones CRUD completas (GET, POST, PUT, DELETE), usar los endpoints
     API en `agrovista/api_routes.py`.

@@ -5,7 +5,11 @@ from datetime import datetime
 from flask import jsonify, request
 from flask_jwt_extended import get_jwt
 
-from app.core.controller import api_login_required, check_resource_access, login_required
+from app.core.controller import (
+    api_login_required,
+    check_resource_access,
+    login_required,
+)
 from app.core.models import Organization
 from app.extensions import db
 from app.modules.foliage.models import (
@@ -272,8 +276,7 @@ def get_recommendation_results(recommendation_id):
 
     # 3. Obtener producción más reciente del mismo lote
     prod = (
-        Production.query
-        .filter_by(lot_id=rec.lot_id)
+        Production.query.filter_by(lot_id=rec.lot_id)
         .order_by(Production.date.desc())
         .first()
     )
@@ -286,38 +289,59 @@ def get_recommendation_results(recommendation_id):
     # 5. Calcular resumen
     result_summary = _calculate_result_summary(prod, obj)
 
-    return jsonify({
-        "success": True,
-        "recommendation": {
-            "id": rec.id,
-            "lot_id": rec.lot_id,
-            "crop_id": rec.crop_id,
-            "date": rec.date.isoformat() if rec.date else None,
-            "title": rec.title,
-            "applied": rec.applied if hasattr(rec, 'applied') else None,
-            "automatic_recommendations": rec.automatic_recommendations if hasattr(rec, 'automatic_recommendations') else None,
-            "text_recommendations": rec.text_recommendations if hasattr(rec, 'text_recommendations') else None,
-        },
-        "production": {
-            "id": prod.id,
-            "lot_id": prod.lot_id,
-            "date": prod.date.isoformat() if prod.date else None,
-            "production_kg": prod.production_kg,
-            "bags": prod.bags,
-            "price_per_kg": prod.price_per_kg,
-        } if prod else None,
-        "objective": {
-            "id": obj.id,
-            "crop_id": obj.crop_id,
-            "target_value": obj.target_value,
-        } if obj else None,
-        "result_summary": result_summary,
-        "roi": {
-            "cost_estimated": None,
-            "benefit_estimated": None,
-            "note": "ROI económico disponible en fase futura (requiere datos de costo)"
-        }
-    }), 200
+    return (
+        jsonify(
+            {
+                "success": True,
+                "recommendation": {
+                    "id": rec.id,
+                    "lot_id": rec.lot_id,
+                    "crop_id": rec.crop_id,
+                    "date": rec.date.isoformat() if rec.date else None,
+                    "title": rec.title,
+                    "applied": rec.applied if hasattr(rec, "applied") else None,
+                    "automatic_recommendations": (
+                        rec.automatic_recommendations
+                        if hasattr(rec, "automatic_recommendations")
+                        else None
+                    ),
+                    "text_recommendations": (
+                        rec.text_recommendations
+                        if hasattr(rec, "text_recommendations")
+                        else None
+                    ),
+                },
+                "production": (
+                    {
+                        "id": prod.id,
+                        "lot_id": prod.lot_id,
+                        "date": prod.date.isoformat() if prod.date else None,
+                        "production_kg": prod.production_kg,
+                        "bags": prod.bags,
+                        "price_per_kg": prod.price_per_kg,
+                    }
+                    if prod
+                    else None
+                ),
+                "objective": (
+                    {
+                        "id": obj.id,
+                        "crop_id": obj.crop_id,
+                        "target_value": obj.target_value,
+                    }
+                    if obj
+                    else None
+                ),
+                "result_summary": result_summary,
+                "roi": {
+                    "cost_estimated": None,
+                    "benefit_estimated": None,
+                    "note": "ROI económico disponible en fase futura (requiere datos de costo)",
+                },
+            }
+        ),
+        200,
+    )
 
 
 def _calculate_result_summary(prod, obj):
@@ -340,8 +364,14 @@ def _calculate_result_summary(prod, obj):
     success = (delta_kg >= 0) if delta_kg is not None else None
 
     return {
-        "status": "SUCCESS" if success else ("FAILED" if success is False else "NO_TARGET"),
-        "status_text": ("✅ EXITOSA" if success else "⚠️ NO CUMPLIDA") if success is not None else "Sin objetivo definido",
+        "status": (
+            "SUCCESS" if success else ("FAILED" if success is False else "NO_TARGET")
+        ),
+        "status_text": (
+            ("✅ EXITOSA" if success else "⚠️ NO CUMPLIDA")
+            if success is not None
+            else "Sin objetivo definido"
+        ),
         "actual_kg": actual,
         "target_kg": target,
         "delta_kg": round(delta_kg, 2) if delta_kg is not None else None,
