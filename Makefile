@@ -41,18 +41,18 @@ save:
 	git commit -m "fix and updates"
 
 test:
-	$(VENV_NAME)/bin/pytest
+	$(VENV_NAME)/bin/pytest -c project/pyproject.toml project/tests
 
 format:
 	@echo "Formatting code..."
-	$(VENV_NAME)/bin/black project/app project/run.py
-	$(VENV_NAME)/bin/isort project/app project/run.py
+	$(VENV_NAME)/bin/black --config project/pyproject.toml project/app project/run.py
+	$(VENV_NAME)/bin/isort --settings-path project/pyproject.toml project/app project/run.py
 
 lint:
 	@echo "Running linters..."
-	$(VENV_NAME)/bin/flake8 project/app project/run.py
-	$(VENV_NAME)/bin/black --check project/app project/run.py
-	$(VENV_NAME)/bin/isort --check-only project/app project/run.py
+	$(VENV_NAME)/bin/flake8 --config project/setup.cfg project/app project/run.py
+	$(VENV_NAME)/bin/black --check --config project/pyproject.toml project/app project/run.py
+	$(VENV_NAME)/bin/isort --check-only --settings-path project/pyproject.toml project/app project/run.py
 
 check: format lint test
 
@@ -80,6 +80,8 @@ rmcache:
 	find $(PROJECT_DIR) -type d -name '__pycache__' -exec rm -rf {} +
 
 documents:
+	MAIL_SERVER=docs MAIL_USERNAME=docs MAIL_PASSWORD=docs \
+	SECRET_KEY=docs SECURITY_SALT=docs \
 	$(VENV_NAME)/bin/pdoc --docformat google -o docs project/app
 
 css:

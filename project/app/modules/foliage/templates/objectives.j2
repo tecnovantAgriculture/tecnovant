@@ -35,6 +35,7 @@
 {# api de consumo #}
 
 {% set api_url = url_for('foliage_api.objectives') %}
+{% set csv_download_url = url_for('foliage_api.download_objectives_csv') %}
 
 
 {% block extra_js %}

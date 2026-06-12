@@ -18,6 +18,19 @@
 {# api de consumo #}
 {% set api_url = url_for('foliage_api.lots_view') %}
 {% set search_url = url_for('foliage.amd_lots') %}
+{% set csv_download_url = url_for('foliage_api.download_csv', resource='lots') %}
+
+{# Accion extra por fila: link al seguimiento foliar post-aplicacion.
+   Definido como macro (no como set) para que se evalue en el scope del
+   for-loop del padre, donde `item` existe. crud_base.j2 invoca
+   row_action_extra(item) si esta definido. #}
+{% macro row_action_extra(item) %}
+<a href="{{ url_for('foliage_report.seguimiento_lote', lot_id=item.id) }}"
+   class="inline-flex items-center px-2 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 rounded-md transition-colors"
+   role="menuitem">
+    Ver evolución foliar
+</a>
+{% endmacro %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="/css/leaflet.css" />

@@ -1034,3 +1034,141 @@ def secondary_target_map(
         except (TypeError, ValueError):
             continue
     return mapping
+
+
+# Concentración (grado) de los productos de la línea nano, por símbolo.
+# Port del btn_Nano_formula del FRM_Balance (Foliar Digital.xlsm).
+NANO_PRODUCT_GRADES: Dict[str, float] = {"N": 16.0, "P": 11.0, "K": 19.0}
+DEFAULT_NANO_GRADE = 40.0
+
+
+def compute_mineral_balance(
+    order: Sequence[str],
+    targets: Dict[str, object],
+    actuals: Dict[str, object],
+    aforo: object,
+    nutrients: Sequence[object],
+    *,
+    aforo_actual: object = None,
+    digits: int | None = 2,
+) -> Dict[str, object]:
+    """Compute the mineral balance table (port of FRM_Balance in Excel).
+
+    Macros convert as ``% × aforo × 100`` and micros as ``ppm × aforo ÷ 100``
+    to express both sides in kg/ha. The objective row converts with the
+    objective aforo and the actual row with the actual aforo (falling back
+    to the objective one so legacy reports without an actual aforo keep
+    rendering). The difference keeps only deficits (surpluses clamp to 0).
+    The formula grade is each deficit share of the total requirement, and
+    the nano dosage divides each deficit by the nano product concentration
+    (N 16, P 11, K 19, others 40).
+
+    Args:
+        order: Nutrient display order (names as the frontend knows them).
+        targets: Reference values keyed by nutrient name (% or ppm).
+        actuals: Leaf analysis values keyed by nutrient name (% or ppm).
+        aforo: Forage yield of the objective side; converts the objective
+            row and acts as fallback for the actual row.
+        nutrients: ORM ``Nutrient`` rows to classify macro/micro and map
+            names to symbols.
+        aforo_actual: Forage yield of the lot/analysis side; converts the
+            actual row. ``None`` or invalid falls back to ``aforo``.
+        digits: Rounding applied to every numeric output.
+
+    Returns:
+        Dict[str, object]: ``{"entries": [...], "total_kg_ha": float|None,
+        "aforo_actual_fallback": bool}`` where each entry carries
+        objective/actual raw and kg values, the deficit, grade percentage
+        and nano dosage for one nutrient. ``aforo_actual_fallback`` is True
+        when the actual row was converted with the objective aforo because
+        no valid actual aforo was provided.
+    """
+
+    from app.modules.foliage.models import NutrientCategory
+
+    def _to_float(value: object) -> Optional[float]:
+        try:
+            number = float(value)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return None
+        return number if math.isfinite(number) else None
+
+    info: Dict[str, Tuple[bool, Optional[str]]] = {}
+    for nutrient in nutrients:
+        is_macro = getattr(nutrient, "category", None) == NutrientCategory.MACRONUTRIENT
+        symbol = getattr(nutrient, "symbol", None)
+        for key in filter(None, [getattr(nutrient, "name", None), symbol]):
+            info[key] = (is_macro, symbol)
+
+    aforo_val = _to_float(aforo)
+    if aforo_val is not None and aforo_val <= 0:
+        aforo_val = None
+    aforo_act_val = _to_float(aforo_actual)
+    if aforo_act_val is None or aforo_act_val <= 0:
+        aforo_act_val = aforo_val
+        aforo_actual_fallback = aforo_val is not None
+    else:
+        aforo_actual_fallback = False
+
+    def _round(value: Optional[float]) -> Optional[float]:
+        if value is None or digits is None:
+            return value
+        return round(value, digits)
+
+    entries: List[Dict[str, object]] = []
+    for name in order:
+        targ = _to_float(targets.get(name))
+        act = _to_float(actuals.get(name))
+        is_macro, symbol = info.get(name, (False, None))
+        entry: Dict[str, object] = {
+            "name": name,
+            "objective_raw": targ,
+            "actual_raw": act,
+            "objective_kg": None,
+            "actual_kg": None,
+            "difference_kg": None,
+            "grade_pct": None,
+            "nano_kg": None,
+            "_symbol": symbol,
+        }
+        if targ is not None and act is not None and aforo_val is not None:
+            obj_factor = aforo_val * 100 if is_macro else aforo_val / 100
+            act_factor = aforo_act_val * 100 if is_macro else aforo_act_val / 100
+            obj_kg = targ * obj_factor
+            act_kg = act * act_factor
+            entry["objective_kg"] = obj_kg
+            entry["actual_kg"] = act_kg
+            entry["difference_kg"] = min(act_kg - obj_kg, 0.0)
+        entries.append(entry)
+
+    total = sum(
+        abs(entry["difference_kg"])  # type: ignore[arg-type]
+        for entry in entries
+        if entry["difference_kg"] is not None
+    )
+
+    for entry in entries:
+        deficit = entry["difference_kg"]
+        if deficit is not None:
+            magnitude = abs(deficit)  # type: ignore[arg-type]
+            if total > 0:
+                entry["grade_pct"] = magnitude / total * 100
+            grade = NANO_PRODUCT_GRADES.get(entry["_symbol"] or "", DEFAULT_NANO_GRADE)
+            entry["nano_kg"] = magnitude / grade
+        del entry["_symbol"]
+        for key in (
+            "objective_raw",
+            "actual_raw",
+            "objective_kg",
+            "actual_kg",
+            "difference_kg",
+            "grade_pct",
+            "nano_kg",
+        ):
+            entry[key] = _round(entry[key])  # type: ignore[arg-type]
+
+    return {
+        "entries": entries,
+        "total_kg_ha": _round(total) if total > 0 else None,
+        "aforo_actual_fallback": aforo_actual_fallback,
+    }

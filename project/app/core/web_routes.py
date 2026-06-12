@@ -9,7 +9,7 @@ Regla general: usar @login_required para rutas web que renderizan templates.
 """
 
 # Third party imports
-from datetime import date
+from datetime import date, datetime
 
 from flask import Response, current_app, redirect, render_template, request, url_for
 from flask_jwt_extended import (
@@ -151,6 +151,13 @@ def logout():
 
 @web.route("/forgot_password")
 def forgot_password():
+    """Renderiza el formulario de recuperación de contraseña.
+
+    Página pública que permite al usuario solicitar un enlace de
+    restablecimiento de contraseña vía email.
+
+    :status 200: Formulario de recuperación de contraseña
+    """
     return render_template("forgot_password.j2")
 
 
@@ -168,6 +175,15 @@ Paginas de dashboard y administracion
 @web.route("/dashboard")
 @login_required
 def dashboard():
+    """Página principal del panel de control post-login.
+
+    Muestra estadísticas agregadas del tenant (análisis del mes,
+    fincas activas, imágenes procesadas, lotes analizados,
+    recomendaciones generadas). Solo incluye datos de organizaciones
+    asociadas al usuario autenticado.
+
+    :status 200: Dashboard con estadísticas del tenant
+    """
     user_id = get_jwt_identity()
     user = User.query.get(user_id) if user_id else None
     organizations = get_clients_for_user(user_id) if user_id else []

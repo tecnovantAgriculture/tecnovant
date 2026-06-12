@@ -12,7 +12,7 @@ from flask import current_app, jsonify, request, url_for
 from PIL import Image
 from sqlalchemy.orm import selectinload
 
-from app.core.controller import api_login_required
+from app.core.controller import api_login_required, check_permission
 from app.extensions import db
 
 from . import media_api as api
@@ -20,6 +20,7 @@ from .controller import MediaController
 from .helpers import (
     PreprocessConfig,
     _media_root,
+    friendly_preprocess_error,
     generate_nd_index_rgba,
     preprocess_rgb_once,
 )
@@ -36,6 +37,7 @@ def ping():
 
 @api.route("/assets/<uuid>/reprocess", methods=["POST"])
 @api_login_required
+@check_permission(required_roles=["administrator", "reseller"])
 def reprocess_asset(uuid: str):
     """Encolar reprocesamiento de un asset en background thread."""
     asset = Asset.query.filter_by(uuid=uuid).first_or_404()
@@ -92,7 +94,7 @@ def get_preprocess_status(uuid: str):
     if error_flag.exists():
         try:
             with open(error_flag, "r", encoding="utf-8") as fh:
-                response["error"] = fh.read().strip()
+                response["error"] = friendly_preprocess_error(fh.read().strip())
         except Exception:
             response["error"] = "No se pudo leer el error"
 
@@ -101,6 +103,10 @@ def get_preprocess_status(uuid: str):
         try:
             with open(status_file, "r", encoding="utf-8") as fh:
                 response["status"] = json.load(fh)
+            if response["status"] and response["status"].get("error"):
+                response["status"]["error"] = friendly_preprocess_error(
+                    response["status"]["error"]
+                )
         except Exception:
             response["status"] = None
 
@@ -175,6 +181,7 @@ def list_assets():
 
 @api.route("/upload", methods=["POST"])
 @api_login_required
+@check_permission(required_roles=["administrator", "reseller"])
 def upload_local_api():
     """Almacenar un archivo recibido mediante la clave `file` del formulario.
 
@@ -228,6 +235,7 @@ def upload_local_api():
 
 @api.route("/assets/<int:asset_id>", methods=["DELETE"])
 @api_login_required
+@check_permission(required_roles=["administrator", "reseller"])
 def delete_asset(asset_id: int):
     """Eliminar un activo existente identificado por su ID numérico."""
 
@@ -535,8 +543,14 @@ def asset_agrovista_meta(asset_id: int):
 
 @api.route("/cleanup/orphaned-processing", methods=["POST"])
 @api_login_required
+@check_permission(required_roles=["administrator", "reseller"])
 def cleanup_orphaned_processing():
-    """Clean up orphaned .processing flags from cache directories."""
+    """Clean up orphaned .processing flags from cache directories.
+
+    Restricted to administrator/reseller: this is a global, destructive
+    maintenance sweep over the whole preprocess cache, not a tenant-scoped
+    operation.
+    """
     import json
     import time
     from pathlib import Path
@@ -629,6 +643,7 @@ def cleanup_orphaned_processing():
 
 @api.route("/cleanup/asset/<uuid>", methods=["POST"])
 @api_login_required
+@check_permission(required_roles=["administrator", "reseller"])
 def cleanup_asset_cache(uuid: str):
     """Clean up cache for a specific asset."""
     import shutil

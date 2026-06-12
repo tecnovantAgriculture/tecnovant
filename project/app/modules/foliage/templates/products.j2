@@ -15,3 +15,4 @@
 {# entregado desde el endpoint #}
 {# api de consumo #}
 {% set api_url = url_for('foliage_api.products') %}
+{% set csv_download_url = url_for('foliage_api.download_csv', resource='products') %}

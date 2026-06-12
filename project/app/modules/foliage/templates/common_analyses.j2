@@ -48,6 +48,7 @@
 {# entregado desde el endpoint #}
 {# api de consumo #}
 {% set api_url = url_for('foliage_api.common_analyses') %}
+{% set csv_download_url = url_for('foliage_api.download_common_analyses_csv') %}
 
 {% block extra_js %}
     {{ super() }}

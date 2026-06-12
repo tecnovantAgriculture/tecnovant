@@ -70,23 +70,29 @@
 <div class="container">
     <div class="row">
         <div class="col-md-12">
-{# Titulo #}
+{# Encabezado: identidad del informe + referencia de comparación #}
     <div id="report-content" class="container mx-auto p-6">
-        <div class="flex justify-between items-center mb-6">
+        <div class="flex justify-between items-start mb-6 border p-4 rounded-lg">
             <div>
-                <h1 class="text-3xl font-semibold">{{ title }}</h1>
-                <p class="text-gray-600">{{ description }}</p>
-                <p class="text-sm text-sky-600">
-                    Finca: {{ analysisData.common.finca }} | Lote: {{ analysisData.common.lote }} | Fecha: {{ analysisData.common.fechaAnalisis }} | ID: {{ analysisData.common.id }}
+                <h1 class="text-2xl font-semibold text-gray-900">
+                    Informes de Análisis — {{ report_title or 'Informe Agronómico' }}
+                </h1>
+                <p class="text-sm text-gray-600">
+                    Nº {{ recommendation_id }} · {{ analysisData.common.fechaAnalisis }}
+                </p>
+                <p class="text-sm text-sky-600 mt-1">
+                    Finca {{ analysisData.common.finca }} | Comparación: {{ comparison_label }}
                 </p>
             </div>
-{# export boton #}
             <div class="flex gap-2">
                 <button id="btnExportPDF" class="inline-flex items-center gap-2 rounded-md border border-transparent px-3 py-2 text-sm font-medium leading-4 text-white shadow-sm bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="12 2 2 7.86 12 12"></polyline><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-                    Exportar
+                    Exportar PDF
                 </button>
-
+                <button id="btnExportDOCX" class="inline-flex items-center gap-2 rounded-md border border-transparent px-3 py-2 text-sm font-medium leading-4 text-white shadow-sm bg-sky-600 hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-sky-500">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="9" y1="13" x2="15" y2="13"></line><line x1="9" y1="17" x2="15" y2="17"></line></svg>
+                    Exportar DOC
+                </button>
             </div>
         </div>
         {# tabs #}
@@ -96,12 +102,62 @@
             <button class="{{ button_class_report }} report-tabs-trigger" data-target="#soil">Análisis de Suelo</button>
             <button class="{{ button_class_report }} report-tabs-trigger" data-target="#recommendations">Recomendaciones</button>
             <button class="{{ button_class_report }} report-tabs-trigger" data-target="#history">Histórico</button>
-            <button class="{{ button_class_report }} report-tabs-trigger" data-target="#results">Resultados</button>
         </div>
 
 
 {# tab resumen #}
     <div id="dashboard" class="report-tabs-content">
+        {# KPIs principales #}
+        <div class="mb-4 grid grid-cols-2 md:grid-cols-3 gap-3">
+            <div class="border p-3 rounded-lg">
+                <p class="text-xs text-gray-500 uppercase tracking-wide">Aforo</p>
+                <p class="text-xl font-bold text-emerald-700" id="kpi-yield">--</p>
+                <p class="text-xs text-gray-600">meta: <span id="kpi-yield-target">--</span></p>
+            </div>
+            <div class="border p-3 rounded-lg">
+                <p class="text-xs text-gray-500 uppercase tracking-wide">Proteína</p>
+                <p class="text-xl font-bold text-emerald-700" id="kpi-protein">--</p>
+                <p class="text-xs text-gray-600">meta: <span id="kpi-protein-target">--</span> %</p>
+            </div>
+            <div class="border p-3 rounded-lg">
+                <p class="text-xs text-gray-500 uppercase tracking-wide">Limitante</p>
+                <p class="text-xl font-bold text-red-600" id="kpi-limiting">--</p>
+                <p class="text-xs text-gray-600"><span id="kpi-limiting-pct">--</span> %P</p>
+            </div>
+        </div>
+
+        {# Área, brecha productiva y ortofoto #}
+        <div class="mb-4 grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div class="border p-3 rounded-lg">
+                <p class="text-xs text-gray-500 uppercase tracking-wide">Área del lote</p>
+                <p class="text-xl font-bold text-gray-900">
+                    {% if lot_area %}{{ "%.2f"|format(lot_area) }} ha{% else %}--{% endif %}
+                </p>
+                <p class="text-xs text-gray-600">Lote {{ analysisData.common.lote }}</p>
+            </div>
+            <div class="border p-3 rounded-lg">
+                <p class="text-xs text-gray-500 uppercase tracking-wide">Brecha productiva</p>
+                <div class="text-sm mt-1 space-y-1">
+                    <p>Aforo: <span class="font-semibold" id="gap-yield">--</span></p>
+                    <p>Proteína: <span class="font-semibold" id="gap-protein">--</span></p>
+                </div>
+            </div>
+            <div class="border p-3 rounded-lg">
+                <p class="text-xs text-gray-500 uppercase tracking-wide">Ortofoto / NDVI</p>
+                {% if lot_image_url %}
+                <div id="lot-image-slot" class="mt-1 overflow-hidden rounded bg-slate-100">
+                    <img src="{{ lot_image_url }}" alt="Recorte del lote sobre la ortofoto"
+                         class="h-20 w-full object-contain" data-lightbox
+                         onerror="this.closest('#lot-image-slot').remove()">
+                </div>
+                {% else %}
+                <div id="lot-image-slot" class="mt-1 flex h-20 items-center justify-center rounded bg-slate-100 text-xs text-gray-500">
+                    Sin imagen asociada al lote
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
         <div class="mb-4 grid grid-cols-1 md:grid-cols-3 gap-4">
 {# contenido resumen #}
 
@@ -238,7 +294,7 @@
                                     <td class="px-6 py-4 font-semibold">{{ nutrient_names.get(nutrient, nutrient|upper) }}</td>
                                     <td class="px-6 py-4 font-semibold text-emerald-800">{{ data.valor }}</td>
                                     <td class="px-6 py-4">{{ data.unidad }}</td>
-                                    <td class="px-6 py-4 text-sky-600">{{ data.ideal }}</td>
+                                    <td class="px-6 py-4 text-sky-600">{{ data.ideal if data.ideal is not none else 'N/D' }}</td>
                                     <td class="px-6 py-4">
                                         <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
                                             {% if data.tipo == 'Macronutrient' %}bg-emerald-100 text-emerald-800{% else %}bg-sky-100 text-sky-800{% endif %}">
@@ -246,14 +302,19 @@
                                         </span>
                                     </td>
                                     <td class="px-6 py-4">
-                                        {% set percentage = (data.valor / data.ideal * 100) | round(1) if data.ideal > 0 else 0 %}
+                                        {# data.ideal puede ser None para nutrientes
+                                           sin target cargado en el objective; el
+                                           operador ``and`` cortocircuita el None
+                                           antes de la comparación > 0. #}
+                                        {% set percentage = (data.valor / data.ideal * 100) | round(1) if data.ideal and data.ideal > 0 else 0 %}
                                         <div class="flex items-center">
                                             <span class="mr-2 text-sm font-medium">{{ percentage }}%</span>
                                             <div class="w-20 bg-gray-200 rounded-full h-2">
                                                 <div class="h-2 rounded-full 
-                                                     {% if percentage >= 80 and percentage <= 120 %}bg-emerald-500
-                                                     {% elif percentage >= 60 and percentage <= 140 %}bg-amber-500
-                                                                                                         {% else %}bg-red-600{% endif %}" 
+                                                     {% if percentage >= 80 and percentage <= 140 %}bg-emerald-500
+                                                     {% elif percentage > 140 %}bg-emerald-800
+                                                     {% elif percentage >= 60 %}bg-amber-500
+                                                     {% else %}bg-red-600{% endif %}" 
                                                     style="width: {{ [percentage, 100] | min }}%"></div>
                                             </div>
                                         </div>
@@ -265,6 +326,7 @@
                     </table>
                 </div>
             </div>
+
         {# fin contenido foliar #}
         </div>
     </div>
@@ -357,21 +419,121 @@
             {# fin presentacion recomendaciones #}
         {# fin contenido recomendaciones #}
         </div>
-        <div class="mb-4  border p-4 rounded-lg">
-                <div class="flex items-center">
-                    <h2 class="text-lg font-semibold">Recomendaciones de aplicación de fertilizante</h2>
-                </div>
-                <div class="space-y-4">
-                <pre class="report-recommendation-text">{{automatic_recommendations|safe}}</pre>
-                <div class="">
-                Nota técnica:
-Esta recomendación ha sido generada utilizando una versión preliminar del algoritmo de optimización basado en la Ley del Mínimo de Liebig y programación lineal. Actualmente se encuentra en fase de prueba de concepto y puede arrojar resultados desproporcionados debido a múltiples factores como coeficientes, unidades o contribuciones de productos no ajustadas aún a condiciones reales.
-
-Se recomienda revisar y validar esta recomendación con un ingeniero agrónomo antes de cualquier aplicación. Próximas versiones del sistema incorporarán ajustes de validación, límites máximos por nutriente y calibración por cultivo, suelo y región.
-                </div>
+        {# Balance de Minerales — Producto Nano (mismo cálculo y layout que agrovista.comparison_config) #}
+        {% if mineral_balance and mineral_balance.entries %}
+        {% set entries = mineral_balance.entries %}
+        {% set total = mineral_balance.total_kg_ha %}
+        {% set fmt = "%.2f" %}
+        <div id="mineralBalanceTable" class="mt-8 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+            <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <h2 class="text-sm font-semibold text-gray-800">Balance de Minerales — Producto Nano</h2>
+                <span class="rounded-full bg-gray-100 px-2.5 py-0.5 text-[11px] text-gray-600">
+                    Déficits convertidos a kg/ha según el aforo
+                </span>
             </div>
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200 text-xs">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-3 py-2 text-left font-semibold text-gray-600">Concepto</th>
+                            {% for entry in entries %}
+                            <th class="px-3 py-2 text-left font-semibold text-gray-600">{{ entry.name }}</th>
+                            {% endfor %}
+                            <th class="px-3 py-2 text-left font-semibold text-gray-600">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100 bg-white">
+                        {# Objetivo (% · ppm) — bg-indigo-50 #}
+                        <tr class="bg-indigo-50">
+                            <td class="whitespace-nowrap px-3 py-2 font-medium text-gray-800">Objetivo (% · ppm)</td>
+                            {% for entry in entries %}
+                            <td class="px-3 py-2 text-gray-700">{{ fmt|format(entry.objective_raw) if entry.objective_raw is not none else '—' }}</td>
+                            {% endfor %}
+                            <td class="px-3 py-2 text-gray-400">—</td>
+                        </tr>
+                        {# Objetivo (kg/ha) — bg-indigo-50 #}
+                        <tr class="bg-indigo-50">
+                            <td class="whitespace-nowrap px-3 py-2 font-medium text-gray-800">Objetivo (kg/ha)</td>
+                            {% for entry in entries %}
+                            <td class="px-3 py-2 text-gray-700">{{ fmt|format(entry.objective_kg) if entry.objective_kg is not none else '—' }}</td>
+                            {% endfor %}
+                            <td class="px-3 py-2 text-gray-400">—</td>
+                        </tr>
+                        {# Actual (% · ppm) — bg-sky-50 #}
+                        <tr class="bg-sky-50">
+                            <td class="whitespace-nowrap px-3 py-2 font-medium text-gray-800">Actual (% · ppm)</td>
+                            {% for entry in entries %}
+                            <td class="px-3 py-2 text-gray-700">{{ fmt|format(entry.actual_raw) if entry.actual_raw is not none else '—' }}</td>
+                            {% endfor %}
+                            <td class="px-3 py-2 text-gray-400">—</td>
+                        </tr>
+                        {# Actual (kg/ha) — bg-sky-50 #}
+                        <tr class="bg-sky-50">
+                            <td class="whitespace-nowrap px-3 py-2 font-medium text-gray-800">Actual (kg/ha)</td>
+                            {% for entry in entries %}
+                            <td class="px-3 py-2 text-gray-700">{{ fmt|format(entry.actual_kg) if entry.actual_kg is not none else '—' }}</td>
+                            {% endfor %}
+                            <td class="px-3 py-2 text-gray-400">—</td>
+                        </tr>
+                        {# Diferencia (kg/ha) — bg-red-50, déficits en rojo #}
+                        <tr class="bg-red-50">
+                            <td class="whitespace-nowrap px-3 py-2 font-medium text-gray-800">Diferencia (kg/ha)</td>
+                            {% for entry in entries %}
+                            {% set diff = entry.difference_kg %}
+                            <td class="px-3 py-2 {% if diff is not none and diff < 0 %}text-red-600 font-semibold{% else %}text-gray-700{% endif %}">
+                                {{ fmt|format(diff) if diff is not none else '—' }}
+                            </td>
+                            {% endfor %}
+                            <td class="px-3 py-2 text-gray-400">—</td>
+                        </tr>
+                        {# Grado fórmula (%) — bg-yellow-50, total en última columna #}
+                        <tr class="bg-yellow-50">
+                            <td class="whitespace-nowrap px-3 py-2 font-medium text-gray-800">Grado fórmula (%)</td>
+                            {% for entry in entries %}
+                            <td class="px-3 py-2 text-gray-700">{{ "%.1f"|format(entry.grade_pct) if entry.grade_pct is not none else '—' }}</td>
+                            {% endfor %}
+                            <td class="px-3 py-2 whitespace-nowrap font-semibold text-gray-900">
+                                {{ "%s kg/ha"|format(fmt|format(total)) if total is not none else '—' }}
+                            </td>
+                        </tr>
+                        {# Nano (kg/ha) — bg-emerald-50, valores positivos en verde #}
+                        <tr class="bg-emerald-50">
+                            <td class="whitespace-nowrap px-3 py-2 font-medium text-gray-800">Nano (kg/ha)</td>
+                            {% for entry in entries %}
+                            {% set nano = entry.nano_kg %}
+                            <td class="px-3 py-2 {% if nano is not none and nano > 0 %}text-emerald-700 font-semibold{% else %}text-gray-700{% endif %}">
+                                {{ fmt|format(nano) if nano is not none else '—' }}
+                            </td>
+                            {% endfor %}
+                            <td class="px-3 py-2 text-gray-400">—</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="mt-3 text-[11px] text-gray-600">
+                Objetivo se expresa en kg/ha con el aforo objetivo y Actual con el
+                aforo actual (macros: % × aforo × 100; micros: ppm × aforo ÷ 100).
+                La Diferencia solo refleja déficits (excedentes se truncan a 0).
+                El Grado de fórmula es la participación porcentual de cada déficit
+                en el total requerido (columna Total), y Nano es la cantidad del
+                producto más económico que cubre cada déficit según su
+                concentración real en el catálogo.
+            </p>
+            {% if mineral_balance.aforo_actual_fallback %}
+            <p class="mt-1 text-[11px] font-medium text-amber-700">
+                Nota: no existe aforo actual; la fila Actual (kg/ha) se convirtió
+                con el aforo objetivo.
+            </p>
+            {% endif %}
+            {% if total is not none %}
+            <p class="mt-1 text-sm text-gray-800">
+                Requerimiento total: <strong>{{ fmt|format(total) }} kg/ha</strong>
+            </p>
+            {% endif %}
         </div>
-         <div class="mb-4  border p-4 rounded-lg">
+        {% endif %}
+
+        <div class="mb-4  border p-4 rounded-lg">
                 <div class="flex items-center">
                     <h2 class="text-lg font-semibold">Explicación de la Ley de Liebig</h2>
                 </div>
@@ -416,6 +578,14 @@ Se recomienda revisar y validar esta recomendación con un ingeniero agrónomo a
 
     <!-- Gráfica de datos históricos -->
     <canvas id="historicalChart"></canvas>
+
+    <!-- Tabla de comparación de nutrientes en el tiempo (rellenada por report.js) -->
+    <h2 class="mt-6 text-lg font-semibold">Comparación de Nutrientes en el Tiempo</h2>
+    <div id="historicalTableWrap" class="mt-2 overflow-x-auto">
+        <p class="text-gray-500 dark:text-gray-400 text-sm">
+            No hay análisis foliares registrados para este lote.
+        </p>
+    </div>
 
     <!-- Análisis de tendencias -->
     <h2>Tendencias Observadas</h2>
@@ -465,6 +635,7 @@ Se recomienda revisar y validar esta recomendación con un ingeniero agrónomo a
     <script src="/js/chart.js"></script>
     <script src="/js/html2canvas.min.js"></script>
     <script src="/js/jspdf.umd.min.js"></script>
+    <script src="/js/lightbox.js" defer></script>
     <script>
     window.REPORT_CONFIG = {
         foliarData: {{ analysisData.foliar | tojson }},
@@ -474,12 +645,63 @@ Se recomienda revisar y validar esta recomendación con un ingeniero agrónomo a
         automaticRecommendations: {{ automatic_recommendations | tojson }},
         textRecommendations: {{ text_recommendations | tojson }},
         historicalData: {{ historical_data | tojson }},
+        trends: {{ trends | tojson }},
         cvData: {{ cv_data | tojson }},
         cropName: {{ crop_name | default('') | tojson }},
         reportTitle: {{ report_title | default('') | tojson }},
         reportAuthor: {{ report_author | default('') | tojson }},
-        recommendationId: {{ recommendation_id | tojson }}
+        recommendationId: {{ recommendation_id | tojson }},
+        recommendationDoses: {{ recommendation_doses | tojson }},
+        productiveObjective: {{ productiveObjective | tojson }},
+        lotImageUrl: {{ lot_image_url | default('') | tojson }},
+        lotArea: {{ lot_area | default(0) | tojson }},
+        mineralBalance: {{ mineral_balance | default({}) | tojson }},
+        nanoDoses: {{ nano_doses | default({}) | tojson }}
     };
+    </script>
+    <script>
+    (function() {
+        const cfg = window.REPORT_CONFIG;
+        const obj = cfg.productiveObjective;
+        const mla = cfg.minimumLawAnalyses;
+
+        // KPI: Aforo
+        if (obj && obj.current && obj.current.yield && obj.target && obj.target.yield) {
+            document.getElementById('kpi-yield').textContent = obj.current.yield.toFixed(1) + ' t/ha';
+            document.getElementById('kpi-yield-target').textContent = obj.target.yield.toFixed(1) + ' t/ha';
+        }
+
+        // KPI: Proteína
+        if (obj && obj.current && obj.current.protein && obj.target && obj.target.protein) {
+            document.getElementById('kpi-protein').textContent = obj.current.protein.toFixed(1) + '%';
+            document.getElementById('kpi-protein-target').textContent = obj.target.protein.toFixed(1);
+        }
+
+        // KPI: Limitante
+        if (mla && mla.nutriente_limitante) {
+            const nutName = mla.nutriente_limitante;
+            const resultados = mla.resultados || {};
+            const perc = resultados[nutName] ? resultados[nutName]['%P'] : '--';
+            document.getElementById('kpi-limiting').textContent = nutName;
+            document.getElementById('kpi-limiting-pct').textContent = perc;
+        }
+
+        // Brecha productiva (gaps del objetivo)
+        if (obj && obj.gaps) {
+            const gapYieldEl = document.getElementById('gap-yield');
+            const gapProteinEl = document.getElementById('gap-protein');
+            if (gapYieldEl && typeof obj.gaps.yield === 'number') {
+                const sign = obj.gaps.yield > 0 ? '+' : '';
+                gapYieldEl.textContent = sign + obj.gaps.yield.toFixed(2) + ' (' + sign + obj.gaps.yield_pct.toFixed(1) + '%)';
+                gapYieldEl.className = 'font-semibold ' + (obj.gaps.yield < 0 ? 'text-red-600' : 'text-emerald-700');
+            }
+            if (gapProteinEl && typeof obj.gaps.protein === 'number') {
+                const sign = obj.gaps.protein > 0 ? '+' : '';
+                gapProteinEl.textContent = sign + obj.gaps.protein.toFixed(2) + ' pp (' + sign + obj.gaps.protein_pct.toFixed(1) + '%)';
+                gapProteinEl.className = 'font-semibold ' + (obj.gaps.protein < 0 ? 'text-red-600' : 'text-emerald-700');
+            }
+        }
+    })();
     </script>
     <script src="/js/report.js"></script>
 {% endblock %}

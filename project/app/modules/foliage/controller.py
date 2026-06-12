@@ -58,11 +58,12 @@ class FarmView(MethodView):
     @check_permission(required_roles=["administrator", "reseller"])
     def get(self, farm_id=None):
         """
-        Obtiene una lista de granjas o una granja específica.
-        Args:
-            farm_id (str, optional): ID de la granja a consultar.
-        Returns:
-            JSON: Lista de granjas o detalles de una granja específica.
+        Obtiene una lista de fincas o una finca específica.
+
+        :param farm_id: ID de la finca a consultar (opcional, vía URL)
+        :status 200: Lista de fincas activas o detalle de una finca
+        :status 403: Sin permiso sobre la finca solicitada
+        :status 404: Finca no encontrada
         """
         if farm_id:
             return self._get_farm(farm_id)
@@ -73,9 +74,13 @@ class FarmView(MethodView):
     @check_permission(required_roles=["administrator", "reseller"])
     def post(self):
         """
-        Crea una nueva granja.
-        Returns:
-            JSON: Detalles de la granja creada.
+        Crea una nueva finca.
+
+        Requiere name y org_id en el payload JSON.
+
+        :status 201: Finca creada exitosamente
+        :status 400: Campos requeridos ausentes (name, org_id)
+        :status 409: Ya existe una finca con ese nombre en la misma org
         """
         data = request.get_json()
         if not data or not all(k in data for k in ("name", "org_id")):
@@ -85,11 +90,12 @@ class FarmView(MethodView):
     @check_permission(resource_owner_check=True)
     def put(self, id: int):
         """
-        Actualiza una granja existente.
-        Args:
-            id (int): ID de la granja a actualizar.
-        Returns:
-            JSON: Detalles de la granja actualizada.
+        Actualiza una finca existente.
+
+        :param id: ID de la finca a actualizar (vía URL)
+        :status 200: Finca actualizada exitosamente
+        :status 404: Finca no encontrada
+        :status 403: Sin permiso sobre la finca
         """
         data = request.get_json()
         farm_id = data.get("id")
@@ -100,11 +106,14 @@ class FarmView(MethodView):
     @check_permission(resource_owner_check=True)
     def delete(self, id=None):
         """
-        Elimina una granja existente.
-        Args:
-            id (int, optional): ID de la granja a eliminar.
-        Returns:
-            JSON: Mensaje de confirmación.
+        Soft-delete de una o varias fincas.
+
+        Soporta borrado individual (id en URL) o batch (ids en payload).
+
+        :param id: ID de la finca (opcional si se usa batch)
+        :status 200: Finca(s) eliminada(s) exitosamente
+        :status 400: Sin id en URL ni payload
+        :status 404: Finca no encontrada
         """
         data = request.get_json()
         farm_id = id
@@ -258,10 +267,12 @@ class LotView(MethodView):
     def get(self, lot_id=None, id=None):
         """
         Obtiene una lista de lotes o un lote específico.
-        Args:
-            lot_id (str, optional): ID del lote a consultar.
-        Returns:
-            JSON: Lista de lotes o detalles de un lote específico.
+
+        :param lot_id: ID del lote a consultar (opcional, vía URL)
+        :param id: ID alternativo del lote (opcional, compatibilidad)
+        :status 200: Lista de lotes activos o detalle de un lote
+        :status 403: Sin permiso sobre la finca del lote
+        :status 404: Lote no encontrado
         """
         if lot_id is None and id is not None:
             lot_id = id
@@ -275,8 +286,11 @@ class LotView(MethodView):
     def post(self):
         """
         Crea un nuevo lote.
-        Returns:
-            JSON: Detalles del lote creado.
+
+        Requiere name, area y farm_id en el payload JSON.
+
+        :status 201: Lote creado exitosamente
+        :status 400: Campos requeridos ausentes
         """
         data = request.get_json()
         if not data or not all(k in data for k in ("name", "area", "farm_id")):
@@ -287,10 +301,11 @@ class LotView(MethodView):
     def put(self, id=None):
         """
         Actualiza un lote existente.
-        Args:
-            lot_id (str): ID del lote a actualizar.
-        Returns:
-            JSON: Detalles del lote actualizado.
+
+        :param id: ID del lote a actualizar (vía URL o payload)
+        :status 200: Lote actualizado exitosamente
+        :status 400: Campos requeridos ausentes
+        :status 404: Lote no encontrado
         """
         data = request.get_json()
         lot_id = data.get("id")
@@ -301,11 +316,11 @@ class LotView(MethodView):
     @check_permission(resource_owner_check=True)
     def delete(self, id=None):
         """
-        Elimina un lote existente.
-        Args:
-            lot_id (str): ID del lote a eliminar.
-        Returns:
-            JSON: Mensaje de confirmación.
+        Soft-delete de un lote.
+
+        :param id: ID del lote a eliminar (vía URL)
+        :status 200: Lote eliminado exitosamente
+        :status 404: Lote no encontrado
         """
         data = request.get_json()
         if data and "ids" in data:
@@ -415,13 +430,15 @@ class LotView(MethodView):
         return Response(json_data, status=200, mimetype="application/json")
 
     def _delete_lot(self, lot_id=None, lot_ids=None):
-        """Elimina un lote marcándolo como inactivo."""
+        """Elimina uno o varios lotes marcándolos como inactivos."""
         claims = get_jwt()
         if lot_id and lot_ids:
             raise BadRequest("Solo se puede especificar lot_id o lot_ids, no ambos.")
 
         if lot_id:
             lot = Lot.query.get_or_404(lot_id)
+            if not self._has_access(lot, claims):
+                raise Forbidden("You do not have access to this lot.")
             if hasattr(lot, "active"):
                 lot.active = False
             else:
@@ -435,26 +452,27 @@ class LotView(MethodView):
                 lot = Lot.query.get(lot_id)
                 if not lot:
                     continue
+                if not self._has_access(lot, claims):
+                    continue
                 if hasattr(lot, "active"):
                     lot.active = False
                 else:
                     db.session.delete(lot)
                 deleted_lots.append(lot.name)
-                db.session.commit()
 
-            if deleted_lots:
-                deleted_lots_str = ", ".join(deleted_lots)
+            if not deleted_lots:
                 return (
                     jsonify(
-                        {"message": f"Lots {deleted_lots_str} deleted successfully"}
+                        {"error": "No lots were deleted due to permission restrictions"}
                     ),
-                    200,
+                    403,
                 )
+
+            db.session.commit()
+            deleted_lots_str = ", ".join(deleted_lots)
             return (
-                jsonify(
-                    {"error": "No lots were deleted due to permission restrictions"}
-                ),
-                403,
+                jsonify({"message": f"Lots {deleted_lots_str} deleted successfully"}),
+                200,
             )
 
     def _has_access(self, lot, claims):
@@ -486,10 +504,10 @@ class CropView(MethodView):
     def get(self, id=None):
         """
         Obtiene una lista de cultivos o un cultivo específico.
-        Args:
-            crop_id (str, optional): ID del cultivo a consultar.
-        Returns:
-            JSON: Lista de cultivos o detalles de un cultivo específico.
+
+        :param id: ID del cultivo a consultar (opcional, vía URL)
+        :status 200: Lista de cultivos o detalle de un cultivo
+        :status 404: Cultivo no encontrado
         """
         crop_id = id
         if crop_id:
@@ -500,8 +518,11 @@ class CropView(MethodView):
     def post(self):
         """
         Crea un nuevo cultivo.
-        Returns:
-            JSON: Detalles del cultivo creado.
+
+        Requiere name en el payload JSON.
+
+        :status 201: Cultivo creado exitosamente
+        :status 400: Campo name ausente
         """
         data = request.get_json()
         if not data or not all(k in data for k in ("name",)):
@@ -512,10 +533,11 @@ class CropView(MethodView):
     def put(self, id):
         """
         Actualiza un cultivo existente.
-        Args:
-            crop_id (str): ID del cultivo a actualizar.
-        Returns:
-            JSON: Detalles del cultivo actualizado.
+
+        :param id: ID del cultivo a actualizar (vía URL)
+        :status 200: Cultivo actualizado exitosamente
+        :status 400: Campos requeridos ausentes
+        :status 404: Cultivo no encontrado
         """
         data = request.get_json()
         crop_id = data.get("id")
@@ -526,11 +548,11 @@ class CropView(MethodView):
     @check_permission(resource_owner_check=True)
     def delete(self, id=None):
         """
-        Elimina un cultivo existente.
-        Args:
-            crop_id (str): ID del cultivo a eliminar.
-        Returns:
-            JSON: Mensaje de confirmación.
+        Soft-delete de un cultivo.
+
+        :param id: ID del cultivo a eliminar (vía URL)
+        :status 200: Cultivo eliminado exitosamente
+        :status 404: Cultivo no encontrado
         """
         data = request.get_json()
         if data and "ids" in data:
@@ -910,11 +932,12 @@ class ObjectiveView(MethodView):
     @check_permission(required_roles=["administrator", "reseller"])
     def get(self, objective_id=None, id=None):
         """
-        Retrieve a list of objectives or a specific objective.
-        Args:
-            objective_id (int, optional): ID of the objective to retrieve.
-        Returns:
-            JSON: List of objectives or details of a specific objective.
+        Obtiene una lista de objetivos nutricionales o un objetivo específico.
+
+        :param objective_id: ID del objetivo a consultar (opcional, vía URL)
+        :status 200: Lista de objetivos o detalle de un objetivo
+        :status 403: Sin permiso sobre el objetivo solicitado
+        :status 404: Objetivo no encontrado
         """
         if objective_id is None and id is not None:
             objective_id = id
@@ -925,17 +948,13 @@ class ObjectiveView(MethodView):
     @check_permission(required_roles=["administrator", "reseller"])
     def post(self):
         """
-        Create a new objective with nutrient targets, protein, rest, and target value.
-        Expected JSON data:
-            {
-                "crop_id": int,
-                "target_value": float,
-                "protein": float (optional),
-                "rest": float (optional),
-                "nutrient_targets": {"nutrient_<id>": float, ...} (e.g., "nutrient_1": 10.5)
-            }
-        Returns:
-            JSON: Details of the created objective.
+        Crea un nuevo objetivo nutricional con metas de nutrientes.
+
+        Requiere crop_id y target_value en el payload JSON.
+        Opcionales: protein, rest, y nutrient_targets (nutrient_<id>: float).
+
+        :status 201: Objetivo creado exitosamente
+        :status 400: Campos requeridos ausentes o IDs de nutrientes inválidos
         """
         data = request.get_json()
         required_fields = ["crop_id", "target_value"]
@@ -946,12 +965,12 @@ class ObjectiveView(MethodView):
     @check_permission(resource_owner_check=True)
     def put(self, id: int):
         """
-        Update an existing objective.
-        Args:
-            objective_id (int): ID of the objective to update.
-        Expected JSON data: Same as POST, with optional fields.
-        Returns:
-            JSON: Details of the updated objective.
+        Actualiza un objetivo nutricional existente.
+
+        :param id: ID del objetivo a actualizar (vía URL)
+        :status 200: Objetivo actualizado exitosamente
+        :status 400: Campos requeridos ausentes
+        :status 404: Objetivo no encontrado
         """
         data = request.get_json()
         objective_id = id
@@ -963,11 +982,12 @@ class ObjectiveView(MethodView):
     @check_permission(resource_owner_check=True)
     def delete(self, id=None):
         """
-        Delete an existing objective.
-        Args:
-            objective_id (int): ID of the objective to delete.
-        Returns:
-            JSON: Confirmation message.
+        Elimina un objetivo nutricional existente.
+
+        :param id: ID del objetivo a eliminar (vía URL)
+        :status 200: Objetivo eliminado exitosamente
+        :status 400: ID de objetivo ausente
+        :status 404: Objetivo no encontrado
         """
         objective_id = id
 
@@ -1169,7 +1189,7 @@ class ObjectiveView(MethodView):
             }
             for target in nutrient_targets
         ]
-        return {
+        result = {
             "id": objective.id,
             "crop_id": objective.crop_id,
             "crop_name": objective.crop.name,
@@ -1180,6 +1200,12 @@ class ObjectiveView(MethodView):
             "updated_at": objective.updated_at.isoformat(),
             "nutrient_targets": nutrient_targets_dict,
         }
+        # Agrega keys planas nutrient_<id> para que crud.js
+        # (fillFormWithData dentro del IIFE) pueda llenar los campos
+        # del modal "Ver/Editar" sin depender de la estructura anidada.
+        for target in nutrient_targets:
+            result[f"nutrient_{target.nutrient_id}"] = target.target_value
+        return result
 
 
 # Example Usage
@@ -1242,11 +1268,12 @@ class ProductView(MethodView):
     @check_permission(required_roles=["administrator", "reseller"])
     def get(self, product_id=None):
         """
-        Retrieve a list of products or a specific product
-        Args:
-            product_id (int, optional): ID of the product to retrieve
-        Returns:
-            JSON: List of products or details of a specific product
+        Obtiene una lista de productos o un producto específico.
+
+        :param product_id: ID del producto a consultar (opcional, vía URL)
+        :status 200: Lista de productos o detalle de un producto
+        :status 403: Sin permiso sobre el producto solicitado
+        :status 404: Producto no encontrado
         """
         if product_id:
             return self._get_product(product_id)
@@ -1255,9 +1282,12 @@ class ProductView(MethodView):
     @check_permission(required_roles=["administrator", "reseller"])
     def post(self):
         """
-        Create a new product
-        Returns:
-            JSON: Details of the created product
+        Crea un nuevo producto.
+
+        Requiere name y description en el payload JSON.
+
+        :status 201: Producto creado exitosamente
+        :status 400: Campos requeridos ausentes
         """
         data = request.get_json()
         required_fields = ["name", "description"]
@@ -1268,11 +1298,12 @@ class ProductView(MethodView):
     @check_permission(resource_owner_check=True)
     def put(self, id: int):
         """
-        Update an existing product
-        Args:
-            product_id (int): ID of the product to update
-        Returns:
-            JSON: Details of the updated product
+        Actualiza un producto existente.
+
+        :param id: ID del producto a actualizar (vía URL)
+        :status 200: Producto actualizado exitosamente
+        :status 400: Campos requeridos ausentes
+        :status 404: Producto no encontrado
         """
         data = request.get_json()
         product_id = id
@@ -1283,11 +1314,12 @@ class ProductView(MethodView):
     @check_permission(resource_owner_check=True)
     def delete(self, id=None):
         """
-        Delete an existing product
-        Args:
-            product_id (int): ID of the product to delete
-        Returns:
-            JSON: Confirmation message
+        Elimina un producto existente.
+
+        :param id: ID del producto a eliminar (vía URL)
+        :status 200: Producto eliminado exitosamente
+        :status 400: ID de producto ausente
+        :status 404: Producto no encontrado
         """
         product_id = id
         if not product_id:
@@ -1380,11 +1412,12 @@ class ProductContributionView(MethodView):
     @check_permission(required_roles=["administrator"])
     def get(self, product_contribution_id=None):
         """
-        Retrieve a list of product contributions or a specific product contribution
-        Args:
-            product_contribution_id (int, optional): ID of the product contribution to retrieve
-        Returns:
-            JSON: List of product contributions or details of a specific product contribution
+        Obtiene una lista de contribuciones de productos o una contribución específica.
+
+        :param product_contribution_id: ID de la contribución a consultar (opcional, vía URL)
+        :status 200: Lista de contribuciones o detalle de una contribución
+        :status 403: Sin permiso
+        :status 404: Contribución no encontrada
         """
         if product_contribution_id:
             return self._get_product_contribution(product_contribution_id)
@@ -1393,14 +1426,13 @@ class ProductContributionView(MethodView):
     @check_permission(required_roles=["administrator"])
     def post(self):
         """
-        Create a new product contribution
-        Expected JSON data:
-            {
-                "product_id": int,
-                "nutrient_contributions": {"nutrient_<id>": float, ...} (e.g., "nutrient_1": 10.5)
-            }
-        Returns:
-            JSON: Details of the created product contribution
+        Crea una nueva contribución de producto.
+
+        Requiere product_id en el payload JSON.
+        Opcional: nutrient_contributions (nutrient_<id>: float).
+
+        :status 201: Contribución creada exitosamente
+        :status 400: Campos requeridos ausentes o IDs inválidos
         """
         data = request.get_json()
         required_fields = ["product_id"]
@@ -1411,12 +1443,12 @@ class ProductContributionView(MethodView):
     @check_permission(required_roles=["administrator"])
     def put(self, id: int):
         """
-        Update an existing product contribution
-        Args:
-            product_contribution_id (int): ID of the product contribution to update
-        Expected JSON data: Same as POST, with optional fields
-        Returns:
-            JSON: Details of the updated product contribution
+        Actualiza una contribución de producto existente.
+
+        :param id: ID de la contribución a actualizar (vía URL)
+        :status 200: Contribución actualizada exitosamente
+        :status 400: Campos requeridos ausentes
+        :status 404: Contribución no encontrada
         """
         data = request.get_json()
         product_contribution_id = id
@@ -1427,11 +1459,12 @@ class ProductContributionView(MethodView):
     @check_permission(required_roles=["administrator"])
     def delete(self, id=None):
         """
-        Delete an existing product contribution
-        Args:
-            product_contribution_id (int): ID of the product contribution to delete
-        Returns:
-            JSON: Confirmation message
+        Elimina una contribución de producto existente.
+
+        :param id: ID de la contribución a eliminar (vía URL)
+        :status 200: Contribución eliminada exitosamente
+        :status 400: ID de contribución ausente
+        :status 404: Contribución no encontrada
         """
         product_contribution_id = id
         if not product_contribution_id:
@@ -1576,7 +1609,7 @@ class ProductContributionView(MethodView):
             }
             for contribution in nutrient_contributions
         ]
-        return {
+        result = {
             "id": product_contribution.id,
             "product_id": product_contribution.product_id,
             "product_name": product_contribution.product.name,
@@ -1584,6 +1617,12 @@ class ProductContributionView(MethodView):
             "updated_at": product_contribution.updated_at.isoformat(),
             "nutrient_contributions": nutrient_contributions_dict,
         }
+        # Agrega keys planas nutrient_<id> para que crud.js
+        # (fillFormWithData dentro del IIFE) pueda llenar los campos
+        # del modal "Ver" sin depender de la estructura anidada.
+        for contribution in nutrient_contributions:
+            result[f"nutrient_{contribution.nutrient_id}"] = contribution.contribution
+        return result
 
 
 # 👌
@@ -1595,11 +1634,12 @@ class ProductPriceView(MethodView):
     @check_permission(required_roles=["administrator", "reseller"])
     def get(self, product_price_id=None):
         """
-        Retrieve a list of product prices or a specific product price
-        Args:
-            product_price_id (int, optional): ID of the product price to retrieve
-        Returns:
-            JSON: List of product prices or details of a specific product price
+        Obtiene una lista de precios de productos o un precio específico.
+
+        :param product_price_id: ID del precio a consultar (opcional, vía URL)
+        :status 200: Lista de precios o detalle de un precio
+        :status 403: Sin permiso sobre el precio solicitado
+        :status 404: Precio no encontrado
         """
         if product_price_id:
             return self._get_product_price(product_price_id)
@@ -1608,9 +1648,13 @@ class ProductPriceView(MethodView):
     @check_permission(required_roles=["administrator"])
     def post(self):
         """
-        Create a new product price
-        Returns:
-            JSON: Details of the created product price
+        Crea un nuevo precio de producto.
+
+        Requiere product_id, price, start_date y end_date en el payload JSON.
+
+        :status 201: Precio creado exitosamente
+        :status 400: Campos requeridos ausentes
+        :status 409: Ya existe un precio para este producto
         """
         data = request.get_json()
         required_fields = ["product_id", "price", "start_date", "end_date"]
@@ -1621,11 +1665,12 @@ class ProductPriceView(MethodView):
     @check_permission(required_roles=["administrator"])
     def put(self, id: int):
         """
-        Update an existing product price
-        Args:
-            product_price_id (int): ID of the product price to update
-        Returns:
-            JSON: Details of the updated product price
+        Actualiza un precio de producto existente.
+
+        :param id: ID del precio a actualizar (vía URL)
+        :status 200: Precio actualizado exitosamente
+        :status 400: Campos requeridos ausentes
+        :status 404: Precio no encontrado
         """
         data = request.get_json()
         product_price_id = id
@@ -1636,11 +1681,12 @@ class ProductPriceView(MethodView):
     @check_permission(required_roles=["administrator"])
     def delete(self, id=None):
         """
-        Delete an existing product price
-        Args:
-            product_price_id (int): ID of the product price to delete
-        Returns:
-            JSON: Confirmation message
+        Elimina un precio de producto existente.
+
+        :param id: ID del precio a eliminar (vía URL)
+        :status 200: Precio eliminado exitosamente
+        :status 400: ID de precio ausente
+        :status 404: Precio no encontrado
         """
         product_price_id = id
         if not product_price_id:
@@ -1785,10 +1831,11 @@ class CommonAnalysisView(MethodView):
     def get(self, common_analysis_id=None):
         """
         Obtiene una lista de análisis comunes o un análisis común específico.
-        Args:
-            common_analysis_id (str, optional): ID del análisis común a consultar.
-        Returns:
-            JSON: Lista de análisis comunes o detalles de un análisis común específico.
+
+        :param common_analysis_id: ID del análisis común a consultar (opcional, vía URL)
+        :status 200: Lista de análisis comunes o detalle de un análisis
+        :status 403: Sin permiso sobre el análisis solicitado
+        :status 404: Análisis común no encontrado
         """
         if common_analysis_id:
             return self._get_common_analysis(common_analysis_id)
@@ -1798,8 +1845,11 @@ class CommonAnalysisView(MethodView):
     def post(self):
         """
         Crea un nuevo análisis común.
-        Returns:
-            JSON: Detalles del análisis común creado.
+
+        Requiere lot_id, protein, energy, rest, rest_days y month en el payload JSON.
+
+        :status 201: Análisis común creado exitosamente
+        :status 400: Campos requeridos ausentes
         """
         data = request.get_json()
         if not data or not all(
@@ -1820,10 +1870,11 @@ class CommonAnalysisView(MethodView):
     def put(self, id):
         """
         Actualiza un análisis común existente.
-        Args:
-            common_analysis_id (str): ID del análisis común a actualizar.
-        Returns:
-            JSON: Detalles del análisis común actualizado.
+
+        :param id: ID del análisis común a actualizar (vía URL)
+        :status 200: Análisis común actualizado exitosamente
+        :status 400: Campos requeridos ausentes
+        :status 404: Análisis común no encontrado
         """
         data = request.get_json()
         common_analysis_id = id
@@ -1834,11 +1885,14 @@ class CommonAnalysisView(MethodView):
     @check_permission(resource_owner_check=True)
     def delete(self, id=None):
         """
-        Elimina un análisis común existente.
-        Args:
-            common_analysis_id (str): ID del análisis común a eliminar.
-        Returns:
-            JSON: Mensaje de confirmación.
+        Elimina uno o varios análisis comunes.
+
+        Soporta borrado individual (id en URL) o batch (ids en payload).
+
+        :param id: ID del análisis común (opcional si se usa batch)
+        :status 200: Análisis común(es) eliminado(s) exitosamente
+        :status 400: Sin id en URL ni payload
+        :status 404: Análisis común no encontrado
         """
         data = request.get_json()
         common_analysis_id = id
@@ -2074,11 +2128,12 @@ class LotCropView(MethodView):
     @check_permission(required_roles=["administrator", "reseller"])
     def get(self, lot_crop_id=None):
         """
-        Obtiene una lista de relaciones lot-crop o una relación específica.
-        Args:
-            lot_crop_id (int, optional): ID de la relación lot-crop a consultar.
-        Returns:
-            JSON: Lista de relaciones o detalles de una relación específica.
+        Obtiene una lista de relaciones lote-cultivo o una relación específica.
+
+        :param lot_crop_id: ID de la relación lote-cultivo a consultar (opcional, vía URL)
+        :status 200: Lista de relaciones activas o detalle de una relación
+        :status 403: Sin permiso sobre la relación solicitada
+        :status 404: Relación lote-cultivo no encontrada
         """
         if lot_crop_id:
             return self._get_lot_crop(lot_crop_id)
@@ -2087,9 +2142,13 @@ class LotCropView(MethodView):
     @check_permission(required_roles=["administrator", "reseller"])
     def post(self):
         """
-        Crea una nueva relación lot-crop.
-        Returns:
-            JSON: Detalles de la relación creada.
+        Crea una nueva relación lote-cultivo.
+
+        Requiere lot_id, crop_id y start_date en el payload JSON.
+
+        :status 201: Relación lote-cultivo creada exitosamente
+        :status 400: Campos requeridos ausentes
+        :status 409: Ya existe un cultivo activo en el lote
         """
         data = request.get_json()
         if not data or not all(k in data for k in ("lot_id", "crop_id", "start_date")):
@@ -2099,11 +2158,12 @@ class LotCropView(MethodView):
     @check_permission(resource_owner_check=True)
     def put(self, id: int):
         """
-        Actualiza una relación lot-crop existente.
-        Args:
-            lot_crop_id (int): ID de la relación a actualizar.
-        Returns:
-            JSON: Detalles de la relación actualizada.
+        Actualiza una relación lote-cultivo existente.
+
+        :param id: ID de la relación lote-cultivo a actualizar (vía URL)
+        :status 200: Relación lote-cultivo actualizada exitosamente
+        :status 400: Campos requeridos ausentes
+        :status 404: Relación lote-cultivo no encontrada
         """
         data = request.get_json()
         lot_crop_id = data.get("id")
@@ -2114,11 +2174,14 @@ class LotCropView(MethodView):
     @check_permission(resource_owner_check=True)
     def delete(self, id=None):
         """
-        Elimina una relación lot-crop existente.
-        Args:
-            lot_crop_id (int): ID de la relación a eliminar.
-        Returns:
-            JSON: Mensaje de confirmación.
+        Elimina una o varias relaciones lote-cultivo.
+
+        Soporta borrado individual (id en URL) o batch (ids en payload).
+
+        :param id: ID de la relación lote-cultivo (opcional si se usa batch)
+        :status 200: Relación(es) lote-cultivo eliminada(s) exitosamente
+        :status 400: Sin id en URL ni payload
+        :status 404: Relación lote-cultivo no encontrada
         """
         data = request.get_json()
         lot_crop_id = id
@@ -2361,10 +2424,11 @@ class LeafAnalysisView(MethodView):
     def get(self, leaf_analysis_id=None):
         """
         Obtiene una lista de análisis de hojas o un análisis de hoja específico.
-        Args:
-            leaf_analysis_id (int, optional): ID del análisis de hoja a consultar.
-        Returns:
-            JSON: Lista de análisis de hojas o detalles de un análisis de hoja específico.
+
+        :param leaf_analysis_id: ID del análisis de hoja a consultar (opcional, vía URL)
+        :status 200: Lista de análisis de hojas o detalle de un análisis
+        :status 403: Sin permiso sobre el análisis solicitado
+        :status 404: Análisis de hoja no encontrado
         """
         filter_by = request.args.get("filter_by")
         if filter_by:
@@ -2379,13 +2443,12 @@ class LeafAnalysisView(MethodView):
     def post(self):
         """
         Crea un nuevo análisis de hoja con valores de nutrientes.
-        Expected JSON data:
-            {
-                "common_analysis_id": int,
-                "nutrient_values": {"nutrient_<id>": float, ...} (e.g., "nutrient_1": 10.5)
-            }
-        Returns:
-            JSON: Detalles del análisis de hoja creado.
+
+        Requiere common_analysis_id en el payload JSON.
+        Opcional: nutrient_values (nutrient_<id>: float).
+
+        :status 201: Análisis de hoja creado exitosamente
+        :status 400: Campos requeridos ausentes
         """
         data = request.get_json()
         required_fields = ["common_analysis_id"]
@@ -2397,11 +2460,11 @@ class LeafAnalysisView(MethodView):
     def put(self, id):
         """
         Actualiza un análisis de hoja existente.
-        Args:
-            leaf_analysis_id (int): ID del análisis de hoja a actualizar.
-        Expected JSON data: Same as POST, con campos opcionales.
-        Returns:
-            JSON: Detalles del análisis de hoja actualizado.
+
+        :param id: ID del análisis de hoja a actualizar (vía URL)
+        :status 200: Análisis de hoja actualizado exitosamente
+        :status 400: Campos requeridos ausentes
+        :status 404: Análisis de hoja no encontrado
         """
         data = request.get_json()
         leaf_analysis_id = id
@@ -2414,10 +2477,11 @@ class LeafAnalysisView(MethodView):
     def delete(self, id=None):
         """
         Elimina un análisis de hoja existente.
-        Args:
-            leaf_analysis_id (int): ID del análisis de hoja a eliminar.
-        Returns:
-            JSON: Mensaje de confirmación.
+
+        :param id: ID del análisis de hoja a eliminar (vía URL)
+        :status 200: Análisis de hoja eliminado exitosamente
+        :status 400: ID de análisis ausente
+        :status 404: Análisis de hoja no encontrado
         """
         leaf_analysis_id = id
         if not leaf_analysis_id:
@@ -2673,11 +2737,12 @@ class SoilAnalysisView(MethodView):
     @check_permission(required_roles=["administrator", "reseller"])
     def get(self, soil_analysis_id=None):
         """
-        Retrieve a list of soil analyses or a specific soil analysis
-        Args:
-            soil_analysis_id (int, optional): ID of the soil analysis to retrieve
-        Returns:
-            JSON: List of soil analyses or details of a specific soil analysis
+        Obtiene una lista de análisis de suelo o un análisis de suelo específico.
+
+        :param soil_analysis_id: ID del análisis de suelo a consultar (opcional, vía URL)
+        :status 200: Lista de análisis de suelo o detalle de un análisis
+        :status 403: Sin permiso sobre el análisis solicitado
+        :status 404: Análisis de suelo no encontrado
         """
 
         if soil_analysis_id:
@@ -2692,9 +2757,12 @@ class SoilAnalysisView(MethodView):
     @check_permission(required_roles=["administrator", "reseller"])
     def post(self):
         """
-        Create a new soil analysis
-        Returns:
-            JSON: Details of the created soil analysis
+        Crea un nuevo análisis de suelo.
+
+        Requiere common_analysis_id, energy y grazing en el payload JSON.
+
+        :status 201: Análisis de suelo creado exitosamente
+        :status 400: Campos requeridos ausentes
         """
         data = request.get_json()
         required_fields = ["common_analysis_id", "energy", "grazing"]
@@ -2705,11 +2773,12 @@ class SoilAnalysisView(MethodView):
     @check_permission(resource_owner_check=True)
     def put(self, id: int):
         """
-        Update an existing soil analysis
-        Args:
-            soil_analysis_id (int): ID of the soil analysis to update
-        Returns:
-            JSON: Details of the updated soil analysis
+        Actualiza un análisis de suelo existente.
+
+        :param id: ID del análisis de suelo a actualizar (vía URL)
+        :status 200: Análisis de suelo actualizado exitosamente
+        :status 400: Campos requeridos ausentes
+        :status 404: Análisis de suelo no encontrado
         """
         data = request.get_json()
         soil_analysis_id = id
@@ -2720,11 +2789,12 @@ class SoilAnalysisView(MethodView):
     @check_permission(resource_owner_check=True)
     def delete(self, id=None):
         """
-        Delete an existing soil analysis
-        Args:
-            soil_analysis_id (int): ID of the soil analysis to delete
-        Returns:
-            JSON: Confirmation message
+        Elimina un análisis de suelo existente.
+
+        :param id: ID del análisis de suelo a eliminar (vía URL)
+        :status 200: Análisis de suelo eliminado exitosamente
+        :status 400: ID de análisis ausente
+        :status 404: Análisis de suelo no encontrado
         """
         soil_analysis_id = id
         if not soil_analysis_id:
@@ -2762,6 +2832,12 @@ class SoilAnalysisView(MethodView):
         if filter_by:
             query = query.filter(Lot.farm_id == filter_by)
 
+        query = query.options(
+            joinedload(SoilAnalysis.common_analysis)
+            .joinedload(CommonAnalysis.lot)
+            .joinedload(Lot.farm)
+        )
+
         soil_analyses = query.all()
         response_data = [self._serialize_soil_analysis(sa) for sa in soil_analyses]
         json_data = json.dumps(response_data, ensure_ascii=False, indent=4)
@@ -2769,7 +2845,11 @@ class SoilAnalysisView(MethodView):
 
     def _get_soil_analysis(self, soil_analysis_id):
         """Retrieve details of a specific soil analysis"""
-        soil_analysis = SoilAnalysis.query.get_or_404(soil_analysis_id)
+        soil_analysis = SoilAnalysis.query.options(
+            joinedload(SoilAnalysis.common_analysis)
+            .joinedload(CommonAnalysis.lot)
+            .joinedload(Lot.farm)
+        ).get_or_404(soil_analysis_id)
         claims = get_jwt()
         if not self._has_access(soil_analysis, claims):
             raise Forbidden("You do not have access to this soil analysis")
@@ -2819,6 +2899,7 @@ class SoilAnalysisView(MethodView):
         return {
             "id": soil_analysis.id,
             "common_analysis_id": soil_analysis.common_analysis_id,
+            "common_analysis_display": f"{soil_analysis.common_analysis.lot.farm.name}, {soil_analysis.common_analysis.lot.name}, {soil_analysis.common_analysis.date.isoformat()}",
             "energy": soil_analysis.energy,
             "grazing": soil_analysis.grazing,
             "created_at": soil_analysis.created_at.isoformat(),
@@ -2835,11 +2916,12 @@ class NutrientApplicationView(MethodView):
     @check_permission(required_roles=["administrator", "reseller"])
     def get(self, nutrient_application_id=None):
         """
-        Obtiene una lista de aplicaciones de nutrientes o una aplicación de nutriente específico.
-        Args:
-            nutrient_application_id (str, optional): ID de la aplicación de nutriente a consultar.
-        Returns:
-            JSON: Lista de aplicaciones de nutrientes o detalles de una aplicación de nutriente específico.
+        Obtiene una lista de aplicaciones de nutrientes o una aplicación específica.
+
+        :param nutrient_application_id: ID de la aplicación a consultar (opcional, vía URL)
+        :status 200: Lista de aplicaciones o detalle de una aplicación
+        :status 403: Sin permiso sobre la aplicación solicitada
+        :status 404: Aplicación de nutriente no encontrada
         """
         if nutrient_application_id:
             return self._get_nutrient_application(nutrient_application_id)
@@ -2851,15 +2933,13 @@ class NutrientApplicationView(MethodView):
     @check_permission(required_roles=["administrator", "reseller"])
     def post(self):
         """
-        Create a new nutrient application with nutrient quantities.
-        Expected JSON data:
-            {
-                "lot_id": int,
-                "date": str (YYYY-MM-DD),
-                "nutrient_quantities": {"nutrient_<id>": float, ...} (e.g., "nutrient_1": 10.5)
-            }
-        Returns:
-            JSON: Details of the created nutrient application.
+        Crea una nueva aplicación de nutrientes con cantidades.
+
+        Requiere lot_id y date en el payload JSON.
+        Opcional: nutrient_quantities (nutrient_<id>: float).
+
+        :status 201: Aplicación de nutrientes creada exitosamente
+        :status 400: Campos requeridos ausentes o IDs inválidos
         """
         data = request.get_json()
         required_fields = ["lot_id", "date"]
@@ -2870,12 +2950,12 @@ class NutrientApplicationView(MethodView):
     @check_permission(resource_owner_check=True)
     def put(self, id: int):
         """
-        Update an existing nutrient application.
-        Args:
-            nutrient_application_id (int): ID of the nutrient application to update.
-        Expected JSON data: Same as POST, with optional fields.
-        Returns:
-            JSON: Details of the updated nutrient application.
+        Actualiza una aplicación de nutrientes existente.
+
+        :param id: ID de la aplicación a actualizar (vía URL)
+        :status 200: Aplicación actualizada exitosamente
+        :status 400: Campos requeridos ausentes
+        :status 404: Aplicación de nutriente no encontrada
         """
         data = request.get_json()
         nutrient_application_id = id
@@ -2886,11 +2966,12 @@ class NutrientApplicationView(MethodView):
     @check_permission(resource_owner_check=True)
     def delete(self, id=None):
         """
-        Delete an existing nutrient application.
-        Args:
-            nutrient_application_id (int): ID of the nutrient application to delete.
-        Returns:
-            JSON: Confirmation message.
+        Elimina una aplicación de nutrientes existente.
+
+        :param id: ID de la aplicación a eliminar (vía URL)
+        :status 200: Aplicación eliminada exitosamente
+        :status 400: ID de aplicación ausente
+        :status 404: Aplicación de nutriente no encontrada
         """
         nutrient_application_id = id
         if not nutrient_application_id:
@@ -2964,7 +3045,20 @@ class NutrientApplicationView(MethodView):
         lot = Lot.query.get(lot_id)
         if not lot:
             raise BadRequest("Invalid lot ID.")
-        new_nutrient_application = NutrientApplication(date=date, lot_id=lot_id)
+        # Optional fields for follow-up tracking
+        recommendation_id = data.get("recommendation_id")
+        applied_date_str = data.get("applied_date")
+        applied_date = (
+            datetime.strptime(applied_date_str, "%Y-%m-%d").date()
+            if applied_date_str
+            else None
+        )
+        new_nutrient_application = NutrientApplication(
+            date=date,
+            lot_id=lot_id,
+            recommendation_id=recommendation_id,
+            applied_date=applied_date,
+        )
         db.session.add(new_nutrient_application)
         db.session.flush()  # Ensure new_nutrient_application.id is available
         # Handle nutrient quantities
@@ -2976,24 +3070,51 @@ class NutrientApplicationView(MethodView):
             nutrient = Nutrient.query.get(nutrient_id)
             if not nutrient:
                 raise BadRequest(f"Invalid nutrient ID: {nutrient_id}")
-            try:
-                quantity_float = float(value)  # Convert to float
-                if quantity_float <= 0:
-                    raise BadRequest(f"Quantity for {nutrient.name} must be positive.")
-                insert_stmt = nutrient_application_nutrients.insert().values(
-                    nutrient_application_id=new_nutrient_application.id,
-                    nutrient_id=nutrient_id,
-                    quantity=quantity_float,
-                )
-                db.session.execute(insert_stmt)
-            except ValueError:
-                raise BadRequest(
-                    f"Quantity for {nutrient.name} must be a valid number."
-                )
+            quantity_float, recommended_quantity = self._parse_nutrient_quantity(
+                value, nutrient.name
+            )
+            insert_stmt = nutrient_application_nutrients.insert().values(
+                nutrient_application_id=new_nutrient_application.id,
+                nutrient_id=nutrient_id,
+                quantity=quantity_float,
+                recommended_quantity=recommended_quantity,
+            )
+            db.session.execute(insert_stmt)
         db.session.commit()
         response_data = self._serialize_nutrient_application(new_nutrient_application)
         json_data = json.dumps(response_data, ensure_ascii=False, indent=4)
         return Response(json_data, status=201, mimetype="application/json")
+
+    @staticmethod
+    def _parse_nutrient_quantity(value, nutrient_name: str):
+        """
+        Backward-compatible parser for nutrient quantities.
+
+        Acepta dos formatos:
+            - float plano: "nutrient_1": 10.5   (legacy, recommended_quantity=None)
+            - dict anidado: "nutrient_1": {"quantity": 10.5, "recommended_quantity": 12.0}
+
+        Returns:
+            tuple: (quantity_float, recommended_quantity_or_None)
+        """
+        if isinstance(value, dict):
+            qty = value.get("quantity")
+            rec = value.get("recommended_quantity")
+        else:
+            qty = value
+            rec = None
+        try:
+            quantity_float = float(qty)
+        except (TypeError, ValueError):
+            raise BadRequest(f"Quantity for {nutrient_name} must be a valid number.")
+        if quantity_float <= 0:
+            raise BadRequest(f"Quantity for {nutrient_name} must be positive.")
+        if rec is not None:
+            try:
+                rec = float(rec)
+            except (TypeError, ValueError):
+                rec = None
+        return quantity_float, rec
 
     def _update_nutrient_application(self, nutrient_application_id, data):
         """Update an existing nutrient application"""
@@ -3008,6 +3129,15 @@ class NutrientApplicationView(MethodView):
             nutrient_application.lot_id = data["lot_id"]
         if "date" in data:
             nutrient_application.date = datetime.strptime(data["date"], "%Y-%m-%d")
+        if "recommendation_id" in data:
+            nutrient_application.recommendation_id = data["recommendation_id"]
+        if "applied_date" in data:
+            applied_date_str = data["applied_date"]
+            nutrient_application.applied_date = (
+                datetime.strptime(applied_date_str, "%Y-%m-%d").date()
+                if applied_date_str
+                else None
+            )
         # Handle nutrient quantities if provided
         nutrient_quantities = {
             k: v for k, v in data.items() if k.startswith("nutrient_")
@@ -3023,25 +3153,16 @@ class NutrientApplicationView(MethodView):
                 nutrient = Nutrient.query.get(nutrient_id)
                 if not nutrient:
                     raise BadRequest(f"Invalid nutrient ID: {nutrient_id}")
-                # Convert value to float (or int) and validate
-                try:
-                    quantity_float = float(
-                        value
-                    )  # Use float to handle decimal values; use int if only integers are expected
-                    if quantity_float <= 0:
-                        raise BadRequest(
-                            f"Quantity for {nutrient.name} must be positive."
-                        )
-                    insert_stmt = nutrient_application_nutrients.insert().values(
-                        nutrient_application_id=nutrient_application.id,
-                        nutrient_id=nutrient_id,
-                        quantity=quantity_float,
-                    )
-                    db.session.execute(insert_stmt)
-                except ValueError:
-                    raise BadRequest(
-                        f"Quantity for {nutrient.name} must be a valid number."
-                    )
+                quantity_float, recommended_quantity = self._parse_nutrient_quantity(
+                    value, nutrient.name
+                )
+                insert_stmt = nutrient_application_nutrients.insert().values(
+                    nutrient_application_id=nutrient_application.id,
+                    nutrient_id=nutrient_id,
+                    quantity=quantity_float,
+                    recommended_quantity=recommended_quantity,
+                )
+                db.session.execute(insert_stmt)
         db.session.commit()
         response_data = self._serialize_nutrient_application(nutrient_application)
         json_data = json.dumps(response_data, ensure_ascii=False, indent=4)
@@ -3071,6 +3192,7 @@ class NutrientApplicationView(MethodView):
             {
                 "nutrient_id": quantity.nutrient_id,
                 "quantity": quantity.quantity,
+                "recommended_quantity": getattr(quantity, "recommended_quantity", None),
                 "nutrient_name": Nutrient.query.get(quantity.nutrient_id).name,
                 "nutrient_symbol": Nutrient.query.get(quantity.nutrient_id).symbol,
                 "nutrient_unit": Nutrient.query.get(quantity.nutrient_id).unit,
@@ -3084,6 +3206,12 @@ class NutrientApplicationView(MethodView):
             "farm_name": nutrient_application.lot.farm.name,
             "organization_name": nutrient_application.lot.farm.organization.name,
             "date": nutrient_application.date.isoformat(),
+            "recommendation_id": nutrient_application.recommendation_id,
+            "applied_date": (
+                nutrient_application.applied_date.isoformat()
+                if nutrient_application.applied_date
+                else None
+            ),
             "created_at": nutrient_application.created_at.isoformat(),
             "updated_at": nutrient_application.updated_at.isoformat(),
             "nutrient_quantities": nutrient_quantities_dict,
@@ -3098,11 +3226,12 @@ class ProductionView(MethodView):
     @check_permission(required_roles=["administrator", "reseller"])
     def get(self, production_id=None):
         """
-        Retrieve a list of productions or a specific production
-        Args:
-            production_id (int, optional): ID of the production to retrieve
-        Returns:
-            JSON: List of productions or details of a specific production
+        Obtiene una lista de producciones o una producción específica.
+
+        :param production_id: ID de la producción a consultar (opcional, vía URL)
+        :status 200: Lista de producciones o detalle de una producción
+        :status 403: Sin permiso sobre la producción solicitada
+        :status 404: Producción no encontrada
         """
         if production_id:
             return self._get_production(production_id)
@@ -3111,9 +3240,13 @@ class ProductionView(MethodView):
     @check_permission(required_roles=["administrator", "reseller"])
     def post(self):
         """
-        Create a new production
-        Returns:
-            JSON: Details of the created production
+        Crea una nueva producción.
+
+        Requiere lot_id, date, area, production_kg, bags, harvest, month,
+        variety, price_per_kg, protein_65dde y discount en el payload JSON.
+
+        :status 201: Producción creada exitosamente
+        :status 400: Campos requeridos ausentes
         """
         data = request.get_json()
         required_fields = [
@@ -3136,11 +3269,12 @@ class ProductionView(MethodView):
     @check_permission(resource_owner_check=True)
     def put(self, id: int):
         """
-        Update an existing production
-        Args:
-            production_id (int): ID of the production to update
-        Returns:
-            JSON: Details of the updated production
+        Actualiza una producción existente.
+
+        :param id: ID de la producción a actualizar (vía URL)
+        :status 200: Producción actualizada exitosamente
+        :status 400: Campos requeridos ausentes
+        :status 404: Producción no encontrada
         """
         data = request.get_json()
         production_id = id
@@ -3151,11 +3285,12 @@ class ProductionView(MethodView):
     @check_permission(resource_owner_check=True)
     def delete(self, id=None):
         """
-        Delete an existing production
-        Args:
-            production_id (int): ID of the production to delete
-        Returns:
-            JSON: Confirmation message
+        Elimina una producción existente.
+
+        :param id: ID de la producción a eliminar (vía URL)
+        :status 200: Producción eliminada exitosamente
+        :status 400: ID de producción ausente
+        :status 404: Producción no encontrada
         """
         production_id = id
         if not production_id:

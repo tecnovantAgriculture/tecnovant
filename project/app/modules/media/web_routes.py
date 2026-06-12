@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 
 from flask import (
+    current_app,
     flash,
     redirect,
     render_template,
@@ -27,7 +28,7 @@ from app.helpers.dashboard_helpers import get_dashboard_menu
 
 from . import media as web
 from .controller import MediaController
-from .helpers import _media_root
+from .helpers import _media_root, friendly_preprocess_error
 from .models import Asset, AssetType
 from .tasks import enqueue_preprocess_asset
 
@@ -70,6 +71,10 @@ def _fetch_assets_for_library(
 
 @web.route("/hello", methods=["GET"])
 def hello():
+    """Página de bienvenida del módulo de medios.
+
+    :status 200: Página hello de media
+    """
     return render_template("media/hello.j2")
 
 
@@ -191,6 +196,12 @@ def element(objective_id: int):
                 error_message = fh.read().strip() or None
         except Exception:
             error_message = "No fue posible leer el estado de error del procesamiento."
+
+    # Traducir errores crudos de GDAL/Pillow (raster ilegible/corrupto) a un
+    # mensaje accionable para el usuario.
+    error_message = friendly_preprocess_error(error_message)
+    if status_data and status_data.get("error"):
+        status_data["error"] = friendly_preprocess_error(status_data["error"])
 
     # Build status object for template
     preproc_status = {
@@ -388,20 +399,34 @@ def upload_s3():
 @web.route("/file/<path:key>", methods=["GET"])
 @login_required
 def serve_file(key: str):
-    # Only allow to serve under the media root
+    """Sirve un archivo desde el directorio raíz de medios.
+
+    Usa send_from_directory con safe_join para prevenir path traversal.
+
+    :param key: Ruta relativa del archivo dentro del storage de medios
+    :status 200: Archivo servido con MIME type automático
+    :status 404: Archivo no encontrado o path traversal detectado
+    """
+    # Serve strictly under the media root. Passing the full key to
+    # send_from_directory lets safe_join reject any traversal (404).
     base = _media_root()
-    directory = os.path.join(base, os.path.dirname(key))
-    filename = os.path.basename(key)
-    return send_from_directory(directory, filename)
+    return send_from_directory(base, key)
 
 
 @web.route("/download/<path:key>", methods=["GET"])
 @login_required
 def download_file(key: str):
+    """Fuerza la descarga de un archivo desde el storage de medios.
+
+    Usa send_from_directory con as_attachment=True para disparar
+    el diálogo de descarga en el navegador.
+
+    :param key: Ruta relativa del archivo dentro del storage de medios
+    :status 200: Archivo descargado como attachment
+    :status 404: Archivo no encontrado
+    """
     base = _media_root()
-    directory = os.path.join(base, os.path.dirname(key))
-    filename = os.path.basename(key)
-    return send_from_directory(directory, filename, as_attachment=True)
+    return send_from_directory(base, key, as_attachment=True)
 
 
 @web.route("/admin/cleanup", methods=["GET"])

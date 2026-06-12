@@ -1,10 +1,13 @@
 """Define REST API routes for the core module."""
 
 # Third party imports
-from flask import current_app, jsonify, request, views
-from flask_jwt_extended import unset_jwt_cookies
+from flask import Response, jsonify
+from flask_jwt_extended import jwt_required, unset_jwt_cookies
+from sqlalchemy.orm import joinedload
 
 # Local application imports
+from app.helpers.csv_handler import CsvHandler
+
 from . import core_api as api
 from .controller import (
     ChangePasswordView,
@@ -17,6 +20,7 @@ from .controller import (
     UserView,
     login_required,
 )
+from .models import Organization, User
 
 #############################################
 # Set up the API routes for the core module #
@@ -84,6 +88,86 @@ change_password_view = ChangePasswordView.as_view("change_password_view")
 api.add_url_rule(
     "/profile/change-password", view_func=change_password_view, methods=["POST"]
 )
+
+
+# ---------------------------------------------------------------------------
+# CSV download endpoints
+# ---------------------------------------------------------------------------
+
+
+@api.route("/users/csv/download")
+@jwt_required()
+def download_users_csv():
+    """Download CSV of all users with organization info."""
+    handler = CsvHandler()
+    users = User.query.order_by(User.id).all()
+
+    rows = []
+    for user in users:
+        org_names = ", ".join(o.name for o in user.organizations.all())
+        rows.append(
+            {
+                "id": user.id,
+                "username": user.username,
+                "full_name": user.full_name,
+                "email": user.email,
+                "role": user.role.value if user.role else "",
+                "organization": org_names,
+                "active": "Sí" if user.active else "No",
+                "created_at": str(user.created_at),
+                "updated_at": str(user.updated_at),
+            }
+        )
+
+    csv_data = handler.export_to_csv(rows)
+    return Response(
+        csv_data,
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment; filename=users.csv"},
+    )
+
+
+@api.route("/clients/csv/download")
+@jwt_required()
+def download_clients_csv():
+    """Download CSV of all clients/organizations."""
+    handler = CsvHandler()
+    orgs = (
+        Organization.query.options(joinedload(Organization.reseller_package))
+        .order_by(Organization.id)
+        .all()
+    )
+
+    rows = []
+    for org in orgs:
+        reseller_name = ""
+        if org.reseller_package and org.reseller_package.reseller_id:
+            reseller_user = User.query.get(org.reseller_package.reseller_id)
+            reseller_name = reseller_user.username if reseller_user else ""
+
+        rows.append(
+            {
+                "id": org.id,
+                "name": org.name,
+                "description": org.description or "",
+                "nit": org.nit or "",
+                "contact": org.contact or "",
+                "address": org.address or "",
+                "phone": org.phone or "",
+                "reseller": reseller_name,
+                "active": "Sí" if org.active else "No",
+                "created_at": str(org.created_at),
+                "updated_at": str(org.updated_at),
+            }
+        )
+
+    csv_data = handler.export_to_csv(rows)
+    return Response(
+        csv_data,
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment; filename=clients.csv"},
+    )
+
 
 # # Registro de rutas
 # def register_routes(api):

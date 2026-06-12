@@ -202,7 +202,28 @@ def create_app():
     from .helpers.route_lister import RouteLister
 
     view = RouteLister.as_view("list_routes")
-    app.add_url_rule("/list_endpoints", view_func=view)
+
+    def list_endpoints_view(*args, **kwargs):
+        """Gate /list_endpoints with the same policy as /info:
+        public in DEBUG, admin-only in production."""
+        if not app.config.get("DEBUG", False):
+            from flask import abort
+            from flask_jwt_extended import get_jwt_identity, verify_jwt_in_request
+
+            from app.core.models import User
+
+            try:
+                verify_jwt_in_request()
+            except Exception:
+                abort(403, description="Admin privileges required in production mode")
+            user = User.query.get(get_jwt_identity())
+            if not user or not user.is_admin():
+                abort(403, description="Admin privileges required in production mode")
+        return view(*args, **kwargs)
+
+    app.add_url_rule(
+        "/list_endpoints", view_func=list_endpoints_view, endpoint="list_routes"
+    )
 
     @app.route("/info")
     def info():

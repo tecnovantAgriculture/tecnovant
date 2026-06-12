@@ -35,6 +35,7 @@
 {# api de consumo #}
 
 {% set api_url = url_for('foliage_api.leaf_analyses') %}
+{% set csv_download_url = url_for('foliage_api.download_leaf_analyses_csv') %}
 
 {#  **************************** #}
 {% block extra_js %}
@@ -45,7 +46,7 @@ function fillFormWithData(id) {
     if (item) {
         document.getElementById('{{ entity_name_lower }}Id').value = item.id;
         document.getElementById('common_analysis_id').value = item.common_analysis_id || '';
-        
+
         const nutrientIds = {{ nutrient_ids | map(attribute='id') | list | tojson | safe }};
         nutrientIds.forEach(id => {
             const field = document.getElementById(`nutrient_${id}`);
@@ -55,5 +56,164 @@ function fillFormWithData(id) {
         });
     }
 }
+</script>
+<script>
+// "Usar como objetivo de referencia" en el modal Ver: replica el flujo de
+// agrovista.hello creando un SecondaryObjective desde los nutrientes del
+// análisis foliar. Solo UI: envuelve window.showModal sin tocar crud.js.
+(function () {
+    'use strict';
+    var SECONDARY_OBJECTIVES_URL = '/api/agrovista/secondary-objectives';
+    var ANALYSIS_CROPS_URL = '/api/agrovista/analysis-crops';
+    var cropMap = {};
+    var cropsLoaded = false;
+    var isSaving = false;
+    var currentViewId = null;
+
+    function getCsrf() {
+        var meta = document.querySelector('meta[name="csrf-token"]');
+        if (meta && meta.content) return meta.content;
+        var match = document.cookie.match(/(?:^|;\s*)csrf_access_token=([^;]+)/);
+        return match ? decodeURIComponent(match[1]) : '';
+    }
+
+    function setMsg(text, isError) {
+        var msg = document.getElementById('refObjectiveMsg');
+        if (!msg) return;
+        msg.textContent = text || '';
+        msg.classList.toggle('hidden', !text);
+        msg.classList.toggle('text-red-500', !!isError);
+        msg.classList.toggle('text-emerald-600', !isError);
+    }
+
+    function ensureSection() {
+        var existing = document.getElementById('refObjectiveSection');
+        if (existing) return existing;
+        var form = document.getElementById('{{ entity_name_lower }}Form');
+        if (!form) return null;
+        form.insertAdjacentHTML('afterend',
+            '<div id="refObjectiveSection" class="hidden mt-5 border-t border-gray-200 dark:border-gray-700 pt-4 space-y-2">' +
+            '<label for="refObjectiveCrop" class="block text-sm font-semibold text-gray-700 dark:text-gray-300">Cultivo de referencia <span class="font-normal text-gray-500 dark:text-gray-400">(opcional)</span></label>' +
+            '<input id="refObjectiveCrop" list="refObjectiveCropOptions" autocomplete="off" placeholder="Ej: Kikuyo — vacío usa finca/lote/fecha"' +
+            ' class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 py-2 px-3 text-sm shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500">' +
+            '<datalist id="refObjectiveCropOptions"></datalist>' +
+            '<button type="button" id="refObjectiveBtn"' +
+            ' class="w-full inline-flex items-center justify-center rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60">' +
+            'Usar como objetivo de referencia</button>' +
+            '<p id="refObjectiveMsg" class="text-xs hidden"></p>' +
+            '</div>');
+        var btn = document.getElementById('refObjectiveBtn');
+        if (btn) btn.addEventListener('click', createReferenceObjective);
+        return document.getElementById('refObjectiveSection');
+    }
+
+    function loadCrops() {
+        if (cropsLoaded) return;
+        cropsLoaded = true;
+        fetch(ANALYSIS_CROPS_URL, { credentials: 'include' })
+            .then(function (r) { return r.ok ? r.json() : []; })
+            .then(function (items) {
+                var datalist = document.getElementById('refObjectiveCropOptions');
+                if (!datalist || !Array.isArray(items)) return;
+                datalist.innerHTML = '';
+                items.forEach(function (crop) {
+                    if (!crop || !crop.name) return;
+                    cropMap[crop.name.toLowerCase()] = crop.id;
+                    var opt = document.createElement('option');
+                    opt.value = crop.name;
+                    datalist.appendChild(opt);
+                });
+            })
+            .catch(function () { /* datalist opcional, el POST acepta nombre nuevo */ });
+    }
+
+    function defaultCropName(item) {
+        if (item.common_analysis_display) return 'Ref. ' + item.common_analysis_display;
+        if (item.farm_name || item.lot_name) {
+            return 'Ref. ' + [item.farm_name, item.lot_name].filter(Boolean).join(' · ');
+        }
+        return 'Ref. análisis foliar ' + item.id;
+    }
+
+    function createReferenceObjective() {
+        if (isSaving) return;
+        setMsg('');
+        var items = (window.CRUD_CONFIG && window.CRUD_CONFIG.items) || [];
+        var item = items.find(function (f) { return String(f.id) === String(currentViewId); });
+        if (!item) {
+            setMsg('No se encontraron los datos del análisis.', true);
+            return;
+        }
+        // Cultivo opcional: si queda vacío se genera un nombre identificable
+        // desde finca/lote/fecha (el backend exige un AnalysisCrop asociado).
+        var input = document.getElementById('refObjectiveCrop');
+        var name = (input ? input.value.trim() : '') || defaultCropName(item);
+        var nutrientTargets = [];
+        var nitrogenValue = null;
+        Object.keys(item).forEach(function (key) {
+            var m = key.match(/^nutrient_(\d+)$/);
+            if (!m) return;
+            var value = parseFloat(item[key]);
+            if (!isFinite(value)) return;
+            nutrientTargets.push({ nutrient_id: Number(m[1]), target_value: value });
+            var def = window.CRUD_CONFIG.formFields && window.CRUD_CONFIG.formFields[key];
+            if (def && /nitr/i.test(def.label || '')) nitrogenValue = value;
+        });
+        if (!nutrientTargets.length) {
+            setMsg('El análisis no tiene valores de nutrientes registrados.', true);
+            return;
+        }
+        var payload = { nutrient_targets: nutrientTargets };
+        var cropId = cropMap[name.toLowerCase()];
+        if (cropId) { payload.analysis_crop_id = cropId; } else { payload.analysis_crop_name = name; }
+        if (nitrogenValue !== null) payload.nitrogen = nitrogenValue;
+
+        isSaving = true;
+        var btn = document.getElementById('refObjectiveBtn');
+        if (btn) btn.disabled = true;
+        fetch(SECONDARY_OBJECTIVES_URL, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': getCsrf() },
+            body: JSON.stringify(payload)
+        })
+            .then(function (res) {
+                return res.json().catch(function () { return {}; }).then(function (body) {
+                    if (!res.ok) {
+                        throw new Error(body.description || body.error || 'No se pudo crear el objetivo de referencia.');
+                    }
+                    return body;
+                });
+            })
+            .then(function (body) {
+                if (body && body.analysis_crop && body.analysis_crop.name) {
+                    cropMap[body.analysis_crop.name.toLowerCase()] = body.analysis_crop.id;
+                }
+                setMsg('Objetivo de referencia creado correctamente. Ya está disponible en la comparación de Agrovista.');
+            })
+            .catch(function (err) {
+                setMsg(err.message || 'Error al crear el objetivo de referencia.', true);
+            })
+            .finally(function () {
+                isSaving = false;
+                if (btn) btn.disabled = false;
+            });
+    }
+
+    var origShowModal = window.showModal;
+    if (typeof origShowModal !== 'function') return;
+    window.showModal = function (action, id) {
+        origShowModal(action, id);
+        var section = ensureSection();
+        if (!section) return;
+        var isView = action === 'view';
+        section.classList.toggle('hidden', !isView);
+        setMsg('');
+        if (isView) {
+            currentViewId = id;
+            loadCrops();
+        }
+    };
+})();
 </script>
 {% endblock %}

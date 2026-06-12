@@ -6,15 +6,17 @@ from pathlib import Path
 from typing import Dict, Optional
 
 import numpy as np
-from flask import abort, current_app, jsonify, request, send_file
-from flask_jwt_extended import jwt_required
+from flask import Response, abort, current_app, jsonify, request, send_file
+from flask_jwt_extended import get_jwt, jwt_required
 from pyproj import Transformer
 from rasterio.transform import Affine, xy
 from sqlalchemy import func
 from sqlalchemy.orm import joinedload, selectinload
 
+from app.core.controller import check_permission, check_resource_access
 from app.extensions import db
-from app.modules.foliage.models import Nutrient
+from app.helpers.csv_handler import CsvHandler
+from app.modules.foliage.models import CommonAnalysis, Nutrient
 from app.modules.media.helpers import (
     PreprocessConfig,
     _media_root,
@@ -25,12 +27,13 @@ from app.modules.media.models import Asset, StorageLocation
 from app.modules.media.tasks import _resolve_cache_dir
 
 from . import agrovista_api as api
-from .bromatologia import perfil_desde_ngrdi
+from .bromatologia import aforo_desde_proteina, perfil_desde_ngrdi
 from .controller import ensure_processed, process_upload
 from .helpers import (
     VisibleConfig,
     average_protein,
     combine_indices,
+    compute_mineral_balance,
     compute_secondary_objective_targets,
     compute_visible_indices,
     polygon_mask,
@@ -43,6 +46,12 @@ from .models import (
     NDVIImage,
     SecondaryObjective,
     SecondaryObjectiveNutrient,
+)
+from .services.lot_snapshot import (
+    LotSnapshotError,
+    discard_lot_snapshot,
+    generate_lot_snapshot,
+    resolve_lot_snapshot_url,
 )
 
 
@@ -282,9 +291,11 @@ def _protein_from_media(
             {
                 "proteina_pct": _broma["proteina_pct"] if _broma else None,
                 "energia_mcal": _broma["energia_mcal"] if _broma else None,
+                "energia2_mcal": _broma["energia2_mcal"] if _broma else None,
                 "fda_pct": _broma["fda_pct"] if _broma else None,
                 "fdn_pct": _broma["fdn_pct"] if _broma else None,
                 "energia_mj": _broma["energia_mj"] if _broma else None,
+                "aforo_ua_ha": _broma["aforo_ua_ha"] if _broma else None,
                 "indice_vigor": _broma["indice_vigor"] if _broma else None,
                 "en_rango": _broma["en_rango_valido"] if _broma else None,
                 "minerales": _broma["minerales"] if _broma else None,
@@ -323,6 +334,16 @@ def _affine_from_dict(data: dict | None) -> Optional[Affine]:
 @api.route("/polygon-kmz", methods=["POST"])
 @jwt_required()
 def polygon_kmz():
+    """Convierte un polígono de coordenadas de imagen a KMZ georreferenciado.
+
+    Recibe vértices en coordenadas de preview o full-res, los transforma
+    a coordenadas geográficas (EPSG:4326) usando el CRS y affine del asset,
+    y devuelve un archivo KMZ descargable.
+
+    :status 200: Archivo KMZ generado exitosamente
+    :status 400: Vértices inválidos, dimensiones no disponibles o CRS inválido
+    :status 404: Asset no encontrado
+    """
     data = request.get_json(force=True, silent=False) or {}
     img_id = _validate_id(str(data.get("id", "")))
     vertices = _validate_vertices(data.get("vertices", []))
@@ -475,7 +496,18 @@ def _as_float(value, default: float | None = None) -> float | None:
 
 @api.route("/upload", methods=["POST"])
 @jwt_required()
+@check_permission(required_roles=["administrator", "reseller"])
 def upload():
+    """Sube y procesa una imagen multiespectral (GeoTIFF).
+
+    Solo administradores y resellers. El archivo se recibe como
+    multipart/form-data campo 'file'. El procesamiento extrae
+    índices de vegetación y los persiste en caché NPZ.
+
+    :status 201: Imagen procesada exitosamente
+    :status 400: Archivo inválido o error de procesamiento
+    :status 500: Error interno de procesamiento
+    """
     try:
         meta = process_upload(request.files.get("file"))
         return jsonify(meta), 201
@@ -488,6 +520,12 @@ def upload():
 @api.route("/image/<img_id>.png", methods=["GET"])
 @jwt_required()
 def image(img_id: str):
+    """Sirve una imagen PNG pre-procesada desde el almacenamiento NDVI.
+
+    :param img_id: ID de la imagen NDVI registrada
+    :status 200: Imagen PNG servida (cache 1h)
+    :status 404: Imagen no encontrada en BD o en disco
+    """
     _validate_id(img_id)
     record = db.session.get(NDVIImage, img_id)
     if not record:
@@ -501,6 +539,21 @@ def image(img_id: str):
 @api.route("/protein", methods=["POST"])
 @jwt_required()
 def protein():
+    """Calcula proteína cruda, nitrógeno y perfil mineral desde un polígono.
+
+    Recibe vértices de un polígono sobre una imagen multiespectral y
+    retorna estimaciones de proteína, nitrógeno, índices de vegetación
+    (VI, VARI, GLI, NGRDI, ExG, NBI), perfil bromatológico y objetivos
+    secundarios de nutrientes.
+
+    Soporta dos fuentes: assets de media (source=media) y registros
+    NDVI históricos.
+
+    :status 200: JSON con proteína, nitrógeno, índices y perfil mineral
+    :status 400: Vértices inválidos o área sin píxeles válidos
+    :status 404: Asset/imagen no encontrada
+    :status 500: Error de lectura del TIF
+    """
     data = request.get_json(force=True, silent=False) or {}
     img_id = _validate_id(str(data.get("id", "")))
     vertices = _validate_vertices(data.get("vertices", []))
@@ -604,9 +657,11 @@ def protein():
             {
                 "proteina_pct": _broma["proteina_pct"] if _broma else None,
                 "energia_mcal": _broma["energia_mcal"] if _broma else None,
+                "energia2_mcal": _broma["energia2_mcal"] if _broma else None,
                 "fda_pct": _broma["fda_pct"] if _broma else None,
                 "fdn_pct": _broma["fdn_pct"] if _broma else None,
                 "energia_mj": _broma["energia_mj"] if _broma else None,
+                "aforo_ua_ha": _broma["aforo_ua_ha"] if _broma else None,
                 "indice_vigor": _broma["indice_vigor"] if _broma else None,
                 "en_rango": _broma["en_rango_valido"] if _broma else None,
                 "minerales": _broma["minerales"] if _broma else None,
@@ -627,13 +682,28 @@ def protein():
 @api.route("/analysis-crops", methods=["GET"])
 @jwt_required()
 def list_analysis_crops():
+    """Lista todos los cultivos de análisis registrados.
+
+    :status 200: Lista JSON de cultivos con id, name y description
+    """
     crops = AnalysisCrop.query.order_by(AnalysisCrop.name.asc()).all()
     return jsonify([_serialize_analysis_crop(crop) for crop in crops])
 
 
 @api.route("/analysis-crops", methods=["POST"])
 @jwt_required()
+@check_permission(required_roles=["administrator", "reseller"])
 def create_analysis_crop():
+    """Crea un nuevo cultivo de análisis o retorna uno existente.
+
+    Si ya existe un cultivo con el mismo nombre (case-insensitive),
+    actualiza su descripción si la nueva es no vacía y la existente
+    no estaba definida.
+
+    :status 201: Cultivo creado exitosamente
+    :status 200: Cultivo ya existía, retornado con posible update
+    :status 400: Nombre vacío o ausente
+    """
     data = request.get_json(force=True, silent=True) or {}
     name = str(data.get("name", "")).strip()
     if not name:
@@ -656,6 +726,10 @@ def create_analysis_crop():
 @api.route("/nutrients", methods=["GET"])
 @jwt_required()
 def list_nutrients():
+    """Lista todos los nutrientes registrados con su categoría.
+
+    :status 200: Lista JSON con id, name, symbol, unit y category
+    """
     nutrients = Nutrient.query.order_by(Nutrient.name.asc()).all()
     payload = [
         {
@@ -668,6 +742,81 @@ def list_nutrients():
         for nutrient in nutrients
     ]
     return jsonify(payload)
+
+
+@api.route("/mineral-balance", methods=["POST"])
+@jwt_required()
+def mineral_balance():
+    """Compute the mineral balance table server-side (FRM_Balance port).
+
+    Body:
+        order: list[str] — nutrient display order (names).
+        targets: dict — reference values (% macros / ppm micros) by name.
+        actuals: dict — leaf analysis values by name.
+        aforo_objective / aforo_actual: float|None — the objective aforo
+            converts the objective row, the actual aforo converts the
+            actual row; each falls back to the other when missing.
+        protein: float|None — when present, targets are re-derived from
+            this protein value using the calibrated regressions, and the
+            objective aforo is re-estimated from the same protein, before
+            computing the balance.
+
+    Returns:
+        JSON with per-nutrient entries (raw, kg/ha, deficit, grade, nano),
+        the total requirement, the (possibly derived) targets used and
+        the derived objective aforo when protein was provided.
+    """
+    data = request.get_json(silent=True) or {}
+    order = data.get("order")
+    targets = data.get("targets")
+    actuals = data.get("actuals")
+    if not isinstance(order, list) or not all(isinstance(name, str) for name in order):
+        abort(400, description="invalid order")
+    if not isinstance(targets, dict) or not isinstance(actuals, dict):
+        abort(400, description="invalid targets/actuals")
+
+    nutrients = Nutrient.query.order_by(Nutrient.id.asc()).all()
+
+    protein = data.get("protein")
+    derived_aforo = None
+    if protein is not None:
+        try:
+            protein_val = float(protein)
+        except (TypeError, ValueError):
+            abort(400, description="invalid protein")
+        if not math.isfinite(protein_val) or protein_val <= 0:
+            abort(400, description="invalid protein")
+        nitrogen = protein_to_nitrogen(protein_val)
+        derived = compute_secondary_objective_targets(protein_val, nitrogen, nutrients)
+        for item in derived:
+            for key in filter(
+                None, [item.get("nutrient_name"), item.get("nutrient_symbol")]
+            ):
+                if key in targets or key in order:
+                    targets[key] = item.get("target_value")
+        candidate = aforo_desde_proteina(protein_val)
+        if math.isfinite(candidate) and candidate > 0:
+            derived_aforo = candidate
+
+    aforo = derived_aforo if derived_aforo is not None else data.get("aforo_objective")
+    try:
+        aforo_val = float(aforo) if aforo is not None else None
+    except (TypeError, ValueError):
+        aforo_val = None
+    if aforo_val is None or not math.isfinite(aforo_val) or aforo_val <= 0:
+        aforo = data.get("aforo_actual")
+
+    result = compute_mineral_balance(
+        order,
+        targets,
+        actuals,
+        aforo,
+        nutrients,
+        aforo_actual=data.get("aforo_actual"),
+    )
+    result["targets"] = targets
+    result["aforo_objective"] = derived_aforo
+    return jsonify(result)
 
 
 @api.route("/secondary-objectives", methods=["GET"])
@@ -748,6 +897,7 @@ def _parse_nutrient_targets(
 
 @api.route("/secondary-objectives", methods=["POST"])
 @jwt_required()
+@check_permission(required_roles=["administrator", "reseller"])
 def create_secondary_objective():
     """API POST para crear objetivos secundarios (CRUD completo)."""
     data = request.get_json(force=True, silent=True) or {}
@@ -792,6 +942,12 @@ def create_secondary_objective():
 @api.route("/secondary-objectives/<int:objective_id>", methods=["GET"])
 @jwt_required()
 def get_secondary_objective(objective_id: int):
+    """Obtiene un objetivo secundario por ID con sus nutrientes.
+
+    :param objective_id: ID del objetivo secundario (vía URL)
+    :status 200: JSON con el objetivo y sus nutrient_targets
+    :status 404: Objetivo no encontrado
+    """
     objective = (
         SecondaryObjective.query.options(
             joinedload(SecondaryObjective.analysis_crop),
@@ -809,7 +965,17 @@ def get_secondary_objective(objective_id: int):
 
 @api.route("/secondary-objectives/<int:objective_id>", methods=["PUT"])
 @jwt_required()
+@check_permission(required_roles=["administrator", "reseller"])
 def update_secondary_objective(objective_id: int):
+    """Actualiza un objetivo secundario existente.
+
+    Permite modificar cultivo, proteína, nitrógeno y nutrient_targets.
+    Solo administradores y resellers.
+
+    :param objective_id: ID del objetivo secundario (vía URL)
+    :status 200: Objetivo actualizado exitosamente
+    :status 404: Objetivo no encontrado
+    """
     objective = db.session.get(SecondaryObjective, objective_id)
     if objective is None:
         abort(404, description="secondary objective not found")
@@ -857,10 +1023,166 @@ def update_secondary_objective(objective_id: int):
 
 @api.route("/secondary-objectives/<int:objective_id>", methods=["DELETE"])
 @jwt_required()
+@check_permission(required_roles=["administrator", "reseller"])
 def delete_secondary_objective(objective_id: int):
+    """Elimina un objetivo secundario (hard delete).
+
+    Solo administradores y resellers.
+
+    :param objective_id: ID del objetivo secundario (vía URL)
+    :status 200: Objetivo eliminado exitosamente
+    :status 404: Objetivo no encontrado
+    """
     objective = db.session.get(SecondaryObjective, objective_id)
     if objective is None:
         abort(404, description="secondary objective not found")
     db.session.delete(objective)
     db.session.commit()
     return jsonify({"status": "deleted", "id": objective_id})
+
+
+# ---------------------------------------------------------------------------
+# CSV download endpoint
+# ---------------------------------------------------------------------------
+
+
+@api.route("/secondary-objectives/csv/download")
+@jwt_required()
+def download_secondary_objectives_csv():
+    """Download CSV of secondary objectives with nutrient targets."""
+    handler = CsvHandler()
+    nutrient_map = {n.id: n.name for n in Nutrient.query.all()}
+
+    query = SecondaryObjective.query.options(
+        joinedload(SecondaryObjective.analysis_crop),
+        selectinload(SecondaryObjective.nutrient_targets),
+    ).order_by(SecondaryObjective.id.asc())
+    objectives = query.all()
+
+    if not objectives:
+        csv_data = handler.export_to_csv([])
+        return Response(
+            csv_data,
+            mimetype="text/csv",
+            headers={
+                "Content-Disposition": "attachment; "
+                "filename=secondary_objectives.csv",
+            },
+        )
+
+    rows = []
+    for obj in objectives:
+        row = {
+            "id": obj.id,
+            "analysis_crop_id": obj.analysis_crop_id,
+            "analysis_crop_name": (obj.analysis_crop.name if obj.analysis_crop else ""),
+            "protein_average": obj.protein_average,
+            "nitrogen_estimated": obj.nitrogen_estimated,
+            "created_at": str(obj.created_at),
+            "updated_at": str(obj.updated_at),
+        }
+        for target in obj.nutrient_targets:
+            row[f"nutrient_{target.nutrient_id}"] = target.target_value or ""
+        for nid in sorted(nutrient_map):
+            row.setdefault(f"nutrient_{nid}", "")
+        rows.append(row)
+
+    csv_data = handler.export_to_csv(rows)
+    return Response(
+        csv_data,
+        mimetype="text/csv",
+        headers={
+            "Content-Disposition": "attachment; " "filename=secondary_objectives.csv",
+        },
+    )
+
+
+def _get_scoped_common_analysis(common_analysis_id: int) -> CommonAnalysis:
+    """Carga un CommonAnalysis validando el alcance organizacional del JWT.
+
+    Args:
+        common_analysis_id: ID del análisis común.
+
+    Returns:
+        CommonAnalysis: El análisis si existe y el usuario tiene acceso.
+    """
+    analysis = db.session.get(CommonAnalysis, common_analysis_id)
+    if analysis is None:
+        abort(404, description="common analysis not found")
+    farm = analysis.lot.farm if analysis.lot else None
+    if farm is None or not check_resource_access(farm, get_jwt()):
+        abort(403, description="forbidden")
+    return analysis
+
+
+@api.route("/lot-snapshot", methods=["POST"])
+@jwt_required()
+def create_lot_snapshot():
+    """Genera y enlaza el snapshot RGB del lote para un análisis común.
+
+    Payload JSON:
+        common_analysis_id (int): Análisis al que se ancla el snapshot.
+        media_asset_id (int): Asset de media (ortofoto) origen.
+        vertices (list[[x, y]]): Polígono en coordenadas raster full-res
+            (misma convención que ``/protein`` con ``coords_full_res=True``).
+
+    Returns:
+        201 con ``{"variant_id", "url"}`` si el snapshot fue generado.
+    """
+    data = request.get_json(force=True, silent=False) or {}
+    try:
+        common_analysis_id = int(data.get("common_analysis_id"))
+        media_asset_id = int(data.get("media_asset_id"))
+    except (TypeError, ValueError):
+        abort(400, description="invalid identifiers")
+    vertices = _validate_vertices(data.get("vertices"))
+
+    analysis = _get_scoped_common_analysis(common_analysis_id)
+
+    asset = db.session.get(Asset, media_asset_id)
+    if asset is None:
+        abort(404, description="media asset not found")
+
+    previous = analysis.lot_snapshot_variant
+    try:
+        variant = generate_lot_snapshot(asset, vertices)
+        analysis.lot_snapshot_variant = variant
+        discard_lot_snapshot(previous)
+        db.session.commit()
+    except LotSnapshotError as e:
+        db.session.rollback()
+        abort(400, description=str(e))
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception(
+            "agrovista: lot snapshot generation failed for analysis %s",
+            common_analysis_id,
+        )
+        abort(500, description="snapshot generation failed")
+
+    return (
+        jsonify(
+            {
+                "common_analysis_id": analysis.id,
+                "variant_id": variant.id,
+                "url": resolve_lot_snapshot_url(analysis),
+            }
+        ),
+        201,
+    )
+
+
+@api.route("/lot-snapshot/<int:common_analysis_id>", methods=["GET"])
+@jwt_required()
+def get_lot_snapshot(common_analysis_id: int):
+    """Resuelve la URL del snapshot de lote de un análisis común.
+
+    Returns:
+        200 con ``{"url"}`` si existe; 404 si el análisis no tiene snapshot
+        (la UI lo trata como "no mostrar nada").
+    """
+    analysis = _get_scoped_common_analysis(common_analysis_id)
+    url = resolve_lot_snapshot_url(analysis)
+    if not url:
+        abort(404, description="snapshot not available")
+    return jsonify({"common_analysis_id": analysis.id, "url": url}), 200

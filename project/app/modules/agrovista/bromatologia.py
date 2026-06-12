@@ -542,6 +542,11 @@ def _interpolar_mineral(proteina: float, mineral: str) -> float:
 # ---------------------------------------------------------------------------
 
 
+# 2ARGB-V3-cal: LEGACY — modelo espectral 2ARGB con regresiones internas sobre
+# vigor clipped. Sus salidas (fda_pct, fdn_pct, energia_mcal, energia_mj) ya NO
+# se usan en perfil_desde_ngrdi: son reemplazadas por las funciones calibradas
+# _fdn_desde_pc / _fda_desde_pc / _energia_desde_pc abajo. Se conserva como
+# referencia histórica (firma y resultados documentados en tests previos).
 def _calcular_perfil(vigor: float) -> Dict:
     """Cadena de regresiones espectrales → outputs nutricionales."""
     alpha = (_L - vigor) / _E
@@ -598,6 +603,80 @@ def _calcular_perfil(vigor: float) -> Dict:
 
 
 # ---------------------------------------------------------------------------
+# 2ARGB-V3-cal: Derivaciones calibradas desde Proteína%
+# Coeficientes calibrados con 21 muestras; fuente: hoja ENERGÍA del Excel
+# de calibración. Se aplican post-cálculo de proteína en perfil_desde_ngrdi.
+# Rango válido de calibración: PC ∈ [PC_MIN, PC_MAX].
+# ---------------------------------------------------------------------------
+
+
+class _CoefsCalibrados:
+    """Coeficientes calibrados para derivar FDN/FDA/Energía/AFORO desde PC%."""
+
+    # Energía Metabolizable (EM) en Mcal/kg MS  —  lineal, R² ≈ 1.000
+    EM_A0: float = 3.044402
+    EM_A1: float = 0.124211
+
+    # Energía Neta de Lactación (ENL) en Mcal/kg MS  —  lineal, R² ≈ 1.000
+    E2_A0: float = 0.727269
+    E2_A1: float = 0.029688
+
+    # FDN (%)  —  lineal, R² ≈ 1.000
+    FDN_A0: float = 73.142087
+    FDN_A1: float = -1.127595
+
+    # FDA (%)  —  cuadrática (cae rápido con PC alto), RMSE ≈ 0.004%
+    FDA_A2: float = -0.078074
+    FDA_A1: float = 0.981619
+    FDA_A0: float = 32.502456
+
+    # AFORO estimado (UA/ha)  —  cuadrática; es estimación ESPECTRAL,
+    # no el AFORO real de campo/SQL. RMSE ≈ 0.163 UA/ha.
+    AFORO_A2: float = -0.003553
+    AFORO_A1: float = 0.215793
+    AFORO_A0: float = -1.201203
+
+    # Rango válido de la calibración (PC%)
+    PC_MIN: float = 3.81
+    PC_MAX: float = 24.02
+
+
+def _energia_desde_pc(pc: float) -> float:
+    """2ARGB-V3-cal: Energía Metabolizable (Mcal/kg MS) desde Proteína%."""
+    k = _CoefsCalibrados
+    return k.EM_A0 + k.EM_A1 * pc
+
+
+def _energia2_desde_pc(pc: float) -> float:
+    """2ARGB-V3-cal: Energía Neta de Lactación (Mcal/kg MS) desde Proteína%."""
+    k = _CoefsCalibrados
+    return k.E2_A0 + k.E2_A1 * pc
+
+
+def _fdn_desde_pc(pc: float) -> float:
+    """2ARGB-V3-cal: Fibra Detergente Neutra (%) desde Proteína%."""
+    k = _CoefsCalibrados
+    return k.FDN_A0 + k.FDN_A1 * pc
+
+
+def _fda_desde_pc(pc: float) -> float:
+    """2ARGB-V3-cal: Fibra Detergente Ácida (%) desde Proteína% — cuadrática."""
+    k = _CoefsCalibrados
+    return k.FDA_A2 * pc**2 + k.FDA_A1 * pc + k.FDA_A0
+
+
+def _aforo_estimado_desde_pc(pc: float) -> float:
+    """2ARGB-V3-cal: AFORO estimado (UA/ha) desde Proteína%.
+
+    ⚠ Es una estimación ESPECTRAL — el AFORO real de campo debe venir de
+    la fuente SQL correspondiente (ISAFORO en sistemas externos). Aquí
+    se usa como fallback cuando no hay valor de aforo disponible.
+    """
+    k = _CoefsCalibrados
+    return k.AFORO_A2 * pc**2 + k.AFORO_A1 * pc + k.AFORO_A0
+
+
+# ---------------------------------------------------------------------------
 # API pública
 # ---------------------------------------------------------------------------
 
@@ -616,6 +695,16 @@ def minerales_desde_proteina(proteina_pct: float) -> Dict[str, float]:
         _MINERAL_OUTPUT_KEY[m]: round(_interpolar_mineral(proteina_pct, m), 4)
         for m in _MINERAL_KEYS
     }
+
+
+def aforo_desde_proteina(proteina_pct: float) -> float:
+    """AFORO estimado (UA/ha) desde Proteína% — estimación espectral.
+
+    Aplica el mismo clip [PROT_MIN_CLIP, PROT_MAX_CLIP] que el resto de
+    derivaciones para mantener la cuadrática dentro del rango calibrado.
+    """
+    pc = max(PROT_MIN_CLIP, min(PROT_MAX_CLIP, proteina_pct))
+    return round(_aforo_estimado_desde_pc(pc), 4)
 
 
 def perfil_desde_ngrdi(
@@ -671,6 +760,19 @@ def perfil_desde_ngrdi(
 
     # Sobreescribir proteína con el valor de la regresión directa (más preciso que el modelo)
     perfil["proteina_pct"] = round(proteina_real, 4)
+
+    # 2ARGB-V3-cal: Sobrescribir FDN/FDA/Energía con valores calibrados desde PC.
+    # La salida de _calcular_perfil(vigor_fibra) se IGNORA para estas 4 claves;
+    # se mantiene la llamada arriba únicamente por simetría histórica.
+    pc = proteina_real
+    perfil["fdn_pct"] = round(_fdn_desde_pc(pc), 4)
+    perfil["fda_pct"] = round(_fda_desde_pc(pc), 4)
+    perfil["energia_mcal"] = round(_energia_desde_pc(pc), 4)
+    perfil["energia_mj"] = round(_energia_desde_pc(pc) * 4.184, 4)
+    # 2ARGB-V3-cal: Nuevas claves — Energía Neta de Lactación y AFORO estimado.
+    perfil["energia2_mcal"] = round(_energia2_desde_pc(pc), 4)
+    perfil["aforo_ua_ha"] = round(_aforo_estimado_desde_pc(pc), 4)
+    perfil["aforo_fuente"] = "estimacion_espectral"
 
     # Minerales desde proteína real (no desde la del modelo espectral)
     mineral = minerales_desde_proteina(proteina_real)

@@ -4,8 +4,8 @@
 {% set entity_name_lower = "analisis_de_suelo" %}
 {% set show_select_box = True %}
 {# Mostrar la grid de ítems #}
-{% set table_headers = ["ID", "ID del análisis común", "Energía", "Pastoreo", "Fecha de creación", "Fecha de actualización"] %}
-{% set item_fields = ["id", "common_analysis_id", "energy", "grazing", "created_at", "updated_at"] %}
+{% set table_headers = ["ID", "Análisis Común", "Energía", "Pastoreo", "Fecha de creación", "Fecha de actualización"] %}
+{% set item_fields = ["id", "common_analysis_display", "energy", "grazing", "created_at", "updated_at"] %}
 
 {# formulario de editar y add #}
 {% set form_fields = {
@@ -22,3 +22,4 @@
 {# entregado desde el endpoint #}
 {# api de consumo #}
 {% set api_url = url_for('foliage_api.nutrient_applications') %}
+{% set csv_download_url = url_for('foliage_api.download_soil_analyses_csv') %}

@@ -33,6 +33,7 @@ nutrient_application_nutrients = db.Table(
         "nutrient_id", db.Integer, db.ForeignKey("nutrients.id"), primary_key=True
     ),
     db.Column("quantity", db.Float, nullable=True),
+    db.Column("recommended_quantity", db.Float, nullable=True),
     db.Column("created_at", db.DateTime, default=datetime.utcnow),
 )
 
@@ -60,6 +61,13 @@ product_contribution_nutrients = db.Table(
         "nutrient_id", db.Integer, db.ForeignKey("nutrients.id"), primary_key=True
     ),
     db.Column("contribution", db.Float, nullable=True),
+    db.Column(
+        "contribution_unit",
+        db.String(16),
+        nullable=False,
+        default="pct_p_p",
+        server_default="pct_p_p",
+    ),
     db.Column("created_at", db.DateTime, default=datetime.utcnow),
 )
 
@@ -100,6 +108,7 @@ class Lot(db.Model):
     area = db.Column(db.Float, nullable=False)
     farm_id = db.Column(db.Integer, db.ForeignKey("farms.id"), nullable=False)
     geometry = db.Column(db.Text, nullable=True)  # GeoJSON polygon of the lot
+    active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
@@ -188,11 +197,21 @@ class CommonAnalysis(db.Model):
     energy = db.Column(db.Float)
     yield_estimate = db.Column(db.Float)  # for aforo
     month = db.Column(db.Integer)
+    # Recorte RGB del lote sobre la ortofoto (AssetVariant kind="lot_snapshot"),
+    # generado por agrovista al guardar el análisis. SET NULL si el asset se borra.
+    lot_snapshot_variant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("media_variant.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
     )
     lot = db.relationship("Lot", back_populates="common_analyses")
+    lot_snapshot_variant = db.relationship(
+        "AssetVariant", foreign_keys=[lot_snapshot_variant_id]
+    )
     soil_analysis = db.relationship(
         "SoilAnalysis", uselist=False, back_populates="common_analysis"
     )
@@ -339,6 +358,9 @@ class Recommendation(db.Model):
         db.Text
     )  # Detalles del análisis foliar (puede ser JSON)
     applied = db.Column(db.Boolean, default=False)
+    common_analysis_id = db.Column(
+        db.Integer, db.ForeignKey("common_analyses.id"), nullable=True
+    )
     active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(
@@ -348,6 +370,7 @@ class Recommendation(db.Model):
     # Relaciones
     lot = db.relationship("Lot", back_populates="recommendations")
     crop = db.relationship("Crop")
+    base_analysis = db.relationship("CommonAnalysis", foreign_keys=[common_analysis_id])
 
     __table_args__ = (
         db.Index("ix_recommendations_lot_id", "lot_id"),
@@ -369,6 +392,10 @@ class NutrientApplication(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     date = db.Column(db.Date, nullable=False)
     lot_id = db.Column(db.Integer, db.ForeignKey("lots.id"), nullable=False)
+    recommendation_id = db.Column(
+        db.Integer, db.ForeignKey("recommendations.id"), nullable=True
+    )
+    applied_date = db.Column(db.Date, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
@@ -379,6 +406,9 @@ class NutrientApplication(db.Model):
         "Nutrient",
         secondary=nutrient_application_nutrients,
         back_populates="applications",
+    )
+    recommendation = db.relationship(
+        "Recommendation", backref="recommendation_applications"
     )
 
     def __repr__(self):
@@ -453,6 +483,31 @@ class Product(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     description = db.Column(db.Text)
+    application_type = db.Column(
+        db.String(16), nullable=False, default="unknown", server_default="unknown"
+    )
+    density_kg_per_l = db.Column(db.Float, nullable=True)
+    # Recommended application dose range per hectare, per the product's
+    # technical sheet (Línea Nanotech 2020.RV). All three are NULL when
+    # no ficha técnica is available; the recommendation flow skips
+    # products with NULL dose_typical_kg_per_ha.
+    dose_min_kg_per_ha = db.Column(db.Float, nullable=True)
+    dose_max_kg_per_ha = db.Column(db.Float, nullable=True)
+    dose_typical_kg_per_ha = db.Column(db.Float, nullable=True)
+    # Units of the dose_*_kg_per_ha columns. 'kg_per_ha' for powders,
+    # 'L_per_ha' for liquids. Required to interpret the dose value
+    # unambiguously (the historic bug that motivated this column was
+    # silently treating Nitra-n's 5-10 kg/ha range as L/ha, giving
+    # nonsensical results).
+    dose_min_unit = db.Column(
+        db.String(16), nullable=False, default="kg_per_ha", server_default="kg_per_ha"
+    )
+    dose_max_unit = db.Column(
+        db.String(16), nullable=False, default="kg_per_ha", server_default="kg_per_ha"
+    )
+    dose_typical_unit = db.Column(
+        db.String(16), nullable=False, default="kg_per_ha", server_default="kg_per_ha"
+    )
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
@@ -500,6 +555,9 @@ class ProductPrice(db.Model):
     supplier = db.Column(db.String(100))
     start_date = db.Column(db.Date, nullable=False, default=date.today)
     end_date = db.Column(db.Date, default=lambda: date.today() + timedelta(days=365))
+    price_unit = db.Column(
+        db.String(8), nullable=False, default="kg", server_default="kg"
+    )
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
@@ -512,6 +570,41 @@ class ProductPrice(db.Model):
 
     def __repr__(self):
         return f"<ProductPrice {self.id}>"
+
+
+class FollowUpAnalysis(db.Model):
+    """Vincula una NutrientApplication con el CommonAnalysis tomado posteriormente."""
+
+    __tablename__ = "follow_up_analyses"
+    id = db.Column(db.Integer, primary_key=True)
+    nutrient_application_id = db.Column(
+        db.Integer, db.ForeignKey("nutrient_applications.id"), nullable=False
+    )
+    post_analysis_id = db.Column(
+        db.Integer, db.ForeignKey("common_analyses.id"), nullable=False
+    )
+    weeks_after_application = db.Column(db.Integer, nullable=True)
+    notes = db.Column(db.Text, nullable=True)
+    active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(
+        db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    nutrient_application = db.relationship("NutrientApplication", backref="follow_ups")
+    post_analysis = db.relationship("CommonAnalysis", foreign_keys=[post_analysis_id])
+
+    __table_args__ = (
+        db.Index("ix_follow_up_analyses_app_id", "nutrient_application_id"),
+        db.Index("ix_follow_up_analyses_post_id", "post_analysis_id"),
+    )
+
+    def __repr__(self):
+        return f"<FollowUpAnalysis {self.id}>"
+
+    @property
+    def organization(self):
+        return self.nutrient_application.lot.farm.organization
 
 
 # Validación de nutrientes

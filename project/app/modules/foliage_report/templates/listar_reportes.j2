@@ -129,6 +129,29 @@
                 </tbody>
             </table>
         </div>
+
+        {# Paginación #}
+        {% if pagination and pagination.pages > 1 %}
+        <div class="mt-6 flex items-center justify-between text-sm">
+            <span class="text-gray-500 dark:text-gray-300">Página {{ pagination.page }} de {{ pagination.pages }} — {{ pagination.total }} reportes</span>
+            <div class="flex gap-2">
+                {% set prev_args = request.args.to_dict() %}
+                {% set next_args = request.args.to_dict() %}
+                {% if pagination.has_prev %}
+                    {% set _ = prev_args.update({'page': pagination.prev_num}) %}
+                    <a href="{{ url_for('foliage_report.listar_reportes', **prev_args) }}" class="px-3 py-1 rounded-md border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-900">Anterior</a>
+                {% else %}
+                    <span class="px-3 py-1 rounded-md border border-gray-200 text-gray-400 dark:border-gray-700">Anterior</span>
+                {% endif %}
+                {% if pagination.has_next %}
+                    {% set _ = next_args.update({'page': pagination.next_num}) %}
+                    <a href="{{ url_for('foliage_report.listar_reportes', **next_args) }}" class="px-3 py-1 rounded-md bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-100">Siguiente</a>
+                {% else %}
+                    <span class="px-3 py-1 rounded-md border border-gray-200 text-gray-400 dark:border-gray-700">Siguiente</span>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
     </div>
 </div>
 {% if DEBUG %}

@@ -264,6 +264,90 @@ def extract_geo_info_if_tiff(filepath: str) -> GeoInfo:
     return geo
 
 
+# Límite duro del formato TIFF clásico: offsets de 32 bits.
+TIFF_CLASSIC_MAX_BYTES = 4 * 1024 * 1024 * 1024
+
+TIFF_INVALID_HINT = (
+    "El archivo TIFF está corrupto o incompleto: la cabecera no apunta a un "
+    "índice (IFD) válido. Esto suele ocurrir cuando el software que generó "
+    "la ortofoto supera el límite de 4 GiB del formato TIFF clásico sin usar "
+    "BigTIFF. Re-exporte como BigTIFF o COG (o con compresión) y vuelva a "
+    "subir el archivo."
+)
+
+
+def validate_tiff_upload(filepath: str, size_bytes: int) -> Optional[str]:
+    """Valida la cabecera de un TIFF antes de aceptarlo en la biblioteca.
+
+    Lee solo los primeros 8 bytes, así que es seguro para archivos de varios
+    GB. Devuelve un mensaje de error accionable o ``None`` si la estructura
+    es válida.
+    """
+    try:
+        with open(filepath, "rb") as fh:
+            header = fh.read(8)
+    except OSError:
+        return "No se pudo leer el archivo subido."
+    if len(header) < 8:
+        return "El archivo es demasiado pequeño para ser un TIFF válido."
+
+    if header[:2] == b"II":
+        byteorder = "little"
+    elif header[:2] == b"MM":
+        byteorder = "big"
+    else:
+        return (
+            "El archivo no tiene cabecera TIFF válida pese a su extensión. "
+            "Verifique el export y vuelva a subirlo."
+        )
+
+    version = int.from_bytes(header[2:4], byteorder)
+    if version == 43:
+        # BigTIFF: offsets de 64 bits, sin límite de 4 GiB.
+        return None
+    if version != 42:
+        return TIFF_INVALID_HINT
+
+    # TIFF clásico: el offset al primer IFD no puede ser 0 ni apuntar fuera
+    # del archivo, y el formato no puede direccionar >= 4 GiB.
+    first_ifd_offset = int.from_bytes(header[4:8], byteorder)
+    if first_ifd_offset == 0 or first_ifd_offset >= size_bytes:
+        return TIFF_INVALID_HINT
+    if size_bytes >= TIFF_CLASSIC_MAX_BYTES:
+        return (
+            "El archivo declara formato TIFF clásico pero pesa 4 GiB o más, "
+            "tamaño que ese formato no puede direccionar; el export quedó "
+            "corrupto casi con certeza. Re-exporte como BigTIFF o COG y "
+            "vuelva a subirlo."
+        )
+    return None
+
+
+_RASTER_UNREADABLE_PATTERNS = (
+    "not recognized as being in a supported file format",
+    "cannot identify image file",
+)
+
+
+def friendly_preprocess_error(raw: Optional[str]) -> Optional[str]:
+    """Traduce errores crudos de GDAL/Pillow a un mensaje accionable.
+
+    Se aplica al texto de ``.error`` / ``.status.json`` antes de mostrarlo
+    en la vista de elemento o en el endpoint de estado.
+    """
+    if not raw:
+        return raw
+    lowered = raw.lower()
+    if any(pattern in lowered for pattern in _RASTER_UNREADABLE_PATTERNS):
+        return (
+            "El archivo no puede leerse como raster: está corrupto o el "
+            "export quedó incompleto (típico al superar el límite de 4 GiB "
+            "del formato TIFF clásico). Reprocesar no lo corregirá: "
+            "re-exporte como BigTIFF o COG y suba el archivo de nuevo."
+        )
+    return raw
+
+
 def allocate_storage_path(ext: str) -> Tuple[str, str]:
     """Create a unique storage path and return (storage_key, abs_path).
 

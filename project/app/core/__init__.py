@@ -13,8 +13,6 @@ License:
 """
 """Application core blueprints and route imports."""
 
-import os
-
 from flask import Blueprint, current_app, send_from_directory
 
 from .controller import login_required
@@ -41,12 +39,9 @@ def serve_avatar(key: str):
     # Get base storage directory (handles Docker env properly)
     base = AvatarService.ensure_storage_directory()
 
-    # Extract directory and filename from the key path
-    directory = os.path.join(str(base), os.path.dirname(key))
-    filename = os.path.basename(key)
-
-    # send_from_directory handles path security validation
-    response = send_from_directory(directory, filename)
+    # Pass the full key so send_from_directory/safe_join rejects any
+    # path traversal (e.g. "../../etc/passwd") with a 404.
+    response = send_from_directory(str(base), key)
     # Add cache headers (1 day for avatars)
     response.headers["Cache-Control"] = "public, max-age=86400"
     return response

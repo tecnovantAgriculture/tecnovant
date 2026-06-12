@@ -1,9 +1,10 @@
 """API routes for generating foliage analysis reports."""
 
+import re
 from datetime import datetime
 
-from flask import jsonify, request
-from flask_jwt_extended import get_jwt
+from flask import jsonify, request, send_file
+from flask_jwt_extended import get_jwt, jwt_required
 
 from app.core.controller import (
     api_login_required,
@@ -20,6 +21,7 @@ from app.modules.foliage.models import (
     Lot,
     LotCrop,
     Nutrient,
+    NutrientApplication,
     Objective,
     Production,
     Recommendation,
@@ -30,6 +32,9 @@ from app.modules.foliage.models import (
 from . import foliage_report_api as api
 from .controller import (
     DeleteRecommendationView,
+    FollowUpComparisonView,
+    FollowUpView,
+    LotEvolutionView,
     RecommendationFilterView,
     RecommendationGenerator,
     RecommendationView,
@@ -52,10 +57,39 @@ api.add_url_rule(
     "/delete_report/<int:report_id>", view_func=delete_report_view, methods=["DELETE"]
 )
 
+# Rutas del sistema de seguimiento post-aplicación (fase 5)
+follow_up_view = FollowUpView.as_view("follow_up")
+api.add_url_rule(
+    "/applications/<int:application_id>/follow-up",
+    view_func=follow_up_view,
+    methods=["GET", "POST"],
+)
+
+follow_up_comparison_view = FollowUpComparisonView.as_view("follow_up_comparison")
+api.add_url_rule(
+    "/follow-up/<int:follow_up_id>/comparison",
+    view_func=follow_up_comparison_view,
+    methods=["GET"],
+)
+
+lot_evolution_view = LotEvolutionView.as_view("lot_evolution")
+api.add_url_rule(
+    "/lots/<int:lot_id>/evolution",
+    view_func=lot_evolution_view,
+    methods=["GET"],
+)
+
 
 @api.route("/get-farms")
 @login_required
 def get_farms():
+    """Lista las fincas accesibles para el usuario autenticado.
+
+    Filtra por alcance multi-tenant: solo retorna fincas cuyas
+    organizaciones están asociadas al usuario.
+
+    :status 200: Lista JSON con id y name de cada finca
+    """
     claims = get_jwt()
 
     # Obtener todas las fincas que el usuario puede visualizar
@@ -69,6 +103,16 @@ def get_farms():
 @api.route("/get-lots/")
 @login_required
 def get_lots():
+    """Lista los lotes de una finca con su cultivo activo.
+
+    Retorna cada lote con el crop_id del LotCrop más reciente,
+    útil para precargar el cultivo en formularios de informe.
+
+    :param farm_id: ID de la finca (requerido, query string)
+    :status 200: Lista JSON con id, name y crop_id de cada lote
+    :status 403: Usuario sin acceso a la finca
+    :status 404: Finca no encontrada
+    """
     claims = get_jwt()
     farm_id = request.args.get("farm_id")
     farm = Farm.query.get_or_404(farm_id)
@@ -111,6 +155,12 @@ def get_lots():
 @api.route("/get-objectives-for-crop/<int:crop_id>")
 @login_required
 def get_objectives_for_crop(crop_id):
+    """Lista los objetivos nutricionales asociados a un cultivo.
+
+    :param crop_id: ID del cultivo (vía URL)
+    :status 200: Lista JSON con id, name y target_value de cada objetivo
+    :status 404: Cultivo no encontrado
+    """
     crop = Crop.query.get_or_404(crop_id)
     objectives = Objective.query.filter_by(crop_id=crop_id).all()
     objectives_data = [
@@ -144,6 +194,18 @@ def get_all_objectives():
 @api.route("/analyses")
 @login_required
 def get_analyses():
+    """Lista los análisis comunes con datos de suelo y foliar.
+
+    Filtra opcionalmente por finca, lote y rango de fechas.
+    Incluye nutrientes foliares con sus valores para cada análisis.
+
+    :param farm_id: ID de finca para filtrar (opcional)
+    :param lot_id: ID de lote para filtrar (opcional)
+    :param start_date: Fecha inicial YYYY-MM-DD (opcional)
+    :param end_date: Fecha final YYYY-MM-DD (opcional)
+    :status 200: Lista JSON con análisis y nutrientes
+    :status 400: Formato de fecha inválido
+    """
     claims = get_jwt()
     farm_id = request.args.get("farm_id")
     lot_id = request.args.get("lot_id")
@@ -208,6 +270,8 @@ def get_analyses():
         analysis_data = {
             "id": common_analysis.id,
             "date": common_analysis.date.strftime("%Y-%m-%d"),
+            "protein": common_analysis.protein,
+            "yield_estimate": common_analysis.yield_estimate,
             "lot": {
                 "id": common_analysis.lot.id,
                 "name": common_analysis.lot.name,
@@ -341,6 +405,50 @@ def get_recommendation_results(recommendation_id):
             }
         ),
         200,
+    )
+
+
+# ===== DOCX Export Endpoint =====
+@api.route("/<int:id>/export/docx")
+@jwt_required()
+def export_report_docx(id):
+    """Generate and stream the Word version of a Recommendation report.
+
+    The DOCX mirrors the on-screen PDF page-for-page: cover, summary
+    (Law of the Minimum), foliar detail, macro/micro nutrient pages
+    with charts, soil, recommendations, and historical evolution.
+    Charts are rendered server-side with matplotlib using the same
+    data the web dashboard already consumes via ReportView.
+
+    Multi-tenant isolation: the recommendation's lot must belong to
+    an organization the caller can access (mirrors the pattern in
+    ``get_recommendation_results``).
+    """
+    rec = Recommendation.query.get_or_404(id)
+    lot = Lot.query.get_or_404(rec.lot_id) if rec.lot_id else None
+    if not lot:
+        return jsonify({"error": "Lot not found"}), 404
+
+    claims = get_jwt()
+    if not check_resource_access(lot.farm, claims):
+        return jsonify({"error": "Forbidden"}), 403
+
+    from .services.docx_export import build_report_docx_bytes  # lazy import
+
+    buf = build_report_docx_bytes(id)
+
+    safe_lote = (
+        re.sub(r"[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ ]", "", lot.name or "").strip() or "lote"
+    )
+    filename = f"informe_{safe_lote}_{datetime.now().strftime('%Y-%m-%d')}.docx"
+
+    return send_file(
+        buf,
+        mimetype=(
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        ),
+        as_attachment=True,
+        download_name=filename,
     )
 
 

@@ -3,32 +3,24 @@ import json
 from datetime import datetime
 from decimal import ROUND_HALF_UP, Decimal
 from statistics import mean, stdev
-from typing import Dict, List, Tuple
+from typing import Dict, Tuple
 
-from flask import current_app, jsonify
-from flask.views import MethodView
-from flask_jwt_extended import get_jwt, jwt_required
+from flask import current_app
 
 # Third party imports
 from scipy.optimize import linprog
-from werkzeug.exceptions import Forbidden
 
-from app.core.models import ResellerPackage, RoleEnum
 from app.extensions import db
-from app.modules.foliage.controller import ProductContributionView
 from app.modules.foliage.helpers import macronutrients, micronutrients
 
 # Local application imports
-from app.modules.foliage.models import (
+from app.modules.foliage.models import (  # Lot,  # unused; LotCrop,  # unused; Recommendation,  # unused
     CommonAnalysis,
     LeafAnalysis,
-    Lot,
-    LotCrop,
     Nutrient,
     Objective,
     ProductContribution,
     ProductPrice,
-    Recommendation,
     leaf_analysis_nutrients,
     objective_nutrients,
     product_contribution_nutrients,
@@ -136,14 +128,10 @@ class LeyLiebig:
         return nutrientes
 
 
-from decimal import ROUND_HALF_UP, Decimal
-from typing import Dict, Tuple
-
-from scipy.optimize import linprog
-
-
 class NutrientOptimizer:
     """
+
+
     Clase que optimiza la aplicación de productos para satisfacer los requerimientos de nutrientes de un cultivo,
     basada en la Ley del Mínimo de Liebig y programación lineal.
     """
@@ -465,6 +453,367 @@ class NutrientOptimizer:
         except Exception as e:
             print(f"Error generando recomendación: {str(e)}")
             return f"Error al generar recomendación para el lote {lot_id}: {str(e)}"
+
+
+class RecommendationError(Exception):
+    """Raised when dose computation cannot be performed for a product."""
+
+
+def compute_dose(
+    product_name: str,
+    cantidad: Decimal,
+    price: Decimal,
+    application_type: str,
+    density_kg_per_l,
+    price_unit: str,
+    application_mode: str = "edaphic",
+):
+    """Compute per-hectare dose and cost for a single product in a recommendation.
+
+    The function is pure: it does not touch the DB and does not mutate
+    products / product_prices. It receives a quantity already resolved by
+    the optimizer (in the unit of the price: kg if price_unit='kg', L if
+    'L') and returns a dict ready to persist as a RecommendationDose row.
+
+    Args:
+        product_name: Display name of the product.
+        cantidad: Quantity of product from the optimizer, in the unit of
+            ``price`` (kg if powder, L if liquid).
+        price: Unit price (COP per ``price_unit``).
+        application_type: One of 'powder', 'liquid', 'unknown'.
+        density_kg_per_l: Product density in kg/L. Required for liquids;
+            ignored for powders (where it must be None).
+        price_unit: 'kg' (COP/kg) or 'L' (COP/L). Must match the
+            application_type semantics.
+        application_mode: 'edaphic' (kg/ha or L/ha) or 'foliar'
+            (unsupported in this phase - returns dose_per_ha=None).
+
+    Returns:
+        dict with keys: product, dose_per_ha, dose_unit, cost_per_ha,
+        application_mode, application_type.
+
+    Raises:
+        RecommendationError: if ``application_type`` is 'unknown' or if
+            a liquid product is missing ``density_kg_per_l``.
+    """
+    if application_type == "unknown":
+        raise RecommendationError(
+            f"Producto '{product_name}' sin application_type definido"
+        )
+
+    if application_mode == "foliar":
+        # Gap P1 documentado: foliar necesita caldo_L_por_ha. Por ahora
+        # devolvemos dose_per_ha=None y dejamos que la UI lo muestre.
+        return {
+            "product": product_name,
+            "dose_per_ha": None,
+            "dose_unit": None,
+            "cost_per_ha": float(cantidad) * float(price),
+            "application_mode": "foliar",
+            "application_type": application_type,
+        }
+
+    # application_mode == 'edaphic' (default)
+    if application_type == "powder":
+        # density_kg_per_l must be None for powders (validation handled by
+        # caller / seed; defensive check here for runtime safety).
+        dose_per_ha = float(cantidad)
+        cost_per_ha = dose_per_ha * float(price)
+        return {
+            "product": product_name,
+            "dose_per_ha": dose_per_ha,
+            "dose_unit": "kg/ha",
+            "cost_per_ha": cost_per_ha,
+            "application_mode": "edaphic",
+            "application_type": "powder",
+        }
+
+    if application_type == "liquid":
+        if density_kg_per_l is None:
+            raise RecommendationError(
+                f"Producto líquido '{product_name}' sin density_kg_per_l"
+            )
+        # cantidad está en L (porque price_unit='L' para líquidos).
+        # dosis_L_per_ha = cantidad (1 ha como unidad de superficie);
+        # conversión a kg sólo si la UI lo pide.
+        dose_per_ha = float(cantidad)
+        cost_per_ha = dose_per_ha * float(price)
+        return {
+            "product": product_name,
+            "dose_per_ha": dose_per_ha,
+            "dose_unit": "L/ha",
+            "cost_per_ha": cost_per_ha,
+            "application_mode": "edaphic",
+            "application_type": "liquid",
+        }
+
+    raise RecommendationError(
+        f"application_type inválido '{application_type}' para '{product_name}'"
+    )
+
+
+def compute_dose_from_contributions(
+    productos_contribuciones: Dict[str, Dict[str, Decimal]],
+    productos_precios: Dict[str, Decimal],
+    nutrientes_actuales: Dict[str, Decimal],
+    demandas_ideales: Dict[str, Decimal],
+    application_type_lookup: Dict[str, str],
+    density_lookup,
+    price_unit_lookup: Dict[str, str],
+    typical_dose_per_ha_lookup: Dict[str, Decimal],
+    typical_dose_unit_lookup: Dict[str, str],
+    application_mode: str = "edaphic",
+    deficiency_threshold: float = 0.8,
+):
+    """Select deficient nutrients and recommend one product per nutrient.
+
+    The application dose for each product comes from the technical
+    sheet (``typical_dose_per_ha_lookup``), NOT from a deficit /
+    contribution calculation. The latter was the source of the fase-4
+    bug (e.g. 833 kg/ha of a 6% N powder when the foliar analysis was
+    3.188% vs ideal 3.39%): the % foliar deficit was being divided by
+    the % p/p contribution with no dimensional check.
+
+    Algorithm:
+      1. For each nutrient with ``actual < ideal * threshold``
+         (default 80% of target), mark as deficient.
+      2. For each deficient nutrient, find the most efficient product
+         in the catalogue: highest ``contribution`` for that nutrient
+         (tiebreak: lowest cost at the typical dose).
+      3. Recommend that product with its ``typical_dose_per_ha``
+         (no further math; the agronomist applies the recommended
+         dose range from the technical sheet).
+      4. Persist one row per product via ``compute_dose()``.
+
+    Args:
+        productos_contribuciones: {product_name: {nutrient_name: Decimal}}
+            Values are FRACTIONS in pct_p_p (e.g. 0.33 = 33% K in Kn32).
+        productos_precios: {product_name: Decimal} (COP per price_unit).
+        nutrientes_actuales: {nutrient_name: Decimal} from LeafAnalysis.
+        demandas_ideales: {nutrient_name: Decimal} from Objective.
+        application_type_lookup: {product_name: 'powder'|'liquid'|'unknown'}.
+        density_lookup: {product_name: Decimal|None} kg/L (liquids only).
+        price_unit_lookup: {product_name: 'kg'|'L'}.
+        typical_dose_per_ha_lookup: {product_name: Decimal} from
+            products.dose_typical_kg_per_ha (in dose_typical_unit units).
+        typical_dose_unit_lookup: {product_name: 'kg_per_ha'|'L_per_ha'}.
+        application_mode: 'edaphic' (default) or 'foliar' (gap P1).
+        deficiency_threshold: nutrient is deficient if
+            actual/ideal < threshold. 0.8 = "below 80% of target".
+
+    Returns:
+        list of dicts ready to persist as RecommendationDose rows:
+        [{product_id, product_name, dose_per_ha, dose_unit, cost_per_ha,
+          application_mode, application_type, deficiencies_covered}, ...]
+
+    Products with application_type='unknown' or NULL typical_dose are
+    skipped (logged as warning).
+    """
+    # 1) Identificar nutrientes deficientes (umbral: actual/ideal < threshold)
+    deficient_nutrients = []
+    for nutrient, ideal in demandas_ideales.items():
+        if ideal <= 0:
+            continue
+        actual = nutrientes_actuales.get(nutrient, Decimal("0"))
+        if actual < ideal * Decimal(str(deficiency_threshold)):
+            deficient_nutrients.append(nutrient)
+    if not deficient_nutrients:
+        return []
+
+    # 2) Para cada nutriente deficiente, elegir el producto más eficiente.
+    #    Eficiencia = contribution (fracción, mayor = más eficiente).
+    #    Desempate: menor costo típico (precio × typical_dose).
+    #    Solo consideramos productos con application_type conocido y
+    #    typical_dose_per_ha > 0 (ficha técnica disponible).
+    product_to_nutrients: Dict[str, list[str]] = {}
+    product_dose: Dict[str, Decimal] = {}  # en la unidad del price
+    nutrients_uncovered: list[str] = []
+
+    for nutrient in deficient_nutrients:
+        candidatos = []
+        for product_name, contribs in productos_contribuciones.items():
+            contrib = contribs.get(nutrient, Decimal("0"))
+            if contrib <= 0:
+                continue
+            app_type = application_type_lookup.get(product_name, "unknown")
+            if app_type not in ("powder", "liquid"):
+                continue
+            typical = typical_dose_per_ha_lookup.get(product_name)
+            if typical is None or typical <= 0:
+                continue
+            price = productos_precios.get(product_name, Decimal("0"))
+            if price <= 0:
+                continue
+            # Costo típico total = price (COP/price_unit) × typical_dose
+            # (en unidades del producto, == price_unit en este caller).
+            # Es comparable entre powder y liquid porque ambos precios
+            # están en su unidad de venta.
+            cost_typical = float(price) * float(typical)
+            candidatos.append((product_name, float(contrib), cost_typical))
+
+        if not candidatos:
+            nutrients_uncovered.append(nutrient)
+            continue
+
+        # Mayor contribution; desempate por menor costo típico
+        candidatos.sort(key=lambda x: (-x[1], x[2]))
+        product_name, _contrib, _cost = candidatos[0]
+        # El producto se queda con su typical_dose (sin modificar)
+        product_to_nutrients.setdefault(product_name, []).append(nutrient)
+        product_dose[product_name] = typical_dose_per_ha_lookup[product_name]
+
+    if nutrients_uncovered:
+        import logging
+
+        logging.getLogger(__name__).warning(
+            f"[dose:contributions] sin producto con contribution+dose para "
+            f"nutrientes: {nutrients_uncovered}"
+        )
+
+    # 3) Materializar cada producto via compute_dose() puro.
+    out = []
+    for product_name, _nutrients in product_to_nutrients.items():
+        if product_dose[product_name] <= 0:
+            continue
+        price = productos_precios.get(product_name, Decimal("0"))
+        try:
+            dose = compute_dose(
+                product_name=product_name,
+                cantidad=product_dose[product_name],
+                price=price,
+                application_type=application_type_lookup.get(product_name, "unknown"),
+                density_kg_per_l=density_lookup.get(product_name),
+                price_unit=price_unit_lookup.get(product_name, "kg"),
+                application_mode=application_mode,
+            )
+        except RecommendationError as e:
+            current_app.logger.info(f"[dose:contributions] {product_name} omitido: {e}")
+            continue
+        out.append(
+            {
+                "product_name": product_name,
+                "dose_per_ha": dose["dose_per_ha"],
+                "dose_unit": dose["dose_unit"],
+                "cost_per_ha": dose["cost_per_ha"],
+                "application_mode": dose["application_mode"],
+                "application_type": dose["application_type"],
+            }
+        )
+    return out
+
+
+def compute_nano_dose_rows(
+    mineral_balance: Dict[str, object],
+    symbol_to_name: Dict[str, str],
+    productos_contribuciones: Dict[str, Dict[str, Decimal]],
+    productos_precios: Dict[str, Decimal],
+    price_unit_lookup: Dict[str, str],
+    *,
+    digits: int = 2,
+) -> Dict[str, object]:
+    """Cost the mineral-balance deficits with the nano product line.
+
+    For every deficit in ``mineral_balance`` (output of
+    ``compute_mineral_balance``), compare the catalogue products that
+    contribute the deficient nutrient (only the nano line has
+    ``ProductContribution`` rows) and keep the one that covers the
+    requirement at the lowest cost. The dose follows the FRM_Balance
+    nano convention — deficit kg/ha divided by the product grade
+    expressed as a percent number (contribution × 100), the same math
+    behind the table's ``nano_kg`` row but using the real grade of the
+    selected product instead of the fixed N16/P11/K19 constants.
+
+    Greedy per nutrient; when one product wins several nutrients the
+    rows consolidate into one with the max dose (the larger dose covers
+    the smaller requirements of the same product).
+
+    Args:
+        mineral_balance: ``{"entries": [...], "total_kg_ha": ...}`` where
+            each entry has ``name`` (nutrient symbol) and
+            ``difference_kg`` (deficit ≤ 0 in kg/ha, or None).
+        symbol_to_name: Nutrient symbol → catalogue name (the keys used
+            by ``productos_contribuciones``).
+        productos_contribuciones: {product_name: {nutrient_name: Decimal}}
+            fractions p/p (0.17 = 17%).
+        productos_precios: {product_name: Decimal} COP per price unit.
+        price_unit_lookup: {product_name: 'kg' | 'L'}.
+        digits: rounding for doses and costs.
+
+    Returns:
+        ``{"rows": [...], "total_cost_per_ha": float|None,
+        "uncovered": [symbols]}``. Each row:
+        ``{product_name, nutrients (symbols), contribution_pct,
+        dose_kg_ha, cost_per_ha, price_unit, approx}`` — ``approx`` is
+        True when the price is per litre (cost assumes 1 kg ≈ 1 L).
+        ``nutrient_grades`` maps each nutrient symbol to the contribution
+        percentage (grade) of the cheapest product that covers it, for
+        use in the per‑nutrient mineral-balance table.
+    """
+    entries = mineral_balance.get("entries") or []
+    by_product: Dict[str, Dict[str, object]] = {}
+    uncovered: list[str] = []
+    nutrient_grades: Dict[str, float] = {}
+
+    for entry in entries:
+        diff = entry.get("difference_kg")
+        if diff is None or diff >= 0:
+            continue
+        deficit = abs(float(diff))
+        symbol = str(entry.get("name") or "")
+        nutrient_name = symbol_to_name.get(symbol)
+        if not nutrient_name:
+            uncovered.append(symbol)
+            continue
+
+        best = None  # (cost, dose, product_name, contribution)
+        for product_name, contribs in productos_contribuciones.items():
+            contrib = float(contribs.get(nutrient_name, 0))
+            if contrib <= 0:
+                continue
+            price = float(productos_precios.get(product_name, 0))
+            if price <= 0:
+                continue
+            dose = deficit / (contrib * 100)
+            cost = dose * price
+            if best is None or cost < best[0]:
+                best = (cost, dose, product_name, contrib)
+
+        if best is None:
+            uncovered.append(symbol)
+            continue
+
+        cost, dose, product_name, contrib = best
+        nutrient_grades[symbol] = round(contrib * 100, 1)
+        row = by_product.get(product_name)
+        if row is None or dose > row["dose_kg_ha"]:
+            price_unit = price_unit_lookup.get(product_name, "kg")
+            by_product[product_name] = {
+                "product_name": product_name,
+                "nutrients": (row["nutrients"] if row else []) + [symbol],
+                "contribution_pct": contrib * 100,
+                "dose_kg_ha": dose,
+                "cost_per_ha": cost,
+                "price_unit": price_unit,
+                "approx": price_unit == "L",
+            }
+        else:
+            row["nutrients"].append(symbol)
+
+    rows = []
+    total_cost = 0.0
+    for row in by_product.values():
+        row["contribution_pct"] = round(row["contribution_pct"], 1)
+        row["dose_kg_ha"] = round(row["dose_kg_ha"], digits)
+        row["cost_per_ha"] = round(row["cost_per_ha"], digits)
+        total_cost += row["cost_per_ha"]
+        rows.append(row)
+
+    return {
+        "rows": rows,
+        "total_cost_per_ha": round(total_cost, digits) if rows else None,
+        "uncovered": uncovered,
+        "nutrient_grades": nutrient_grades,
+    }
 
 
 # # # Datos de ejemplo basados en los nutrientes proporcionados
@@ -899,10 +1248,10 @@ class LeafAnalysisData:
 
 #  Título	Finca / Lote	Cultivo	Fecha	Tipo	Autor
 """
-Reportes, incluirán los datos completos de un análisis completo común (CommonAnalysis) 
-ahí se identificará el análisis de suelo (SoilAnalysis) y foliar (LeafAnalysis, debe incluir los nutrientes relacionados de la tabla leaf_analysis_nutrients ) relacionados con el ID del CommonAnalysis, esto deben presentarse así (Nota, los datos y listado de nutriente deben obtenerse de los registrados en el modelo Nutrient): 
-        
-        
+Reportes, incluirán los datos completos de un análisis completo común (CommonAnalysis)
+ahí se identificará el análisis de suelo (SoilAnalysis) y foliar (LeafAnalysis, debe incluir los nutrientes relacionados de la tabla leaf_analysis_nutrients ) relacionados con el ID del CommonAnalysis, esto deben presentarse así (Nota, los datos y listado de nutriente deben obtenerse de los registrados en el modelo Nutrient):
+
+
     analysisData = {
         "common": {
             "id": 3,
@@ -942,16 +1291,16 @@ ahí se identificará el análisis de suelo (SoilAnalysis) y foliar (LeafAnalysi
             "cic": 15.2,
         },
     }
-    
+
 optimalLevels se obtendrá a partir del tipo de cultivo, este se comparará con los tipos de cultivo registrados en Crops y sus valores de nutrientes registrados en objective_nutrients (Nota, los datos y listado de nutriente deben obtenerse de los registrados en el modelo Nutrient)
     optimalLevels = {
         VALOR OBJETIVO	PROTEÍNA	DESCANSO
         "info": {
-            "cultivo": "papa", 
+            "cultivo": "papa",
             "valor_obj": "10",
             "proteina": "8",
             "descanso": "5",
-        
+
         }
         "nutrientes": {
             "nitrogeno": {"min": 2.8, "max": 3.5},
@@ -1113,3 +1462,141 @@ optimalLevels se obtendrá a partir del tipo de cultivo, este se comparará con 
     limitingNutrient = findLimitingNutrient()
     recommendations = generateRecommendations()
 """
+
+
+def compare_analyses(pre_analysis_id: int, post_analysis_id: int) -> dict:
+    """
+    Compara dos CommonAnalysis del mismo lote nutriente a nutriente.
+
+    Retorna delta absoluto, delta pct y veredicto usando Nutrient.cv como
+    umbral de significancia. El veredicto es uno de:
+        "improved"   | delta_pct > cv_threshold
+        "worsened"   | delta_pct < -cv_threshold
+        "unchanged"  | |delta_pct| <= cv_threshold
+        "incomplete" | falta valor pre o post
+
+    Args:
+        pre_analysis_id (int): ID del CommonAnalysis base (pre-aplicación).
+        post_analysis_id (int): ID del CommonAnalysis posterior.
+
+    Returns:
+        dict: Estructura con lot_id, fechas, days_elapsed, nutrients map
+              (por nombre) y summary con conteo de veredictos.
+
+    Raises:
+        ValueError: Si alguno de los análisis no existe o son de lotes
+                    distintos.
+    """
+    from sqlalchemy.orm import joinedload
+
+    pre = CommonAnalysis.query.options(
+        joinedload(CommonAnalysis.leaf_analysis).joinedload(LeafAnalysis.nutrients)
+    ).get(pre_analysis_id)
+    post = CommonAnalysis.query.options(
+        joinedload(CommonAnalysis.leaf_analysis).joinedload(LeafAnalysis.nutrients)
+    ).get(post_analysis_id)
+
+    if not pre or not post:
+        raise ValueError("CommonAnalysis no encontrado.")
+    if pre.lot_id != post.lot_id:
+        raise ValueError("Los análisis no pertenecen al mismo lote.")
+
+    def _get_nutrient_map(analysis):
+        if not analysis.leaf_analysis:
+            return {}
+        # Los valores se consultan en leaf_analysis_nutrients (value Float).
+        # Recorremos el join Nutrient<->leaf_analysis_nutrients para tener
+        # tanto el Nutrient (para cv) como el value.
+        return {n.name: n for n in analysis.leaf_analysis.nutrients}
+
+    # Para mapear valor, hacemos una segunda pasada explícita via la tabla
+    # de asociación. Esto evita un N+1 al acceder a .value.
+    def _get_value_map(analysis):
+        if not analysis.leaf_analysis:
+            return {}
+        from app.modules.foliage.models import leaf_analysis_nutrients
+
+        rows = (
+            db.session.query(
+                leaf_analysis_nutrients.c.nutrient_id, leaf_analysis_nutrients.c.value
+            )
+            .filter(
+                leaf_analysis_nutrients.c.leaf_analysis_id == analysis.leaf_analysis.id
+            )
+            .all()
+        )
+        nutrient_ids = [r[0] for r in rows]
+        nutrients_by_id = (
+            {
+                n.id: n
+                for n in Nutrient.query.filter(Nutrient.id.in_(nutrient_ids)).all()
+            }
+            if nutrient_ids
+            else {}
+        )
+        return {
+            nutrients_by_id[nid].name: (nutrients_by_id[nid], value)
+            for nid, value in rows
+            if nid in nutrients_by_id
+        }
+
+    pre_map = _get_value_map(pre)
+    post_map = _get_value_map(post)
+
+    all_names = set(pre_map) | set(post_map)
+    nutrients_result = {}
+
+    for name in sorted(all_names):
+        pre_entry = pre_map.get(name)
+        post_entry = post_map.get(name)
+        pre_val = pre_entry[1] if pre_entry else None
+        post_val = post_entry[1] if post_entry else None
+
+        if pre_val is None or post_val is None:
+            nutrients_result[name] = {
+                "pre": pre_val,
+                "post": post_val,
+                "delta": None,
+                "delta_pct": None,
+                "cv_threshold": None,
+                "status": "incomplete",
+            }
+            continue
+
+        # Tomamos Nutrient desde cualquiera de los dos mapas
+        nutrient_obj = (pre_entry or post_entry)[0]
+        cv_threshold = nutrient_obj.cv if nutrient_obj.cv else 5.0
+
+        delta = post_val - pre_val
+        delta_pct = (delta / pre_val * 100) if pre_val != 0 else None
+
+        if delta_pct is None:
+            status = "incomplete"
+        elif delta_pct > cv_threshold:
+            status = "improved"
+        elif delta_pct < -cv_threshold:
+            status = "worsened"
+        else:
+            status = "unchanged"
+
+        nutrients_result[name] = {
+            "pre": round(pre_val, 4),
+            "post": round(post_val, 4),
+            "delta": round(delta, 4),
+            "delta_pct": round(delta_pct, 2) if delta_pct is not None else None,
+            "cv_threshold": cv_threshold,
+            "status": status,
+        }
+
+    counts = {"improved": 0, "worsened": 0, "unchanged": 0, "incomplete": 0}
+    for v in nutrients_result.values():
+        counts[v["status"]] = counts.get(v["status"], 0) + 1
+
+    return {
+        "lot_id": pre.lot_id,
+        "pre": {"analysis_id": pre.id, "date": str(pre.date)},
+        "post": {"analysis_id": post.id, "date": str(post.date)},
+        "days_elapsed": (post.date - pre.date).days if pre.date and post.date else None,
+        "nutrients": nutrients_result,
+        "summary": counts,
+    }

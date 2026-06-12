@@ -68,7 +68,7 @@
         </div>
         <div class="grid gap-3 sm:grid-cols-2">
           <div class="rounded-xl bg-slate-100 p-2">
-            <div class="mb-2 flex h-24 items-center justify-center rounded-lg bg-slate-300 text-[11px] font-medium text-slate-700">
+            <div id="analysisLotImageSlot" class="mb-2 flex h-24 items-center justify-center rounded-lg bg-slate-300 text-[11px] font-medium text-slate-700">
               Vista ortofoto lote
             </div>
             <dl class="space-y-1 text-xs text-gray-600">
@@ -135,7 +135,7 @@
         </div>
         <div class="grid gap-3 sm:grid-cols-2">
           <div class="rounded-xl bg-slate-100 p-2">
-            <div class="mb-2 flex h-24 items-center justify-center rounded-lg bg-slate-300 text-[11px] font-medium text-slate-700">
+            <div id="referenceImageSlot" class="mb-2 flex h-24 items-center justify-center rounded-lg bg-slate-300 text-[11px] font-medium text-slate-700">
               Vista de referencia
             </div>
             <dl class="space-y-1 text-xs text-gray-600">
@@ -269,6 +269,65 @@
       </p>
     </section>
 
+    <section class="mb-8 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+      <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h2 class="text-sm font-semibold text-gray-800">Balance de Minerales</h2>
+        <span class="rounded-full bg-gray-100 px-2.5 py-0.5 text-[11px] text-gray-600">
+          Déficits convertidos a kg/ha según el aforo
+        </span>
+      </div>
+      <div class="mb-3 grid grid-cols-4 divide-x divide-gray-200 overflow-hidden rounded-lg border border-gray-200">
+        <div class="bg-gray-100 px-3 py-2 text-center">
+          <div class="flex items-center justify-center gap-1.5">
+            <dt class="text-[11px] uppercase tracking-wide text-gray-500">Proteína objetivo</dt>
+            <label class="relative inline-flex cursor-pointer items-center" title="Editar proteína objetivo">
+              <input type="checkbox" id="balanceProteinEditToggle" class="peer sr-only" />
+              <div class="h-4 w-7 rounded-full bg-gray-300 transition-colors after:absolute after:start-0.5 after:top-0.5 after:h-3 after:w-3 after:rounded-full after:bg-white after:shadow after:transition-all after:content-[''] peer-checked:bg-emerald-500 peer-checked:after:translate-x-3"></div>
+            </label>
+          </div>
+          <dd id="balanceProteinObj" class="mt-1 text-sm font-semibold text-gray-900">--</dd>
+          <input id="balanceProteinObjInput"
+                 type="number"
+                 min="0"
+                 step="0.01"
+                 class="mx-auto mt-1 hidden w-24 rounded-lg border border-gray-300 px-2 py-1 text-center text-sm font-semibold text-gray-900 focus:border-emerald-500 focus:ring-emerald-500" />
+        </div>
+        <div class="bg-gray-100 px-3 py-2 text-center">
+          <dt class="text-[11px] uppercase tracking-wide text-gray-500">Aforo objetivo</dt>
+          <dd id="balanceAforoObj" class="mt-1 text-sm font-semibold text-gray-900">--</dd>
+        </div>
+        <div class="bg-gray-200 px-3 py-2 text-center">
+          <dt class="text-[11px] uppercase tracking-wide text-gray-500">Proteína actual</dt>
+          <dd id="balanceProteinAct" class="mt-1 text-sm font-semibold text-gray-900">--</dd>
+        </div>
+        <div class="bg-gray-200 px-3 py-2 text-center">
+          <dt class="text-[11px] uppercase tracking-wide text-gray-500">Aforo actual</dt>
+          <dd id="balanceAforoAct" class="mt-1 text-sm font-semibold text-gray-900">--</dd>
+        </div>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200 text-xs">
+          <thead class="bg-gray-50">
+            <tr id="balanceTableHeader"></tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100 bg-white" id="balanceTableBody"></tbody>
+        </table>
+      </div>
+      <p class="mt-3 text-[11px] text-gray-600">
+        Objetivo se expresa en kg/ha con el aforo objetivo y Actual con el
+        aforo actual (macros: % × aforo × 100; micros: ppm × aforo ÷ 100).
+        La Diferencia solo refleja déficits (excedentes se truncan a 0).
+        El Grado de fórmula es la participación porcentual de cada déficit
+        en el total requerido (columna Total), y Nano es la cantidad de
+        producto de la línea nanotecnológica a aplicar según su
+        concentración (N 16, P 11, K 19, resto 40).
+      </p>
+      <p id="balanceAforoFallbackNote" class="mt-1 hidden text-[11px] font-medium text-amber-700">
+        Nota: no existe aforo actual; la fila Actual (kg/ha) se convirtió
+        con el aforo objetivo.
+      </p>
+    </section>
+
     <section class="flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 pt-4">
       <div class="text-[11px] text-gray-500">
         Revisa los resultados antes de generar el informe definitivo o guardar la formulación propuesta.
@@ -300,18 +359,40 @@
     <div class="flex items-start justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-700">
       <div>
         <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Vista previa de recomendación</h2>
-        <p class="text-sm text-gray-500 dark:text-gray-400">Diagnóstico nutricional y productos recomendados antes de guardar.</p>
+        <p class="text-sm text-gray-500 dark:text-gray-400">Diagnóstico nutricional y balance de minerales antes de guardar.</p>
       </div>
       <button type="button" id="previewModalClose" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
       </button>
     </div>
     <div class="px-5 py-4 space-y-4">
-      <div id="previewDiagnosis" class="text-sm text-gray-700 dark:text-gray-300"></div>
-      <div id="previewTable" class="overflow-x-auto"></div>
-      <div id="previewProducts" class="text-sm text-gray-700 dark:text-gray-300"></div>
-      <div id="previewCost" class="text-sm font-semibold text-emerald-700 dark:text-emerald-400"></div>
-      <div id="previewWarnings" class="text-sm text-orange-600 dark:text-orange-400"></div>
+      <div class="border-b border-gray-200 pb-3 dark:border-gray-700">
+        <nav class="flex gap-2" role="tablist" aria-label="Pestañas de vista previa">
+          <button type="button"
+                  id="previewTabDiagnosis"
+                  role="tab"
+                  class="inline-flex items-center rounded-lg border border-emerald-600 bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm">
+            Diagnóstico
+          </button>
+          <button type="button"
+                  id="previewTabBalance"
+                  role="tab"
+                  class="inline-flex items-center rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50">
+            Balance
+          </button>
+        </nav>
+      </div>
+      <div id="previewPanelDiagnosis" class="space-y-4">
+        <div id="previewDiagnosis" class="text-sm text-gray-700 dark:text-gray-300"></div>
+        <div id="previewTable" class="overflow-x-auto"></div>
+        <div id="previewProducts" class="text-sm text-gray-700 dark:text-gray-300"></div>
+        <div id="previewCost" class="text-sm font-semibold text-emerald-700 dark:text-emerald-400"></div>
+        <div id="previewWarnings" class="text-sm text-orange-600 dark:text-orange-400"></div>
+      </div>
+      <div id="previewPanelBalance" class="hidden space-y-4">
+        <div id="previewBalanceMeta" class="grid grid-cols-4 divide-x divide-gray-200 overflow-hidden rounded-lg border border-gray-200 text-center"></div>
+        <div id="previewBalanceTable" class="overflow-x-auto"></div>
+      </div>
       <div class="flex justify-end gap-2 pt-2 border-t border-gray-200 dark:border-gray-700">
         <button type="button" id="previewModalCloseBtn"
                 class="inline-flex items-center rounded-lg border border-gray-200 bg-white px-4 py-2 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50">
@@ -370,6 +451,7 @@
 </div>
 
 <script src="/js/jspdf.umd.min.js"></script>
+<script src="/js/lightbox.js" defer></script>
 <script>
   (() => {
     "use strict";
@@ -405,6 +487,15 @@
       cvInfoRow: document.getElementById("cvInfoRow"),
       lawTableHeader: document.getElementById("lawTableHeader"),
       lawTableBody: document.getElementById("lawTableBody"),
+      balanceTableHeader: document.getElementById("balanceTableHeader"),
+      balanceTableBody: document.getElementById("balanceTableBody"),
+      balanceProteinObj: document.getElementById("balanceProteinObj"),
+      balanceProteinObjInput: document.getElementById("balanceProteinObjInput"),
+      balanceProteinEditToggle: document.getElementById("balanceProteinEditToggle"),
+      balanceAforoObj: document.getElementById("balanceAforoObj"),
+      balanceProteinAct: document.getElementById("balanceProteinAct"),
+      balanceAforoAct: document.getElementById("balanceAforoAct"),
+      balanceAforoFallbackNote: document.getElementById("balanceAforoFallbackNote"),
       exportPdfBtn: document.getElementById("exportPdfBtn"),
       previewReportBtn: document.getElementById("previewReportBtn"),
       saveReportBtn: document.getElementById("saveReportBtn"),
@@ -417,6 +508,12 @@
       previewProducts: document.getElementById("previewProducts"),
       previewCost: document.getElementById("previewCost"),
       previewWarnings: document.getElementById("previewWarnings"),
+      previewTabDiagnosis: document.getElementById("previewTabDiagnosis"),
+      previewTabBalance: document.getElementById("previewTabBalance"),
+      previewPanelDiagnosis: document.getElementById("previewPanelDiagnosis"),
+      previewPanelBalance: document.getElementById("previewPanelBalance"),
+      previewBalanceMeta: document.getElementById("previewBalanceMeta"),
+      previewBalanceTable: document.getElementById("previewBalanceTable"),
       changeReferenceBtn: document.getElementById("changeReferenceBtn"),
       referenceModal: document.getElementById("referenceModal"),
       referenceModalClose: document.getElementById("referenceModalClose"),
@@ -437,12 +534,16 @@
       lotCrops: "{{ url_for('foliage_api.lot_crops') }}",
       generateReport: "{{ url_for('foliage_report_api.generate_report') }}",
       reportView: "{{ url_for('foliage_report.vista_reporte', report_id=0) }}",
+      mineralBalance: "{{ url_for('agrovista_api.mineral_balance') }}",
+      lotSnapshot: "{{ url_for('agrovista_api.get_lot_snapshot', common_analysis_id=0) }}",
     };
 
     let payload = null;
     let analysisData = null;
     let objectiveData = null;
     let objectiveType = null;
+    let referenceProtein = null;
+    let referenceAforo = null;
     let cvData = {};
     let nutrientOrder = [];
     let targetValues = {};
@@ -550,6 +651,12 @@
             area_ha: params.get("lot_a_area_ha") ? Number(params.get("lot_a_area_ha")) : null,
             stats: {},
             area_stats: { nutrients: [] },
+            linked_lot_id: params.get("lot_a_linked_lot_id")
+              ? Number(params.get("lot_a_linked_lot_id"))
+              : null,
+            linked_common_analysis_id: params.get("lot_a_linked_common_analysis_id")
+              ? Number(params.get("lot_a_linked_common_analysis_id"))
+              : null,
           },
           lot_b: {
             id: Number(lotBId),
@@ -645,6 +752,19 @@
         return dateB - dateA;
       });
       return items[0]?.crop_id || null;
+    }
+
+    function resolveAnyCropId(){
+      if(!Array.isArray(lotCrops) || !lotCrops.length){
+        return null;
+      }
+      const sorted = [...lotCrops].sort((a, b) => {
+        const dateA = Date.parse(a?.start_date || "") || 0;
+        const dateB = Date.parse(b?.start_date || "") || 0;
+        return dateB - dateA;
+      });
+      const active = sorted.find(item => !item?.end_date && item?.crop_id);
+      return active?.crop_id || sorted.find(item => item?.crop_id)?.crop_id || null;
     }
 
     function pickAnalysis(list, preferredId){
@@ -845,7 +965,8 @@
       });
       buildRow("Diferencia", diffRow, "bg-red-50");
 
-      // Build minimumLawPayload for backend
+      // Build minimumLawPayload for backend — must mirror the rendered
+      // rows (I and R for every nutrient, same formula as iRow/rRow)
       order.forEach(nutrient => {
         const act = actualValues[nutrient];
         const targ = targetValues[nutrient];
@@ -854,8 +975,7 @@
           return;
         }
         const p = (act / targ) * 100;
-        const isLimiting = nutrient === limitingNutrient;
-        const i = (cv != null && isLimiting) ? Math.abs(p - 100) * cv / 100 : null;
+        const i = cv != null ? Math.abs(p - 100) * cv / 100 : null;
         let r = null;
         if(i != null){
           r = p > 100 ? p - i : p + i;
@@ -863,7 +983,7 @@
           if(r > 108) r = 108;
         }
         minimumLawPayload[nutrient] = {
-          "%P": p != null ? p.toFixed(2) : "-",
+          "%P": p.toFixed(2),
           "I": i != null ? i.toFixed(2) : "-",
           "R": r != null ? r.toFixed(2) : "-",
           "Diferencia": (p - 100).toFixed(2),
@@ -884,8 +1004,6 @@
       headLabel.textContent = "Fila";
       el.lawTableHeader.appendChild(headLabel);
 
-      // Row descriptions for header
-      const rowDescriptions = ["% Suficiencia", "Índice de ajuste", "Nivel corregido", "Déficit/Exceso (%)"];
       order.forEach(n => {
         const th = document.createElement("th");
         th.className = "px-3 py-2 text-left font-semibold text-gray-600";
@@ -952,6 +1070,143 @@
       setText(el.excessNutrients, excess.length ? excess.join(", ") : "—");
     }
 
+    // ---- Balance de Minerales (port del FRM_Balance de Foliar Digital.xlsm) ----
+    // Los cálculos viven en el backend (POST /api/agrovista/mineral-balance,
+    // requiere sesión); aquí solo se arma la petición y se pinta la respuesta.
+    let editedProtein = null;
+    let balanceFetchSeq = 0;
+
+    async function computeMineralBalance(){
+      if(!el.balanceTableHeader || !el.balanceTableBody){
+        return;
+      }
+      // Cabecera: proteína/aforo de la referencia (objetivo o lote A) y
+      // del análisis del lote, como en el FRM_Balance del Excel
+      // (P_Objetivo, A_Objetivo, P_Actual, A_Actual)
+      const aforoObj = Number(referenceAforo ?? objectiveData?.target_value);
+      const proteinObj = editedProtein != null
+        ? editedProtein
+        : Number(referenceProtein ?? objectiveData?.protein);
+      const aforoAct = Number(analysisData?.yield_estimate);
+      const proteinAct = Number(analysisData?.protein);
+      setText(el.balanceProteinObj, proteinObj > 0 ? formatNumber(proteinObj, 2) : "--");
+      setText(el.balanceAforoObj, aforoObj > 0 ? formatNumber(aforoObj, 2) : "--");
+      setText(el.balanceProteinAct, proteinAct > 0 ? formatNumber(proteinAct, 2) : "--");
+      setText(el.balanceAforoAct, aforoAct > 0 ? formatNumber(aforoAct, 2) : "--");
+
+      // El backend convierte con el aforo objetivo y cae al actual; si
+      // viaja protein (editada por el usuario), deriva los objetivos
+      // desde esa proteína con las regresiones calibradas
+      const body = {
+        order: nutrientOrder,
+        targets: targetValues,
+        actuals: actualValues,
+        aforo_objective: aforoObj > 0 ? aforoObj : null,
+        aforo_actual: aforoAct > 0 ? aforoAct : null,
+        protein: editedProtein,
+      };
+      const seq = ++balanceFetchSeq;
+      let data;
+      try{
+        data = await fetchJson(ENDPOINTS.mineralBalance, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRF-TOKEN": getCsrfToken() || "",
+          },
+          body: JSON.stringify(body),
+        });
+      }catch(err){
+        console.error("mineral-balance", err);
+        return;
+      }
+      if(seq !== balanceFetchSeq){
+        return; // hay una petición más reciente en vuelo
+      }
+      // Con proteína editada el backend deriva también el aforo objetivo
+      if(data.aforo_objective != null){
+        setText(el.balanceAforoObj, formatNumber(data.aforo_objective, 2));
+      }
+      renderMineralBalance(data);
+    }
+
+    function renderMineralBalance(data){
+      const entries = Array.isArray(data?.entries) ? data.entries : [];
+      const total = typeof data?.total_kg_ha === "number" ? data.total_kg_ha : null;
+
+      if(el.balanceAforoFallbackNote){
+        const usedFallback = entries.length > 0 && data?.aforo_actual_fallback === true;
+        el.balanceAforoFallbackNote.classList.toggle("hidden", !usedFallback);
+      }
+
+      // Mismo orden visual que el FRM_Balance del Excel: % del objetivo,
+      // su conversión a kilos, % del foliar actual, su conversión, y
+      // luego diferencia / grado / nano. Cada bloque con fondo propio.
+      const rows = [
+        { label: "Objetivo (% · ppm)", values: entries.map(e => e.objective_raw), kind: "plain", className: "bg-indigo-50", total: null },
+        { label: "Objetivo (kg/ha)", values: entries.map(e => e.objective_kg), kind: "plain", className: "bg-indigo-50", total: null },
+        { label: "Actual (% · ppm)", values: entries.map(e => e.actual_raw), kind: "plain", className: "bg-sky-50", total: null },
+        { label: "Actual (kg/ha)", values: entries.map(e => e.actual_kg), kind: "plain", className: "bg-sky-50", total: null },
+        { label: "Diferencia (kg/ha)", values: entries.map(e => e.difference_kg), kind: "diff", className: "bg-red-50", total: null },
+        { label: "Grado fórmula (%)", values: entries.map(e => e.grade_pct), kind: "plain", className: "bg-yellow-50", total: total },
+        { label: "Nano (kg/ha)", values: entries.map(e => e.nano_kg), kind: "nano", className: "bg-emerald-50", total: null },
+      ];
+
+      el.balanceTableHeader.innerHTML = "";
+      const headLabel = document.createElement("th");
+      headLabel.className = "px-3 py-2 text-left font-semibold text-gray-600";
+      headLabel.textContent = "Concepto";
+      el.balanceTableHeader.appendChild(headLabel);
+      entries.forEach(entry => {
+        const th = document.createElement("th");
+        th.className = "px-3 py-2 text-left font-semibold text-gray-600";
+        th.textContent = entry.name;
+        el.balanceTableHeader.appendChild(th);
+      });
+      const thTotal = document.createElement("th");
+      thTotal.className = "px-3 py-2 text-left font-semibold text-gray-600";
+      thTotal.textContent = "Total";
+      el.balanceTableHeader.appendChild(thTotal);
+
+      el.balanceTableBody.innerHTML = "";
+      rows.forEach(row => {
+        const tr = document.createElement("tr");
+        if(row.className) tr.className = row.className;
+        const tdLabel = document.createElement("td");
+        tdLabel.className = "whitespace-nowrap px-3 py-2 font-medium text-gray-800";
+        tdLabel.textContent = row.label;
+        tr.appendChild(tdLabel);
+        row.values.forEach(value => {
+          const td = document.createElement("td");
+          td.className = "px-3 py-2 text-gray-700";
+          if(value == null || Number.isNaN(value)){
+            td.textContent = "—";
+            td.classList.add("text-gray-400");
+          }else{
+            td.textContent = value.toFixed(2);
+            if(row.kind === "diff" && value < 0){
+              td.classList.add("text-red-600", "font-semibold");
+            }
+            if(row.kind === "nano" && value > 0){
+              td.classList.add("text-emerald-700", "font-semibold");
+            }
+          }
+          tr.appendChild(td);
+        });
+        const tdTotal = document.createElement("td");
+        tdTotal.className = "px-3 py-2 whitespace-nowrap";
+        if(row.total != null){
+          tdTotal.textContent = `${row.total.toFixed(2)} kg/ha`;
+          tdTotal.classList.add("font-semibold", "text-gray-900");
+        }else{
+          tdTotal.textContent = "—";
+          tdTotal.classList.add("text-gray-400");
+        }
+        tr.appendChild(tdTotal);
+        el.balanceTableBody.appendChild(tr);
+      });
+    }
+
     async function setupLotVsObjective(data){
       const lotId = data.lot_id;
       const objectiveId = data.objective?.id || data.objective_id;
@@ -1015,6 +1270,10 @@
       targetValues = objectiveKind === "secondary"
         ? collectTargetValuesFromSecondaryObjective(objectiveData)
         : collectTargetValuesFromObjective(objectiveData);
+      // Proteína/aforo de la referencia (Objective.protein / target_value;
+      // los secundarios exponen protein_average)
+      referenceProtein = Number(objectiveData?.protein ?? objectiveData?.protein_average) || null;
+      referenceAforo = Number(objectiveData?.target_value) || null;
       nutrientOrder = buildNutrientOrder();
       const cropIdValue = objectiveKind === "secondary" ? objectiveData?.analysis_crop_id : objectiveData?.crop_id;
       renderCropInfo(cropIdValue, cropName);
@@ -1081,6 +1340,31 @@
       }
 
       actualValues = collectActualValues(analysisData);
+
+      // Proteína/aforo de la referencia = los del lote A. Prioridad: su
+      // análisis foliar guardado; fallback al estimado por imagen
+      // (area_stats.protein / bromatologia.aforo_ua_ha)
+      referenceProtein = null;
+      referenceAforo = null;
+      if(lotA.linked_lot_id){
+        try{
+          const refAnalyses = await fetchJson(`${ENDPOINTS.analyses}?lot_id=${lotA.linked_lot_id}`);
+          const refAnalysis = pickAnalysis(refAnalyses, lotA.linked_common_analysis_id);
+          if(refAnalysis){
+            referenceProtein = Number(refAnalysis.protein) || null;
+            referenceAforo = Number(refAnalysis.yield_estimate) || null;
+          }
+        }catch(err){
+          console.warn("No se pudo cargar el análisis del lote A:", err);
+        }
+      }
+      if(referenceProtein == null){
+        referenceProtein = Number(lotA.area_stats?.protein) || null;
+      }
+      if(referenceAforo == null){
+        referenceAforo = Number(lotA.area_stats?.bromatologia?.aforo_ua_ha) || null;
+      }
+
       // If area_stats is missing or empty, use objective targets as fallback
       if(lotA.area_stats && Array.isArray(lotA.area_stats.nutrients) && lotA.area_stats.nutrients.length > 0){
         targetValues = collectTargetValuesFromStats(lotA.area_stats);
@@ -1124,19 +1408,34 @@
       let objectiveId = payload.objective?.id || payload.objective_id;
       let lotId = payload.lot_id;
       let title = "Comparación nutricional";
+      // Etiqueta de la referencia para el encabezado del informe:
+      // lote A en modo lot_vs_lot, "Datos cultivo ideal <crop>" en modo objetivo.
+      let comparisonLabel = currentAnalysisMeta.cropName && currentAnalysisMeta.cropName !== "--"
+        ? `Datos cultivo ideal ${currentAnalysisMeta.cropName}`
+        : (el.referenceName?.textContent?.trim() || "Referencia personalizada");
       if(payload.mode === "lot_vs_lot"){
         const lotB = payload.lot_b;
         lotId = lotB?.linked_lot_id;
         title = `Comparación nutricional · ${lotB?.linked_lot_name || lotB?.name || "Lote"}`;
-        const cropId = resolveCropIdForLot(lotId);
+        comparisonLabel = payload.lot_a?.name || el.referenceName?.textContent?.trim() || "Lote de referencia";
+        await fetchLotCrops();
+        let cropId = resolveCropIdForLot(lotId);
+        if(!cropId && payload.lot_id){
+          cropId = resolveCropIdForLot(payload.lot_id);
+        }
+        if(!cropId && payload.objective?.crop_id){
+          cropId = Number(payload.objective.crop_id) || null;
+        }
         if(!cropId){
-          showError("No se encontró el cultivo asociado al lote B.");
+          cropId = resolveAnyCropId();
+        }
+        if(!cropId){
+          showError("No hay cultivos registrados. Cree al menos un cultivo en el sistema para poder generar el informe.");
           return;
         }
-        try{
-          objectiveId = await createObjectiveFromStats(payload.lot_a?.area_stats, cropId);
-        }catch(err){
-          showError(err?.message || "No se pudo crear el objetivo ideal.");
+        objectiveId = await findObjectiveForCrop(cropId);
+        if(!objectiveId){
+          showError("No existe un objetivo nutricional para este cultivo. Créelo desde Objetivos → Gestión de objetivos antes de generar el informe.");
           return;
         }
       }else if(payload.objective?.type === "secondary"){
@@ -1146,10 +1445,9 @@
           showError("No se encontró el cultivo asociado al lote.");
           return;
         }
-        try{
-          objectiveId = await createObjectiveFromSecondary(objectiveData, cropId);
-        }catch(err){
-          showError(err?.message || "No se pudo crear el objetivo ideal.");
+        objectiveId = await findObjectiveForCrop(cropId);
+        if(!objectiveId){
+          showError("No existe un objetivo nutricional para este cultivo. Créelo desde Objetivos → Gestión de objetivos antes de generar el informe.");
           return;
         }
       }
@@ -1162,6 +1460,7 @@
         common_analysis_id: Number(analysisData.id),
         objective_id: Number(objectiveId),
         title,
+        comparison_label: comparisonLabel,
         minimum_law_analyses: JSON.stringify(minimumLawPayload),
       };
       const csrf = getCsrfToken();
@@ -1191,72 +1490,17 @@
       }
     }
 
-    async function createObjectiveFromStats(areaStats, cropId){
-      if(!areaStats || !Array.isArray(areaStats.nutrients) || !cropId){
-        throw new Error("No se encontraron datos del lote A para crear el objetivo.");
+    async function findObjectiveForCrop(cropId){
+      if(!cropId) return null;
+      try{
+        const list = await fetchJson("{{ url_for('foliage_report_api.get_all_objectives') }}");
+        if(!Array.isArray(list)) return null;
+        const match = list.find(obj => Number(obj?.crop_id) === Number(cropId));
+        return match ? Number(match.id) : null;
+      }catch(err){
+        console.error("findObjectiveForCrop", err);
+        return null;
       }
-      const payloadObjective = {
-        crop_id: Number(cropId),
-        target_value: 0,
-      };
-      areaStats.nutrients.forEach(item => {
-        const nutrientId = item?.nutrient_id;
-        const value = parseFloat(item?.target_value);
-        if(!nutrientId || !Number.isFinite(value)){
-          return;
-        }
-        payloadObjective[`nutrient_${nutrientId}`] = value;
-      });
-      const csrf = getCsrfToken();
-      const res = await fetch("{{ url_for('foliage_api.objectives') }}", {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRF-TOKEN": csrf || "",
-        },
-        body: JSON.stringify(payloadObjective),
-      });
-      const body = await res.json().catch(() => ({}));
-      if(!res.ok){
-        const message = body?.description || body?.error || "No se pudo crear el objetivo.";
-        throw new Error(message);
-      }
-      return body.id || body?.data?.id;
-    }
-
-    async function createObjectiveFromSecondary(secondaryObjective, cropId){
-      if(!secondaryObjective || !Array.isArray(secondaryObjective.nutrient_targets) || !cropId){
-        throw new Error("No se encontró el objetivo secundario para guardar.");
-      }
-      const payloadObjective = {
-        crop_id: Number(cropId),
-        target_value: 0,
-      };
-      secondaryObjective.nutrient_targets.forEach(item => {
-        const nutrientId = item?.nutrient_id;
-        const value = parseFloat(item?.target_value);
-        if(!nutrientId || !Number.isFinite(value)){
-          return;
-        }
-        payloadObjective[`nutrient_${nutrientId}`] = value;
-      });
-      const csrf = getCsrfToken();
-      const res = await fetch("{{ url_for('foliage_api.objectives') }}", {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRF-TOKEN": csrf || "",
-        },
-        body: JSON.stringify(payloadObjective),
-      });
-      const body = await res.json().catch(() => ({}));
-      if(!res.ok){
-        const message = body?.description || body?.error || "No se pudo crear el objetivo.";
-        throw new Error(message);
-      }
-      return body.id || body?.data?.id;
     }
 
     function exportPdf(){
@@ -1276,155 +1520,169 @@
 
       // ---- helpers ----
       const checkPage = (needed) => { if(y + needed > H - 20){ doc.addPage(); y = 20; } };
-      const drawLine = () => {
-        doc.setDrawColor(229, 231, 235);
-        doc.line(ML, y, W - MR, y);
-        y += 3;
-      };
-      const drawField = (label, value, indent = ML) => {
-        if(!value || value === "--" || value === "") return;
-        doc.setFontSize(8);
-        doc.setFont(undefined, "normal");
-        doc.setTextColor(107, 114, 128);  // gray-500
-        doc.text(`${label}:`, indent, y);
-        const labelW = doc.getTextWidth(`${label}:  `);
-        doc.setTextColor(17, 24, 39);  // gray-900
+      const sectionH = (title) => {
+        checkPage(12);
+        doc.setFontSize(10);
         doc.setFont(undefined, "bold");
-        doc.text(String(value), indent + labelW, y);
-        doc.setTextColor(107, 114, 128);
-        doc.setFont(undefined, "normal");
-        y += 5;
+        doc.setTextColor(16, 185, 129);
+        doc.text(title, ML, y);
+        y += 6;
+        doc.setTextColor(0, 0, 0);
       };
 
-      // ---- header ----
-      doc.setFillColor(16, 185, 129);  // emerald-600
-      doc.rect(0, 0, W, 36, "F");
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(16);
-      doc.setFont(undefined, "bold");
-      doc.text("Comparación nutricional", ML, 18);
-      doc.setFontSize(8);
-      doc.setFont(undefined, "normal");
+      // ---- Data extraction (early, reused throughout) ----
       const now = new Date();
       const fechaInforme = now.toLocaleDateString("es-CO", { day: "2-digit", month: "long", year: "numeric" });
-      const horaInforme = now.toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" });
-      doc.text(`Informe generado: ${fechaInforme} – ${horaInforme}`, W - MR, 18, { align: "right" });
-      // Subtitle
-      doc.setFontSize(9);
-      const modeText = payload?.mode === "lot_vs_lot" ? "Lote vs Lote" : "Lote vs Objetivo";
-      doc.text(modeText, ML, 30);
-      doc.setTextColor(200, 200, 200);
-      doc.text(`TecnoAgro · ${now.getFullYear()}`, W - MR, 30, { align: "right" });
-      doc.setTextColor(0, 0, 0);
-      y = 42;
-
-      // ---- Section: Identificación ----
-      checkPage(50);
-      doc.setFontSize(12);
-      doc.setFont(undefined, "bold");
-      doc.setTextColor(16, 185, 129);
-      doc.text("Identificación", ML, y);
-      y += 8;
-      doc.setTextColor(0, 0, 0);
-
-      // Use stored metadata (populated during page load)
       const finca = currentAnalysisMeta.farmName || "--";
       const loteNombre = currentAnalysisMeta.lotName || el.analysisLotName?.textContent?.trim() || "--";
       const area = currentAnalysisMeta.area || el.analysisLotArea?.textContent?.trim() || "--";
       const cultivo = currentAnalysisMeta.cropName || el.analysisLotCrop?.textContent?.trim() || "--";
       const fechaAnalisis = currentAnalysisMeta.analysisDate || el.analysisLotDate?.textContent?.trim() || "--";
       const refObjetivo = el.referenceName?.textContent?.trim() || "--";
-      const refFuente = el.referenceSource?.textContent?.trim() || "--";
-      const refTipo = el.referenceType?.textContent?.trim() || "--";
       const autor = currentAnalysisMeta.username || "Sistema";
+      const orgName = currentAnalysisMeta.orgName || "";
 
-      drawField("Finca", finca);
-      drawField("Lote", loteNombre);
-      drawField("Área", area);
-      drawField("Cultivo", cultivo);
-      drawField("Fecha de análisis", fechaAnalisis);
-      y += 2;
-      drawLine();
-      drawField("Referencia", refObjetivo);
-      drawField("Fuente", refFuente);
-      drawField("Tipo", refTipo);
-      y += 2;
-      drawLine();
-      drawField("Autor del informe", autor);
-      if(currentAnalysisMeta.orgName){
-        drawField("Organización", currentAnalysisMeta.orgName);
-      }
-      y += 4;
-
-      // ---- Section: Índices vegetacionales ----
-      checkPage(25);
-      doc.setFontSize(12);
+      // ---- Compact header (24 mm band) ----
+      doc.setFillColor(16, 185, 129);
+      doc.rect(0, 0, W, 24, "F");
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(14);
       doc.setFont(undefined, "bold");
-      doc.setTextColor(16, 185, 129);
-      doc.text("Índices vegetacionales", ML, y);
-      y += 8;
+      doc.text("COMPARACIÓN NUTRICIONAL", ML, 12);
+      doc.setFontSize(7);
+      doc.setFont(undefined, "normal");
+      const modeText = payload?.mode === "lot_vs_lot" ? "Lote vs Lote" : "Lote vs Objetivo";
+      doc.text(`${modeText}  ·  ${fechaInforme}`, ML, 19);
+      const headerRight = orgName ? `TecnoAgro  ·  ${orgName}` : "TecnoAgro";
+      doc.text(headerRight, W - MR, 19, { align: "right" });
       doc.setTextColor(0, 0, 0);
+      y = 30;
 
+      // ---- KPI cards (2 rows × 3 columns) ----
+      const cardW = (CW - 8) / 3;
+      const cardH = 16;
+      const cardGap = 4;
+
+      function drawKpiCard(x, yy, label, value, rgb){
+        doc.setFillColor(rgb[0], rgb[1], rgb[2]);
+        doc.rect(x, yy, cardW, cardH, "F");
+        doc.setFontSize(6);
+        doc.setFont(undefined, "bold");
+        doc.setTextColor(255, 255, 255);
+        doc.text(label.toUpperCase(), x + 3, yy + 6);
+        doc.setFontSize(9);
+        const displayVal = String(value || "--");
+        const maxW = cardW - 6;
+        let valText = displayVal;
+        while(doc.getTextWidth(valText) > maxW && valText.length > 3){
+          valText = valText.slice(0, -4) + "\u2026";
+        }
+        doc.text(valText, x + 3, yy + 13);
+        doc.setTextColor(0, 0, 0);
+      }
+
+      const row1y = y;
+      drawKpiCard(ML, row1y, "Finca", finca, [5, 150, 105]);
+      drawKpiCard(ML + cardW + cardGap, row1y, "Lote", loteNombre, [20, 184, 166]);
+      drawKpiCard(ML + 2 * (cardW + cardGap), row1y, "Cultivo", cultivo, [13, 148, 136]);
+      y += cardH + cardGap;
+
+      drawKpiCard(ML, y, "\u00c1rea", area, [79, 70, 229]);
+      drawKpiCard(ML + cardW + cardGap, y, "Fecha an\u00e1lisis", fechaAnalisis, [99, 102, 241]);
+      drawKpiCard(ML + 2 * (cardW + cardGap), y, "Referencia", refObjetivo, [16, 185, 129]);
+      y += cardH + 6;
+
+      // Vegetation indices — compact inline if any value exists
       const ndvi = el.analysisNdvi?.textContent?.trim() || "--";
       const vari = el.analysisVari?.textContent?.trim() || "--";
       const nbi = el.analysisNbi?.textContent?.trim() || "--";
       const refNdvi = el.referenceNdvi?.textContent?.trim() || "--";
       const refVari = el.referenceVari?.textContent?.trim() || "--";
       const refNbi = el.referenceNbi?.textContent?.trim() || "--";
+      const hasIndices = ndvi !== "--" || vari !== "--" || nbi !== "--" ||
+                         refNdvi !== "--" || refVari !== "--" || refNbi !== "--";
+      if(hasIndices){
+        sectionH("\u00cdndices vegetacionales");
+        doc.setFontSize(7);
+        const half = ML + CW / 2;
+        doc.setFont(undefined, "bold");
+        doc.setTextColor(107, 114, 128);
+        doc.text("Lote analizado", ML, y);
+        doc.text("Referencia", half, y);
+        y += 4;
+        doc.setFont(undefined, "normal");
+        const drawIdx = (label, a, b) => {
+          doc.setTextColor(156, 163, 175);
+          doc.text(label, ML, y);
+          doc.setTextColor(17, 24, 39);
+          doc.setFont(undefined, "bold");
+          doc.text(String(a), ML + 14, y);
+          doc.setTextColor(156, 163, 175);
+          doc.setFont(undefined, "normal");
+          doc.text(String(b), half + 14, y);
+          y += 4;
+        };
+        drawIdx("NDVI", ndvi, refNdvi);
+        drawIdx("VARI", vari, refVari);
+        drawIdx("NBI", nbi, refNbi);
+        doc.setTextColor(0, 0, 0);
+        y += 2;
+      }
 
-      // Two columns
-      const colMid = ML + CW / 2;
-      doc.setFontSize(8);
-      doc.setFont(undefined, "bold");
-      doc.text("Lote analizado", ML, y);
-      doc.text("Referencia", colMid, y);
-      y += 5;
-      doc.setFont(undefined, "normal");
-      drawField("NDVI", ndvi);
-      doc.setTextColor(17, 24, 39);
-      doc.text(String(refNdvi), colMid + 2, y - 5);
-      doc.setTextColor(107, 114, 128);
-      drawField("VARI", vari);
-      doc.setTextColor(17, 24, 39);
-      doc.text(String(refVari), colMid + 2, y - 5);
-      doc.setTextColor(107, 114, 128);
-      drawField("NBI", nbi);
-      doc.setTextColor(17, 24, 39);
-      doc.text(String(refNbi), colMid + 2, y - 5);
-      doc.setTextColor(107, 114, 128);
-      y += 2;
-      drawLine();
-
-      // ---- Section: Resumen de brechas ----
-      checkPage(20);
-      doc.setFontSize(12);
-      doc.setFont(undefined, "bold");
-      doc.setTextColor(16, 185, 129);
-      doc.text("Resumen de brechas", ML, y);
-      y += 8;
-      doc.setTextColor(0, 0, 0);
-
+      // ---- Executive summary panel ----
+      sectionH("Estado nutricional");
       const limitante = el.limitingNutrient?.textContent?.trim() || "--";
       const optimos = el.optimalNutrients?.textContent?.trim() || "--";
       const exceso = el.excessNutrients?.textContent?.trim() || "--";
 
-      drawField("Nutriente limitante", limitante);
-      drawField("Nutrientes en rango óptimo", optimos);
-      drawField("Nutrientes en exceso", exceso);
-      y += 2;
-      drawLine();
+      // Count optimal nutrients to build an equilibrium index
+      const optCount = optimos !== "--" ? optimos.split(",").length : 0;
+      const excCount = exceso !== "--" ? exceso.split(",").length : 0;
+      const totalMentioned = (limitante !== "--" ? 1 : 0) + optCount + excCount;
+      const eqIdx = totalMentioned > 0 ? Math.round((optCount / totalMentioned) * 100) : 0;
 
-      // ---- Section: Ley de Mínimos ----
-      checkPage(30);
-      doc.setFontSize(12);
+      // Panel background
+      const panelY = y;
+      const panelH = 32;
+      doc.setFillColor(240, 253, 244);  // green-50
+      doc.rect(ML, panelY, CW, panelH, "F");
+      doc.setDrawColor(16, 185, 129);
+      doc.setLineWidth(0.5);
+      doc.rect(ML, panelY, CW, panelH);
+
+      // Status indicators (colored circles + labels)
+      doc.setFontSize(8);
+      const indY = panelY + 10;
+      // Limiting (red)
+      doc.setFillColor(220, 38, 38);
+      doc.circle(ML + 10, indY - 1, 2.5, "F");
       doc.setFont(undefined, "bold");
-      doc.setTextColor(16, 185, 129);
-      doc.text("Tabla de Cálculos – Ley de Mínimos", ML, y);
-      y += 3;
+      doc.setTextColor(17, 24, 39);
+      doc.text(`Limitante: ${limitante}`, ML + 17, indY);
+      // Optimal (green)
+      doc.setFillColor(22, 163, 74);
+      doc.circle(ML + 90, indY - 1, 2.5, "F");
+      doc.setFont(undefined, "normal");
+      doc.text(`\u00d3ptimos: ${optCount} nutrientes`, ML + 97, indY);
+      // Excess (amber)
+      doc.setFillColor(234, 88, 12);
+      doc.circle(ML + 10, indY + 9, 2.5, "F");
+      doc.text(`Exceso: ${exceso !== "--" ? exceso : "ninguno"}`, ML + 17, indY + 9);
+      // Equilibrium index
+      doc.setFillColor(79, 70, 229);
+      doc.circle(ML + 90, indY + 9, 2.5, "F");
+      doc.text(`Equilibrio: ${eqIdx}%`, ML + 97, indY + 9);
+
+      doc.setLineWidth(0);
+      doc.setTextColor(0, 0, 0);
+      y = panelY + panelH + 8;
+
+      // ---- Ley de Mínimos table ----
+      sectionH("Ley de M\u00ednimos");
       doc.setFontSize(7);
       doc.setFont(undefined, "normal");
       doc.setTextColor(107, 114, 128);
-      doc.text("Valores expresados en porcentaje respecto al objetivo ideal", ML, y);
+      doc.text("% respecto al objetivo ideal", ML, y);
       y += 5;
       doc.setTextColor(0, 0, 0);
 
@@ -1451,49 +1709,70 @@
         const colW = CW / (nCols + 1);
         const rowH = 6;
 
-        // Header
+        // Solid header row
         doc.setFontSize(7);
         doc.setFont(undefined, "bold");
-        doc.setFillColor(243, 244, 246);
+        doc.setFillColor(16, 185, 129);
         doc.rect(ML, y, CW, rowH, "F");
-        doc.setTextColor(55, 65, 81);
-        doc.text("Fila", ML + 1, y + rowH - 2);
+        doc.setTextColor(255, 255, 255);
+        doc.text("", ML + 1, y + rowH - 2); // label column header empty
         colNames.forEach((name, i) => {
           doc.text(name, ML + colW * (i + 1) + 1, y + rowH - 2);
         });
-        doc.setTextColor(0, 0, 0);
         y += rowH;
 
-        // Rows
+        // Data rows
         rows.forEach((rowData, ri) => {
           checkPage(rowH + 4);
           if(ri % 2 === 0){
-            doc.setFillColor(249, 250, 251);
+            doc.setFillColor(248, 250, 252);
             doc.rect(ML, y, CW, rowH, "F");
           }
           const label = rowData[0] || "";
-          if(label.includes("Déficit") || label.includes("Diferencia")){
+          if(label.includes("D\u00e9ficit") || label.includes("Diferencia")){
             doc.setFont(undefined, "bold");
           }else{
             doc.setFont(undefined, "normal");
           }
+          doc.setTextColor(55, 65, 81);
           doc.text(label, ML + 1, y + rowH - 2);
+
           rowData.slice(1).forEach((val, ci) => {
-            if(val === "—") return;
+            if(val === "\u2014" || val === "-") return;
             const num = parseFloat(val);
             const display = isNaN(num) ? val : num.toFixed(2);
+            const cellX = ML + colW * (ci + 1);
+            const textX = cellX + colW - 1;
+
             if(label === "%P"){
-              if(num < 88) doc.setTextColor(220, 38, 38);
-              else if(num > 108) doc.setTextColor(234, 88, 12);
-              else doc.setTextColor(22, 163, 74);
+              // Progress bar + colored value
+              const pct = Math.min(Math.max(num, 0), 150) / 150;
+              const barW = colW - 4;
+              // Background track
+              doc.setFillColor(229, 231, 235);
+              doc.rect(cellX + 1, y + 1.5, barW, 3, "F");
+              // Fill
+              if(num < 88){
+                doc.setFillColor(220, 38, 38);
+              }else if(num > 108){
+                doc.setFillColor(234, 88, 12);
+              }else{
+                doc.setFillColor(22, 163, 74);
+              }
+              doc.rect(cellX + 1, y + 1.5, barW * pct, 3, "F");
+              // Value text on top
+              doc.setTextColor(17, 24, 39);
+              doc.setFont(undefined, "bold");
+              doc.text(display, textX, y + rowH - 2, { align: "right" });
             }else if(label === "Diferencia"){
               if(num < 0) doc.setTextColor(220, 38, 38);
               else if(num > 0) doc.setTextColor(234, 88, 12);
               else doc.setTextColor(0, 0, 0);
+              doc.text(display, textX, y + rowH - 2, { align: "right" });
             }else{
               doc.setTextColor(0, 0, 0);
+              doc.text(display, textX, y + rowH - 2, { align: "right" });
             }
-            doc.text(display, ML + colW * (ci + 1) + 1, y + rowH - 2);
           });
           doc.setTextColor(0, 0, 0);
           y += rowH;
@@ -1501,46 +1780,261 @@
       }
       y += 4;
 
-      // ---- Note ----
+      // ---- Auto-interpretation ----
       checkPage(20);
+      doc.setFontSize(8);
+      doc.setFont(undefined, "bold");
+      doc.setTextColor(16, 185, 129);
+      doc.text("Interpretaci\u00f3n", ML, y);
+      y += 6;
+
+      // Build interpretation from available data
+      const parts = [];
+      if(limitante !== "--"){
+        parts.push(`El cultivo presenta una deficiencia de ${limitante} como principal nutriente limitante.`);
+      }
+      if(optCount > 0){
+        parts.push(`${optCount} nutriente(s) se encuentran en rango \u00f3ptimo.`);
+      }
+      if(excCount > 0){
+        parts.push(`Se observa exceso relativo de ${exceso}, lo cual puede interferir con la absorci\u00f3n de otros elementos.`);
+      }
+      if(eqIdx < 50){
+        parts.push(`El \u00edndice de equilibrio nutricional es bajo (${eqIdx}%). Se recomienda priorizar la correcci\u00f3n del nutriente limitante antes de ajustar otros elementos.`);
+      }else if(eqIdx >= 80){
+        parts.push(`El \u00edndice de equilibrio nutricional es alto (${eqIdx}%). El lote se encuentra cercano al perfil objetivo.`);
+      }
+      if(parts.length === 0){
+        parts.push("No hay datos suficientes para generar una interpretaci\u00f3n autom\u00e1tica.");
+      }
+
+      const interpText = parts.join(" ");
       doc.setFontSize(7);
       doc.setFont(undefined, "italic");
+      doc.setTextColor(75, 85, 99);
+      const interpLines = doc.splitTextToSize(interpText, CW);
+      doc.text(interpLines, ML, y);
+      y += interpLines.length * 4 + 4;
+
+      // ---- Section: Balance de Minerales ----
+      checkPage(30);
+      doc.setFontSize(12);
+      doc.setFont(undefined, "bold");
+      doc.setTextColor(16, 185, 129);
+      doc.text("Balance de Minerales", ML, y);
+      y += 3;
+
+      // Metadata: proteína y aforo objetivo/actual
+      const protObj = el.balanceProteinObj?.textContent?.trim() || "--";
+      const aforoObj = el.balanceAforoObj?.textContent?.trim() || "--";
+      const protAct = el.balanceProteinAct?.textContent?.trim() || "--";
+      const aforoAct = el.balanceAforoAct?.textContent?.trim() || "--";
+      doc.setFontSize(7);
+      doc.setFont(undefined, "normal");
       doc.setTextColor(107, 114, 128);
-      const note = "El nutriente limitante principal es aquel con mayor déficit porcentual. " +
-                   "La recomendación de formulación se calculará tomando como base dicho nutriente y " +
-                   "ajustando el resto de aportes para mantener los rangos óptimos.";
-      const noteLines = doc.splitTextToSize(note, CW);
-      doc.text(noteLines, ML, y);
-      y += noteLines.length * 4 + 4;
+      doc.text(
+        `Proteína objetivo: ${protObj}  |  Aforo objetivo: ${aforoObj}  |  Proteína actual: ${protAct}  |  Aforo actual: ${aforoAct}`,
+        ML, y
+      );
+      y += 6;
+      doc.setTextColor(0, 0, 0);
+
+      const balHeader = el.balanceTableHeader;
+      const balBody = el.balanceTableBody;
+      if(!balBody || !balHeader || balHeader.querySelectorAll("th").length < 2){
+        doc.setFontSize(9);
+        doc.text("Sin datos de balance disponibles.", ML, y);
+        y += 6;
+      }else{
+        const balCols = [];
+        balHeader.querySelectorAll("th").forEach(th => balCols.push(th.textContent.trim()));
+        const balRows = [];
+        balBody.querySelectorAll("tr").forEach(tr => {
+          const cells = tr.querySelectorAll("td");
+          const rowData = [];
+          cells.forEach(td => rowData.push(td.textContent.trim()));
+          balRows.push(rowData);
+        });
+
+        // ---- Dynamic column widths ----
+        doc.setFontSize(7);
+        doc.setFont(undefined, "normal");
+        const PAD = 3; // horizontal padding per cell (mm)
+
+        // Measure header widths
+        const colWidths = balCols.map(name => doc.getTextWidth(name) + PAD);
+
+        // Measure max data width per column
+        balRows.forEach(rowData => {
+          rowData.forEach((val, ci) => {
+            if(!val || val === "—") return;
+            const num = parseFloat(val);
+            const display = isNaN(num) ? val.replace(" kg/ha", "") : num.toFixed(2);
+            const w = doc.getTextWidth(display) + PAD;
+            if(w > colWidths[ci]) colWidths[ci] = w;
+          });
+        });
+
+        // Minimum widths: "Concepto" (idx 0) and "Total" (last)
+        colWidths[0] = Math.max(colWidths[0], 36);
+        const lastIdx = colWidths.length - 1;
+        colWidths[lastIdx] = Math.max(colWidths[lastIdx], 17);
+
+        // Build cumulative x-positions
+        const colX = [ML];
+        for(let i = 0; i < colWidths.length; i++){
+          colX.push(colX[i] + colWidths[i]);
+        }
+        let totalReq = colX[colX.length - 1] - ML;
+
+        // Scale down proportionally if needed
+        if(totalReq > CW){
+          const scale = CW / totalReq;
+          for(let i = 0; i < colWidths.length; i++){
+            colWidths[i] *= scale;
+          }
+          // Recompute cumulative positions
+          colX.length = 1; // keep colX[0] = ML
+          for(let i = 0; i < colWidths.length; i++){
+            colX.push(colX[i] + colWidths[i]);
+          }
+          totalReq = colX[colX.length - 1] - ML;
+        }
+
+        const balRowH = 6;
+
+        // Header row
+        doc.setFont(undefined, "bold");
+        doc.setFillColor(243, 244, 246);
+        doc.rect(ML, y, CW, balRowH, "F");
+        doc.setTextColor(55, 65, 81);
+        for(let i = 0; i < balCols.length; i++){
+          const alignX = i === 0 ? colX[i] + 1 : colX[i + 1] - 1; // left for Concepto, right for others
+          doc.text(balCols[i], alignX, y + balRowH - 2, { align: i === 0 ? "left" : "right" });
+        }
+        doc.setTextColor(0, 0, 0);
+        y += balRowH;
+
+        // Data rows
+        doc.setFont(undefined, "normal");
+        balRows.forEach((rowData, ri) => {
+          checkPage(balRowH + 4);
+          if(ri % 2 === 0){
+            doc.setFillColor(249, 250, 251);
+            doc.rect(ML, y, CW, balRowH, "F");
+          }
+          const label = rowData[0] || "";
+          if(label.includes("Diferencia") || label.includes("Grado")){
+            doc.setFont(undefined, "bold");
+          }
+
+          // "Concepto" column: left-aligned
+          doc.text(label, colX[0] + 1, y + balRowH - 2, { align: "left" });
+
+          // Numeric columns: right-aligned
+          for(let ci = 1; ci < rowData.length; ci++){
+            const val = rowData[ci];
+            if(val === "—" || val === "") continue;
+            const num = parseFloat(val);
+            const display = isNaN(num) ? val.replace(" kg/ha", "") : num.toFixed(2);
+            if(label.includes("Diferencia") && num < 0){
+              doc.setTextColor(220, 38, 38);        // red-600
+            }else if(label.includes("Nano") && num > 0){
+              doc.setTextColor(5, 150, 105);         // emerald-700
+            }else{
+              doc.setTextColor(0, 0, 0);
+            }
+            doc.text(display, colX[ci + 1] - 1, y + balRowH - 2, { align: "right" });
+          }
+          doc.setTextColor(0, 0, 0);
+          doc.setFont(undefined, "normal");
+          y += balRowH;
+        });
+      }
+      y += 4;
 
       // ---- Signature block ----
-      checkPage(30);
-      drawLine();
-      y += 10;
-      doc.setFontSize(8);
+      checkPage(25);
+      doc.setDrawColor(209, 213, 219);
+      doc.setLineWidth(0.3);
+      doc.line(ML, y, W - MR, y);
+      doc.setLineWidth(0);
+      y += 8;
+      doc.setFontSize(7);
       doc.setFont(undefined, "normal");
-      doc.setTextColor(55, 65, 81);
-      const sigY = y + 20;
-      doc.setDrawColor(107, 114, 128);
-      doc.line(ML, sigY, ML + 60, sigY);
-      doc.text("Firma del responsable", ML, sigY + 5);
-      doc.line(ML + 80, sigY, ML + 140, sigY);
-      doc.text("Vo.Bo. Agrónomo", ML + 80, sigY + 5);
+      doc.setTextColor(107, 114, 128);
+      const sigY = y + 16;
+      doc.setDrawColor(156, 163, 175);
+      doc.setLineWidth(0.3);
+      doc.line(ML, sigY, ML + 55, sigY);
+      doc.line(ML + 70, sigY, ML + 125, sigY);
+      doc.setLineWidth(0);
+      doc.text("Firma del responsable", ML, sigY + 4);
+      doc.text("Vo.Bo. Agr\u00f3nomo", ML + 70, sigY + 4);
+      if(autor && autor !== "Sistema"){
+        doc.setTextColor(55, 65, 81);
+        doc.setFont(undefined, "bold");
+        doc.text(autor, ML, sigY - 4);
+      }
+      doc.setTextColor(0, 0, 0);
 
-      // ---- Footer ----
+      // ---- Professional footer on every page ----
       const pageCount = doc.internal.getNumberOfPages();
       for(let i = 1; i <= pageCount; i++){
         doc.setPage(i);
-        doc.setFontSize(7);
+        // Separator line
+        doc.setDrawColor(209, 213, 219);
+        doc.setLineWidth(0.2);
+        doc.line(ML, H - 14, W - MR, H - 14);
+        doc.setLineWidth(0);
+        // Footer text
+        doc.setFontSize(6);
         doc.setTextColor(156, 163, 175);
-        doc.text(
-          `Comparación nutricional · Página ${i} de ${pageCount}`,
-          W / 2, H - 10, { align: "center" }
-        );
+        doc.setFont(undefined, "normal");
+        doc.text(`TecnoAgro${orgName ? " \u00b7 " + orgName : ""}`, ML, H - 9);
+        doc.text(`P\u00e1gina ${i} de ${pageCount}`, W / 2, H - 9, { align: "center" });
+        doc.text(fechaInforme, W - MR, H - 9, { align: "right" });
+        // Green accent line at bottom
+        doc.setDrawColor(16, 185, 129);
+        doc.setLineWidth(0.6);
+        doc.line(ML, H - 5, W - MR, H - 5);
+        doc.setLineWidth(0);
         doc.setTextColor(0, 0, 0);
       }
 
       doc.save(`comparacion_nutricional_${loteNombre.replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ ]/g, "").trim()}_${now.toISOString().slice(0, 10)}.pdf`);
+    }
+
+    async function loadSnapshotInto(slotId, commonAnalysisId){
+      // Snapshot RGB del lote: opcional. Sin imagen, el placeholder queda intacto.
+      if(!commonAnalysisId) return;
+      const slot = document.getElementById(slotId);
+      if(!slot) return;
+      try{
+        const res = await fetch(ENDPOINTS.lotSnapshot.replace("0", String(commonAnalysisId)), { credentials: "include" });
+        if(!res.ok) return;
+        const body = await res.json().catch(() => null);
+        if(!body || !body.url) return;
+        const img = document.createElement("img");
+        img.src = body.url;
+        img.alt = "Recorte del lote sobre la ortofoto";
+        img.className = "h-24 w-full rounded-lg object-cover";
+        img.setAttribute("data-lightbox", "");
+        img.onerror = () => { img.remove(); };
+        slot.classList.remove("bg-slate-300");
+        slot.textContent = "";
+        slot.appendChild(img);
+      }catch(_e){ /* silencioso */ }
+    }
+
+    function loadSnapshotImages(p){
+      if(!p) return;
+      if(p.mode === "lot_vs_lot"){
+        loadSnapshotInto("analysisLotImageSlot", p.lot_b?.linked_common_analysis_id);
+        loadSnapshotInto("referenceImageSlot", p.lot_a?.linked_common_analysis_id);
+      }else{
+        loadSnapshotInto("analysisLotImageSlot", p.common_analysis_id);
+      }
     }
 
     async function init(){
@@ -1564,8 +2058,10 @@
           await fetchCvValues(payload.lot_id);
         }
         renderAnalysisInfo(analysisData);
+        loadSnapshotImages(payload);
         renderCvInfo();
         computeMinimumLaw();
+        computeMineralBalance();
       }catch(err){
         console.error(err);
         showError(err?.message || "No se pudo cargar la comparación.");
@@ -1574,6 +2070,36 @@
 
     if(el.exportPdfBtn){
       el.exportPdfBtn.addEventListener("click", exportPdf);
+    }
+    let proteinEditDebounce = null;
+    function resetProteinEditor(){
+      editedProtein = null;
+      if(el.balanceProteinEditToggle) el.balanceProteinEditToggle.checked = false;
+      if(el.balanceProteinObjInput) el.balanceProteinObjInput.classList.add("hidden");
+      if(el.balanceProteinObj) el.balanceProteinObj.classList.remove("hidden");
+    }
+    if(el.balanceProteinEditToggle && el.balanceProteinObjInput && el.balanceProteinObj){
+      el.balanceProteinEditToggle.addEventListener("change", () => {
+        const editing = el.balanceProteinEditToggle.checked;
+        el.balanceProteinObj.classList.toggle("hidden", editing);
+        el.balanceProteinObjInput.classList.toggle("hidden", !editing);
+        if(editing){
+          const current = editedProtein != null ? editedProtein : referenceProtein;
+          el.balanceProteinObjInput.value = current != null ? current : "";
+          el.balanceProteinObjInput.focus();
+        }else if(editedProtein == null){
+          // Edición cancelada sin valor válido: recalcular con la referencia
+          computeMineralBalance();
+        }
+      });
+      el.balanceProteinObjInput.addEventListener("input", () => {
+        const value = parseFloat(el.balanceProteinObjInput.value);
+        editedProtein = Number.isFinite(value) && value > 0 ? value : null;
+        setText(el.balanceProteinObj, editedProtein != null ? formatNumber(editedProtein, 2) : "--");
+        // El backend deriva los objetivos desde la proteína y recalcula
+        clearTimeout(proteinEditDebounce);
+        proteinEditDebounce = setTimeout(computeMineralBalance, 400);
+      });
     }
     if(el.saveReportBtn){
       el.saveReportBtn.addEventListener("click", handleSaveReport);
@@ -1597,6 +2123,8 @@
         el.previewProducts.innerHTML = '';
         el.previewCost.innerHTML = '';
         el.previewWarnings.innerHTML = '';
+        renderPreviewBalance();
+        selectPreviewTab("diagnosis");
         el.previewModal.classList.remove("hidden");
         return;
       }
@@ -1657,11 +2185,70 @@
         : '';
 
       el.previewCost.innerHTML = '';
+      renderPreviewBalance();
+      selectPreviewTab("diagnosis");
       el.previewModal.classList.remove("hidden");
     }
 
     function hidePreviewModal(){
       if(el.previewModal) el.previewModal.classList.add("hidden");
+    }
+
+    // ---- Tabs del modal de vista previa (Diagnóstico | Balance) ----
+    // Estilo botón: activo = sólido esmeralda, inactivo = blanco con borde
+    function setPreviewTabActive(button, active){
+      if(!button) return;
+      button.classList.toggle("border-emerald-600", active);
+      button.classList.toggle("bg-emerald-600", active);
+      button.classList.toggle("text-white", active);
+      button.classList.toggle("border-gray-200", !active);
+      button.classList.toggle("bg-white", !active);
+      button.classList.toggle("text-gray-700", !active);
+      button.classList.toggle("hover:bg-gray-50", !active);
+      button.setAttribute("aria-selected", active ? "true" : "false");
+    }
+
+    function selectPreviewTab(tab){
+      const isBalance = tab === "balance";
+      if(el.previewPanelDiagnosis) el.previewPanelDiagnosis.classList.toggle("hidden", isBalance);
+      if(el.previewPanelBalance) el.previewPanelBalance.classList.toggle("hidden", !isBalance);
+      setPreviewTabActive(el.previewTabDiagnosis, !isBalance);
+      setPreviewTabActive(el.previewTabBalance, isBalance);
+    }
+
+    // Copia de solo lectura del Balance de Minerales ya ajustado
+    // (incluye derivaciones por proteína editada si las hubo)
+    function renderPreviewBalance(){
+      if(!el.previewBalanceTable) return;
+      const sourceTable = el.balanceTableBody ? el.balanceTableBody.closest("table") : null;
+      el.previewBalanceTable.innerHTML = "";
+      if(sourceTable && el.balanceTableBody.children.length){
+        el.previewBalanceTable.appendChild(sourceTable.cloneNode(true));
+      }else{
+        el.previewBalanceTable.innerHTML = '<p class="text-sm text-gray-500">Sin datos de balance disponibles.</p>';
+      }
+      if(el.previewBalanceMeta){
+        const read = node => node?.textContent?.trim() || "--";
+        const cells = [
+          ["Proteína objetivo", read(el.balanceProteinObj), "bg-gray-100"],
+          ["Aforo objetivo", read(el.balanceAforoObj), "bg-gray-100"],
+          ["Proteína actual", read(el.balanceProteinAct), "bg-gray-200"],
+          ["Aforo actual", read(el.balanceAforoAct), "bg-gray-200"],
+        ];
+        el.previewBalanceMeta.innerHTML = cells.map(([label, value, bg]) => `
+          <div class="${bg} px-3 py-2">
+            <dt class="text-[11px] uppercase tracking-wide text-gray-500">${label}</dt>
+            <dd class="mt-1 text-sm font-semibold text-gray-900">${value}</dd>
+          </div>
+        `).join("");
+      }
+    }
+
+    if(el.previewTabDiagnosis){
+      el.previewTabDiagnosis.addEventListener("click", () => selectPreviewTab("diagnosis"));
+    }
+    if(el.previewTabBalance){
+      el.previewTabBalance.addEventListener("click", () => selectPreviewTab("balance"));
     }
 
     if(el.previewReportBtn){
@@ -1771,6 +2358,8 @@
         renderAnalysisInfo(analysisData);
         renderCvInfo();
         computeMinimumLaw();
+        resetProteinEditor();
+        computeMineralBalance();
         // Update badge
         el.modeBadge.textContent = kind === "secondary"
           ? "Modo: Lote vs objetivo secundario"

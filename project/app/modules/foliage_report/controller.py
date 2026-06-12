@@ -21,11 +21,15 @@ from app.modules.foliage.models import (
     CommonAnalysis,
     Crop,
     Farm,
+    FollowUpAnalysis,
     LeafAnalysis,
     Lot,
     LotCrop,
     Nutrient,
+    NutrientApplication,
     Objective,
+    Product,
+    ProductPrice,
     Recommendation,
     SoilAnalysis,
     leaf_analysis_nutrients,
@@ -37,9 +41,14 @@ from .helpers import (
     LeyLiebig,
     NutrientOptimizer,
     ObjectiveResource,
+    RecommendationError,
+    compare_analyses,
+    compute_dose,
+    compute_dose_from_contributions,
     contribuciones_de_producto,
     precios_de_producto,
 )
+from .models import RecommendationDose
 
 
 class ReportView(MethodView):
@@ -126,18 +135,29 @@ class ReportView(MethodView):
             "historicalData": self._get_historical_data(
                 recommendation.lot_id, recommendation.date
             ),
+            # El crop solo se muestra si el lote realmente lo tiene asociado
+            # (LotCrop). Los reportes de comparación agrovista usan un crop
+            # "host" para el objetivo temporal que no debe aparecer.
             "crop": (
                 {
                     "id": recommendation.crop.id,
                     "name": recommendation.crop.name,
                 }
                 if recommendation.crop
+                and db.session.query(LotCrop.id)
+                .filter_by(
+                    lot_id=recommendation.lot_id,
+                    crop_id=recommendation.crop_id,
+                )
+                .first()
+                is not None
                 else None
             ),
             "lot": (
                 {
                     "id": recommendation.lot.id,
                     "name": recommendation.lot.name,
+                    "area": float(recommendation.lot.area or 0),
                     "farm": (
                         {
                             "id": recommendation.lot.farm.id,
@@ -165,6 +185,9 @@ class ReportView(MethodView):
                 }
                 if recommendation.organization
                 else None
+            ),
+            "productiveObjective": self._get_productive_objective(
+                recommendation.lot_id, recommendation.crop_id, recommendation.date
             ),
         }
 
@@ -344,11 +367,14 @@ class ReportView(MethodView):
         if isinstance(lot_id, Lot):
             lot_id = lot_id.id
 
+        # <= para incluir el análisis base del informe: con < quedaba fuera
+        # todo análisis del mismo día (caso agrovista: análisis e informe
+        # creados hoy → histórico vacío en la vista del reporte).
         historical_analyses = (
             LeafAnalysis.query.join(CommonAnalysis)
             .filter(
                 CommonAnalysis.lot_id == lot_id,
-                CommonAnalysis.date < current_date,
+                CommonAnalysis.date <= current_date,
             )
             .order_by(CommonAnalysis.date.desc())
             .limit(5)
@@ -371,6 +397,75 @@ class ReportView(MethodView):
             data.append(entry)
 
         return data
+
+    def _get_productive_objective(self, lot_id, crop_id, analysis_date):
+        """Obtiene el objetivo productivo: actual (CommonAnalysis) vs meta (Objective)."""
+        if not lot_id or not crop_id:
+            return {}
+
+        # Análisis actual del lote
+        common = (
+            CommonAnalysis.query.filter_by(lot_id=lot_id)
+            .order_by(CommonAnalysis.date.desc())
+            .first()
+        )
+        if not common:
+            return {}
+
+        # Objetivo del cultivo
+        objective = Objective.query.filter_by(crop_id=crop_id).first()
+        if not objective:
+            return {}
+
+        return {
+            "current": {
+                "yield": float(common.yield_estimate or 0),
+                "protein": float(common.protein or 0),
+                "rest": float(common.rest or 0),
+            },
+            "target": {
+                "yield": float(objective.target_value or 0),
+                "protein": float(objective.protein or 0),
+                "rest": float(objective.rest or 0),
+            },
+            "gaps": {
+                "yield": round(
+                    float(common.yield_estimate or 0)
+                    - float(objective.target_value or 0),
+                    2,
+                ),
+                "yield_pct": round(
+                    (
+                        (
+                            (
+                                float(common.yield_estimate or 0)
+                                - float(objective.target_value or 0)
+                            )
+                            / float(objective.target_value or 1)
+                            * 100
+                        )
+                        if objective.target_value
+                        else 0
+                    ),
+                    1,
+                ),
+                "protein": round(
+                    float(common.protein or 0) - float(objective.protein or 0), 2
+                ),
+                "protein_pct": round(
+                    (
+                        (
+                            (float(common.protein or 0) - float(objective.protein or 0))
+                            / float(objective.protein or 1)
+                            * 100
+                        )
+                        if objective.protein
+                        else 0
+                    ),
+                    1,
+                ),
+            },
+        }
 
     def _get_limiting_nutrient_data(self, limiting_name, analysisData, optimalLevels):
         """Intenta reconstruir los datos del nutriente limitante."""
@@ -617,6 +712,22 @@ class RecommendationGenerator(MethodView):
         objective_id = data.get("objective_id")
         report_title = data.get("title")
         minimum_law_analyses_str = data.get("minimum_law_analyses")
+        # Etiqueta de la referencia de comparación (agrovista): nombre del
+        # lote A en modo lot_vs_lot o "Datos cultivo ideal <crop>" en modo
+        # objetivo. Se persiste dentro del snapshot minimum_law_analyses
+        # para que el informe pueda mostrar contra qué se comparó.
+        comparison_label = data.get("comparison_label")
+        if comparison_label is not None and not isinstance(comparison_label, str):
+            raise BadRequest("comparison_label debe ser un string.")
+        # New optional inputs for dose-per-ha (gap P1: foliar not supported yet).
+        # yield_kg_per_ha is reserved for future use; current optimizer does
+        # not require it because contributions/demands are already in % p/p.
+        # application_mode drives the dose_unit: 'edaphic' (kg/ha | L/ha)
+        # or 'foliar' (returns dose_per_ha=None, see compute_dose()).
+        yield_kg_per_ha = data.get("yield_kg_per_ha")
+        application_mode = data.get("application_mode", "edaphic")
+        if application_mode not in ("edaphic", "foliar"):
+            raise BadRequest("application_mode debe ser 'edaphic' o 'foliar'.")
 
         if not isinstance(lot_id, int):
             raise BadRequest("lot_id debe ser un entero.")
@@ -628,6 +739,14 @@ class RecommendationGenerator(MethodView):
             raise BadRequest("objective_id debe ser un entero.")
         if not isinstance(report_title, str) or not report_title.strip():
             raise BadRequest("El título no puede estar vacío.")
+        # Validación de los nuevos inputs opcionales para dosis por ha.
+        if yield_kg_per_ha is not None and (
+            not isinstance(yield_kg_per_ha, (int, float)) or yield_kg_per_ha < 0
+        ):
+            raise BadRequest(
+                "yield_kg_per_ha debe ser un número no negativo (o null para omitir)."
+            )
+        # application_mode ya fue validado arriba (debe ser 'edaphic' o 'foliar').
 
         # --- Procesar CommonAnalysis ---
         common_analysis = CommonAnalysis.query.options(
@@ -761,7 +880,6 @@ class RecommendationGenerator(MethodView):
                 )
             # Re-raise other ValueErrors to be caught by the generic Exception handler or handled differently if needed
             raise
-
         except Exception as e:
             current_app.logger.error(
                 f"Error en optimización para lote {lot_id} con objetivo {objective_id}: {str(e)}",
@@ -769,6 +887,77 @@ class RecommendationGenerator(MethodView):
             )
             raise BadRequest(
                 f"Error al generar recomendación con optimizador: {str(e)}"
+            )
+
+        # --- Dose per ha: lectura directa de product_contributions ---
+        # NO usamos optimizer.optimizar_productos() porque el linprog del
+        # NutrientOptimizer requiere Nutrient.cv (coefs de variación)
+        # poblados en la BD, y actualmente todos están en NULL → ajustes=0
+        # → productos=[]. En su lugar leemos product_contributions
+        # directamente y para cada nutriente con déficit elegimos el
+        # producto más eficiente. La dosis a aplicar sale de la ficha
+        # técnica (typical_dose_per_ha), NO de un cálculo déficit/contribution
+        # (esa fórmula producía valores absurdos — ver bug fase 4).
+        # El optimizer queda intacto para limitante_nombre y para el
+        # texto legacy de automatic_recommendations.
+        dose_rows: list[dict] = []
+        try:
+            all_products = Product.query.all()
+            productos_para_dosis = compute_dose_from_contributions(
+                productos_contribuciones_data,
+                productos_precios_data,
+                nutrientes_actuales,
+                demandas_ideales,
+                application_type_lookup={
+                    p.name: p.application_type or "unknown" for p in all_products
+                },
+                density_lookup={p.name: p.density_kg_per_l for p in all_products},
+                price_unit_lookup={
+                    pp.product.name: pp.price_unit
+                    for pp in ProductPrice.query.filter(
+                        ProductPrice.end_date >= datetime.utcnow().date()
+                    ).all()
+                },
+                typical_dose_per_ha_lookup={
+                    p.name: p.dose_typical_kg_per_ha
+                    for p in all_products
+                    if p.dose_typical_kg_per_ha is not None
+                },
+                typical_dose_unit_lookup={
+                    p.name: p.dose_typical_unit
+                    for p in all_products
+                    if p.dose_typical_kg_per_ha is not None
+                },
+                application_mode=application_mode,
+            )
+        except Exception as e:
+            current_app.logger.warning(
+                f"[recommendation:dose] compute_dose_from_contributions falló "
+                f"para lote {lot_id}: {e}. Continuando sin dosis por ha."
+            )
+            productos_para_dosis = []
+
+        # Lookup batch: una sola query para resolver product_id de los nombres
+        productos_lookup: dict[str, Product] = {}
+        if productos_para_dosis:
+            nombres = [d["product_name"] for d in productos_para_dosis]
+            productos_qs = Product.query.filter(Product.name.in_(nombres)).all()
+            productos_lookup = {p.name: p for p in productos_qs}
+
+        for dose in productos_para_dosis:
+            prod = productos_lookup.get(dose["product_name"])
+            if prod is None:
+                continue
+            dose_rows.append(
+                {
+                    "product": prod,
+                    "product_name": dose["product_name"],
+                    "dose_per_ha": dose["dose_per_ha"],
+                    "dose_unit": dose["dose_unit"],
+                    "cost_per_ha": dose["cost_per_ha"],
+                    "application_mode": dose["application_mode"],
+                    "application_type": dose["application_type"],
+                }
             )
 
         # --- Sanity checks on the optimization result (C5) ---
@@ -870,6 +1059,8 @@ class RecommendationGenerator(MethodView):
                     "nutriente_limitante": nutriente_limitante,
                     "resultados": resultados_tabla,
                 }
+                if comparison_label and comparison_label.strip():
+                    final_analysis["comparison_label"] = comparison_label.strip()
                 minimum_law_analyses_json = json.dumps(final_analysis, default=str)
 
             except json.JSONDecodeError:
@@ -894,11 +1085,27 @@ class RecommendationGenerator(MethodView):
                 soil_analysis_details=soil_details_json,
                 foliar_analysis_details=foliar_details_json,
                 minimum_law_analyses=minimum_law_analyses_json,
-                # Considerar añadir objective_id y common_analysis_ids_used si se modifica el modelo
+                common_analysis_id=common_analysis_id,
                 applied=False,
                 active=True,
             )
             db.session.add(new_recommendation)
+            db.session.flush()  # necesitamos new_recommendation.id para las FKs
+
+            # Persistir filas de dosis (una por producto en la combinación)
+            for dose in dose_rows:
+                db.session.add(
+                    RecommendationDose(
+                        recommendation_id=new_recommendation.id,
+                        product_id=dose["product"].id,
+                        product_name=dose["product_name"],
+                        dose_per_ha=dose["dose_per_ha"],
+                        dose_unit=dose["dose_unit"],
+                        cost_per_ha=dose["cost_per_ha"],
+                        application_mode=dose["application_mode"],
+                        application_type=dose["application_type"],
+                    )
+                )
             db.session.commit()
 
             return (
@@ -920,7 +1127,25 @@ class RecommendationGenerator(MethodView):
 
 
 class RecommendationFilterView(MethodView):
+    """Filtra recomendaciones por finca o lote vía query params.
+
+    Retorna la lista completa de recomendaciones con sus relaciones
+    (lote, cultivo) pre-cargadas para el filtro indicado.
+
+    :param farm_id: ID de finca (opcional, int)
+    :param lot_id: ID de lote (opcional, int)
+    :status 200: Lista JSON de recomendaciones filtradas
+    :status 400: Parámetros inválidos
+    """
+
     def get(self):
+        """Retorna recomendaciones filtradas por finca o lote.
+
+        :param farm_id: ID de finca (query string, opcional)
+        :param lot_id: ID de lote (query string, opcional)
+        :status 200: Lista de recomendaciones con lote y cultivo
+        :status 400: farm_id o lot_id no son enteros válidos
+        """
         try:
             farm_id = int(request.args.get("farm_id", 0))
             lot_id = int(request.args.get("lot_id", 0))
@@ -977,8 +1202,21 @@ class RecommendationFilterView(MethodView):
 
 
 class DeleteRecommendationView(MethodView):
+    """Soft-delete de una recomendación por ID.
+
+    Verifica autenticación JWT, rol del usuario (admin/reseller/org_admin/
+    org_editor) y acceso multi-tenant sobre la finca del lote asociado.
+    """
+
     @jwt_required()
     def delete(self, report_id):
+        """Elimina lógicamente (active=False) una recomendación.
+
+        :param report_id: ID de la recomendación (vía URL)
+        :status 200: Reporte eliminado exitosamente
+        :status 403: Usuario sin permisos o sin acceso al recurso
+        :status 404: Reporte no encontrado
+        """
         # Verificar autenticación y permisos (ajusta según tu lógica)
         claims = get_jwt()  # Asume que tienes una función get_jwt() para obtener claims
         if not claims or not claims.get("rol") in [
@@ -1006,3 +1244,165 @@ class DeleteRecommendationView(MethodView):
         except Exception as e:
             db.session.rollback()
             return jsonify({"error": str(e)}), 500
+
+
+class FollowUpView(MethodView):
+    """Crea y lista FollowUpAnalysis para una NutrientApplication."""
+
+    decorators = [jwt_required()]
+
+    @check_permission(required_roles=["administrator", "reseller"])
+    def get(self, application_id: int):
+        """Lista los seguimientos activos de una aplicación."""
+        claims = get_jwt()
+        app_obj = NutrientApplication.query.get_or_404(application_id)
+        if not check_resource_access(app_obj.lot.farm, claims):
+            raise Forbidden("Acceso denegado.")
+        follow_ups = [fu for fu in app_obj.follow_ups if fu.active]
+        return (
+            jsonify(
+                [
+                    {
+                        "id": fu.id,
+                        "post_analysis_id": fu.post_analysis_id,
+                        "weeks_after_application": fu.weeks_after_application,
+                        "notes": fu.notes,
+                        "created_at": fu.created_at.isoformat(),
+                    }
+                    for fu in follow_ups
+                ]
+            ),
+            200,
+        )
+
+    @check_permission(required_roles=["administrator", "reseller"])
+    def post(self, application_id: int):
+        """
+        Registra un análisis posterior como seguimiento de una aplicación.
+        Expected JSON: {"post_analysis_id": int, "notes": str (opcional)}
+        """
+        claims = get_jwt()
+        data = request.get_json()
+        if not data or "post_analysis_id" not in data:
+            raise BadRequest("Falta post_analysis_id.")
+
+        app_obj = NutrientApplication.query.get_or_404(application_id)
+        if not check_resource_access(app_obj.lot.farm, claims):
+            raise Forbidden("Acceso denegado.")
+
+        post_analysis = CommonAnalysis.query.get_or_404(data["post_analysis_id"])
+        if post_analysis.lot_id != app_obj.lot_id:
+            raise BadRequest(
+                "El análisis no pertenece al mismo lote que la aplicación."
+            )
+
+        weeks = None
+        if app_obj.applied_date and post_analysis.date:
+            weeks = (post_analysis.date - app_obj.applied_date).days // 7
+
+        fu = FollowUpAnalysis(
+            nutrient_application_id=application_id,
+            post_analysis_id=data["post_analysis_id"],
+            weeks_after_application=weeks,
+            notes=data.get("notes"),
+        )
+        db.session.add(fu)
+        db.session.commit()
+        return (
+            jsonify(
+                {
+                    "id": fu.id,
+                    "weeks_after_application": fu.weeks_after_application,
+                }
+            ),
+            201,
+        )
+
+
+class FollowUpComparisonView(MethodView):
+    """Devuelve la comparación nutriente a nutriente para un FollowUpAnalysis."""
+
+    decorators = [jwt_required()]
+
+    @check_permission(required_roles=["administrator", "reseller"])
+    def get(self, follow_up_id: int):
+        claims = get_jwt()
+        fu = FollowUpAnalysis.query.get_or_404(follow_up_id)
+        if not check_resource_access(fu.organization, claims):
+            raise Forbidden("Acceso denegado.")
+
+        recommendation = fu.nutrient_application.recommendation
+        pre_analysis_id = recommendation.common_analysis_id if recommendation else None
+        if not pre_analysis_id:
+            raise BadRequest(
+                "La aplicación no tiene recomendación con análisis base vinculado."
+            )
+
+        result = compare_analyses(pre_analysis_id, fu.post_analysis_id)
+        result["follow_up_id"] = fu.id
+        result["recommendation_id"] = recommendation.id if recommendation else None
+        return jsonify(result), 200
+
+
+class LotEvolutionView(MethodView):
+    """Serie temporal de CommonAnalysis de un lote con contexto de aplicación."""
+
+    decorators = [jwt_required()]
+
+    @check_permission(required_roles=["administrator", "reseller"])
+    def get(self, lot_id: int):
+        from sqlalchemy.orm import joinedload
+
+        claims = get_jwt()
+        lot = Lot.query.get_or_404(lot_id)
+        if not check_resource_access(lot.farm, claims):
+            raise Forbidden("Acceso denegado.")
+
+        analyses = (
+            CommonAnalysis.query.options(joinedload(CommonAnalysis.leaf_analysis))
+            .filter_by(lot_id=lot_id)
+            .order_by(CommonAnalysis.date.asc())
+            .all()
+        )
+
+        # Mapear qué análisis son "post" de alguna aplicación
+        follow_ups = (
+            FollowUpAnalysis.query.join(NutrientApplication)
+            .filter(
+                NutrientApplication.lot_id == lot_id,
+                FollowUpAnalysis.active == True,  # noqa: E712
+            )
+            .all()
+        )
+        post_ids = {fu.post_analysis_id: fu for fu in follow_ups}
+
+        # Mapear qué análisis son "pre" (base de una recomendación)
+        recommendations = Recommendation.query.filter_by(
+            lot_id=lot_id, active=True
+        ).all()
+        pre_ids = {
+            r.common_analysis_id for r in recommendations if r.common_analysis_id
+        }
+
+        result = []
+        for a in analyses:
+            role = "unclassified"
+            if a.id in pre_ids:
+                role = "pre_application"
+            if a.id in post_ids:
+                role = "post_application"
+
+            entry = {
+                "analysis_id": a.id,
+                "date": str(a.date),
+                "role": role,
+            }
+            if a.id in post_ids:
+                fu = post_ids[a.id]
+                entry["follow_up_id"] = fu.id
+                entry["weeks_after_application"] = fu.weeks_after_application
+                entry["application_id"] = fu.nutrient_application_id
+
+            result.append(entry)
+
+        return jsonify({"lot_id": lot_id, "timeline": result}), 200

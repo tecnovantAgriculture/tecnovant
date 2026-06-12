@@ -20,6 +20,18 @@ import tempfile
 
 
 class CsvHandler:
+    @staticmethod
+    def _neutralize_cell(value):
+        """Mitigate CSV formula injection.
+
+        Spreadsheet apps execute cells starting with ``= + - @`` (or a
+        leading tab/CR) as formulas. Prefix such string cells with an
+        apostrophe so they are treated as plain text. Non-strings pass through.
+        """
+        if isinstance(value, str) and value[:1] in ("=", "+", "-", "@", "\t", "\r"):
+            return "'" + value
+        return value
+
     def export_to_csv(self, data):
         """Export a list of rows or dictionaries to a CSV formatted string.
 
@@ -41,10 +53,15 @@ class CsvHandler:
             writer.writerow(headers)
             for row_dict in data:
                 # Ensure values are written in the same order as headers
-                writer.writerow([row_dict.get(header, "") for header in headers])
+                writer.writerow(
+                    [
+                        self._neutralize_cell(row_dict.get(header, ""))
+                        for header in headers
+                    ]
+                )
         elif isinstance(data[0], list):
             for row_list in data:
-                writer.writerow(row_list)
+                writer.writerow([self._neutralize_cell(cell) for cell in row_list])
         else:
             raise ValueError("Data must be a list of lists or a list of dictionaries.")
 

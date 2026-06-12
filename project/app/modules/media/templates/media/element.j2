@@ -112,6 +112,25 @@
       {% endif %}
     </div>
 
+    <!-- Error de procesamiento (estado terminal, no procesando) -->
+    {% if preproc_status.error and not preproc_status.is_processing %}
+    <div id="preprocess-error-banner" class="mt-4 rounded-lg border border-red-200 dark:border-red-800 bg-gradient-to-br from-red-50 to-orange-50 dark:from-red-900/20 dark:to-orange-900/20 p-4">
+      <div class="flex items-start gap-3">
+        <div class="flex-shrink-0">
+          <div class="h-8 w-8 rounded-full bg-red-100 dark:bg-red-900/40 flex items-center justify-center">
+            <svg class="h-4 w-4 text-red-600 dark:text-red-400" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
+            </svg>
+          </div>
+        </div>
+        <div class="flex-1">
+          <h3 class="font-semibold text-red-800 dark:text-red-300">El procesamiento falló</h3>
+          <p class="mt-1 text-sm text-red-700 dark:text-red-400">{{ preproc_status.error }}</p>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
     <!-- Panel de estado de procesamiento -->
     {% if preproc_status.is_processing %}
     {% set _state = preproc_status.status.state if preproc_status.status and preproc_status.status.state else "starting" %}
@@ -437,12 +456,41 @@ function startPolling(uuid) {
 
         if (data.has_error) {
           clearInterval(pollingInterval);
+          showPreprocessError(data.error || 'El procesamiento falló sin mensaje de detalle.');
         }
       })
       .catch(error => {
         console.error('Error en polling:', error);
       });
   }, 2000);
+}
+
+function showPreprocessError(message) {
+  // Banner idempotente con el error terminal del worker (data.error del
+  // endpoint de estado, ya traducido por friendly_preprocess_error).
+  let banner = document.getElementById('preprocess-error-banner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'preprocess-error-banner';
+    banner.className = 'mt-4 rounded-lg border border-red-200 dark:border-red-800 bg-gradient-to-br from-red-50 to-orange-50 dark:from-red-900/20 dark:to-orange-900/20 p-4';
+    const card = document.getElementById('media-card-preprocess');
+    if (card) card.appendChild(banner);
+  }
+  banner.innerHTML = `
+    <div class="flex items-start gap-3">
+      <div class="flex-shrink-0">
+        <div class="h-8 w-8 rounded-full bg-red-100 dark:bg-red-900/40 flex items-center justify-center">
+          <svg class="h-4 w-4 text-red-600 dark:text-red-400" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
+          </svg>
+        </div>
+      </div>
+      <div class="flex-1">
+        <h3 class="font-semibold text-red-800 dark:text-red-300">El procesamiento falló</h3>
+        <p class="mt-1 text-sm text-red-700 dark:text-red-400"></p>
+      </div>
+    </div>`;
+  banner.querySelector('p').textContent = message;
 }
 
 function showError(uuid, message) {

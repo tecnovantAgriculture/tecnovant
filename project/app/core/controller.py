@@ -374,7 +374,7 @@ class LoginView(MethodView):
             return response
 
         except Exception as e:
-            print(f"Login error: {str(e)}")
+            current_app.logger.error(f"Login error: {str(e)}")
             return jsonify({"msg": "Invalid request"}), 400
 
     def _invalid_credentials(self, user, password):

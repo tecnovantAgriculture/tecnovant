@@ -34,6 +34,7 @@
 {# entregado desde el endpoint #}
 {# api de consumo #}
 {% set api_url = url_for('foliage_api.nutrient_applications') %}
+{% set csv_download_url = url_for('foliage_api.download_nutrient_applications_csv') %}
 
 {% block extra_js %}
 {{ super() }}

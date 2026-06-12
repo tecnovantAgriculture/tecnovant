@@ -315,6 +315,8 @@
                 <div>FDN: <span id="broma-fdn" class="font-medium text-gray-800 dark:text-gray-200">--</span>%</div>
                 <div>Energía: <span id="broma-mcal" class="font-medium text-gray-800 dark:text-gray-200">--</span> Mcal/kg</div>
                 <div>Energía: <span id="broma-mj" class="font-medium text-gray-800 dark:text-gray-200">--</span> MJ/kg</div>
+                <div>Energía2: <span id="broma-enl" class="font-medium text-gray-800 dark:text-gray-200">--</span> Mcal/kg</div>
+                <div>AFORO: <span id="broma-aforo" class="font-medium text-gray-800 dark:text-gray-200">--</span> UA/ha</div>
               </div>
               <p id="broma-warning" class="hidden mt-1 text-[11px] text-amber-600 dark:text-amber-400"></p>
             </div>
@@ -433,6 +435,17 @@
                       class="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 py-1.5 px-3 text-sm shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500">
                 <option value="">Selecciona un objetivo</option>
               </select>
+            </div>
+            <div class="md:col-span-2">
+              <label class="mb-1 block font-medium text-gray-700 dark:text-gray-300">Análisis del lote</label>
+              <select id="compareAnalysisSelect"
+                      class="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 py-1.5 px-3 text-sm shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled>
+                <option value="">Selecciona primero un lote</option>
+              </select>
+              <p class="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+                La comparación usa el análisis foliar del lote en esa fecha.
+              </p>
             </div>
           </div>
 
@@ -635,12 +648,12 @@
       analysisCrops:"/api/agrovista/analysis-crops",
       secondaryObjectives:"/api/agrovista/secondary-objectives",
       cropObjectives:"/api/foliage/objectives/",
-      foliageObjectives:"/api/foliage/objectives/",
       foliageFarms:"/api/foliage/farms/",
       foliageLots:"/api/foliage/lots/",
       foliageLotCrops:"/api/foliage/lots_crops/",
       commonAnalyses:"/api/foliage/common_analyses/",
-      leafAnalyses:"/api/foliage/leaf_analyses/"
+      leafAnalyses:"/api/foliage/leaf_analyses/",
+      lotSnapshot:"/api/agrovista/lot-snapshot"
     };
     const RIGHT_RULER_W = 64;  // px
     const TOP_RULER_H   = 28;  // px
@@ -681,6 +694,8 @@
       bromaFdn: document.getElementById("broma-fdn"),
       bromaMcal: document.getElementById("broma-mcal"),
       bromaMj: document.getElementById("broma-mj"),
+      bromaEnl: document.getElementById("broma-enl"),
+      bromaAforo: document.getElementById("broma-aforo"),
       bromaWarning: document.getElementById("broma-warning"),
       uploader: document.getElementById("uploader"),
       uploadTrigger: document.getElementById("upload-trigger"),
@@ -709,6 +724,7 @@
       objectiveControls: document.getElementById("objectiveControls"),
       compareLotSelect: document.getElementById("compareLotSelect"),
       compareObjectiveSelect: document.getElementById("compareObjectiveSelect"),
+      compareAnalysisSelect: document.getElementById("compareAnalysisSelect"),
       compareLotASelect: document.getElementById("compareLotASelect"),
       compareLotBSelect: document.getElementById("compareLotBSelect"),
       compareLotObjective: document.getElementById("compareLotObjective"),
@@ -1255,6 +1271,49 @@
         options.push(`<option value=\"${lot.id}\">${label}</option>`);
       }
       el.compareLotSelect.innerHTML = options.join("");
+      renderCompareAnalysisOptions();
+    }
+
+    function getCommonAnalysesForLot(lotId){
+      if(!lotId || !Array.isArray(commonAnalyses)){
+        return [];
+      }
+      return commonAnalyses
+        .filter(item => item && Number(item.lot_id) === Number(lotId))
+        .slice()
+        .sort((a, b) => {
+          const stampA = Date.parse(a?.date || a?.created_at || "");
+          const stampB = Date.parse(b?.date || b?.created_at || "");
+          return (Number.isFinite(stampB) ? stampB : 0) - (Number.isFinite(stampA) ? stampA : 0);
+        });
+    }
+
+    function renderCompareAnalysisOptions(){
+      if(!el.compareAnalysisSelect){
+        updateComparisonButtonState();
+        return;
+      }
+      const lotIdRaw = el.compareLotSelect ? el.compareLotSelect.value : "";
+      if(!lotIdRaw){
+        el.compareAnalysisSelect.innerHTML = '<option value="">Selecciona primero un lote</option>';
+        el.compareAnalysisSelect.disabled = true;
+        updateComparisonButtonState();
+        return;
+      }
+      const items = getCommonAnalysesForLot(lotIdRaw);
+      if(!items.length){
+        el.compareAnalysisSelect.innerHTML = '<option value="">Sin análisis foliares registrados</option>';
+        el.compareAnalysisSelect.disabled = true;
+        updateComparisonButtonState();
+        return;
+      }
+      const options = items.map((item, idx) => {
+        const date = item?.date || item?.created_at || "";
+        const suffix = idx === 0 ? " (más reciente)" : "";
+        return `<option value="${item.id}"${idx === 0 ? " selected" : ""}>Análisis del ${date}${suffix}</option>`;
+      });
+      el.compareAnalysisSelect.innerHTML = options.join("");
+      el.compareAnalysisSelect.disabled = false;
       updateComparisonButtonState();
     }
 
@@ -1435,7 +1494,8 @@
       if(mode === "lot_vs_objective"){
         const lot = el.compareLotSelect ? el.compareLotSelect.value : "";
         const objective = el.compareObjectiveSelect ? el.compareObjectiveSelect.value : "";
-        ready = !!(lot && objective);
+        const analysisOk = !el.compareAnalysisSelect || !!el.compareAnalysisSelect.value;
+        ready = !!(lot && objective && analysisOk);
       }else{
         const lotA = el.compareLotASelect ? el.compareLotASelect.value : "";
         const lotB = el.compareLotBSelect ? el.compareLotBSelect.value : "";
@@ -1477,9 +1537,18 @@
         setCompareHint("Selecciona ambos lotes para comparar y generar el informe.");
         return;
       }
+      const lotValue = el.compareLotSelect ? el.compareLotSelect.value : "";
+      if(lotValue && el.compareAnalysisSelect && el.compareAnalysisSelect.disabled){
+        setCompareHint("El lote seleccionado no tiene análisis foliares registrados.", true);
+        return;
+      }
+      if(lotValue && el.compareAnalysisSelect && !el.compareAnalysisSelect.value){
+        setCompareHint("Selecciona el análisis del lote que quieres comparar.");
+        return;
+      }
       const objectiveValue = el.compareObjectiveSelect ? el.compareObjectiveSelect.value : "";
-      if(objectiveValue){
-        setCompareHint("Selecciona el lote y objetivo ideal para generar la comparación.");
+      if(objectiveValue || lotValue){
+        setCompareHint("Selecciona el lote, su análisis y el objetivo ideal para generar la comparación.");
         return;
       }
       setCompareHint("Cuando tengas al menos un lote con análisis guardado podrás lanzar la comparación y ver la tabla de Ley de Mínimos.");
@@ -1498,40 +1567,6 @@
       }
       await updateStatsForLayer(layer);
       return entry.areaStats || null;
-    }
-
-    async function createObjectiveFromStats(areaStats, cropId){
-      if(!areaStats || !Array.isArray(areaStats.nutrients) || !cropId){
-        return null;
-      }
-      const payload = {
-        crop_id: Number(cropId),
-        target_value: 0,
-      };
-      areaStats.nutrients.forEach(item => {
-        const nutrientId = item?.nutrient_id;
-        const value = parseFloat(item?.target_value);
-        if(!nutrientId || !Number.isFinite(value)){
-          return;
-        }
-        payload[`nutrient_${nutrientId}`] = value;
-      });
-      const csrf = getCsrfToken();
-      const res = await fetch(ENDPOINTS.foliageObjectives, {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRF-TOKEN": csrf || "",
-        },
-        body: JSON.stringify(payload),
-      });
-      const body = await res.json().catch(() => ({}));
-      if(!res.ok){
-        const message = body?.description || body?.error || "No se pudo crear el objetivo.";
-        throw new Error(message);
-      }
-      return body.id || body?.data?.id || null;
     }
 
     function toggleNewLotFields(force){
@@ -1578,6 +1613,14 @@
           el.analysisEnergyInput.value = Number(energyMcal).toFixed(2);
         }else{
           el.analysisEnergyInput.value = "";
+        }
+      }
+      if(el.analysisYieldInput){
+        const yieldUaHa = lastAreaStats?.bromatologia?.aforo_ua_ha;
+        if(yieldUaHa != null && isFinite(yieldUaHa)){
+          el.analysisYieldInput.value = Number(yieldUaHa).toFixed(2);
+        }else{
+          el.analysisYieldInput.value = "";
         }
       }
       if(el.analysisLotAreaInput){
@@ -1733,6 +1776,7 @@
         const data = await res.json().catch(() => []);
         commonAnalyses = Array.isArray(data) ? data : [];
         renderAnalysisDates();
+        renderCompareAnalysisOptions();
       }catch(err){
         console.error("common-analyses", err);
       }
@@ -1920,6 +1964,7 @@
             date: dateLabel,
           });
           renderAnalysisDates();
+          renderCompareAnalysisOptions();
         }
 
         const leafPayload = {
@@ -1951,6 +1996,26 @@
         if(!leafRes.ok){
           throw new Error(leafBody?.description || leafBody?.error || "No se pudo crear el analisis foliar.");
         }
+
+        // Snapshot RGB del lote (best-effort): nunca bloquea el guardado.
+        try{
+          const snapVerts = _submitDrawnLayers.length > 0
+            ? getRasterVertices(_submitDrawnLayers[0])
+            : null;
+          const snapAssetId = imageMeta && imageMeta.media_asset_id ? Number(imageMeta.media_asset_id) : null;
+          if(snapVerts && snapVerts.length >= 3 && snapAssetId){
+            fetch(ENDPOINTS.lotSnapshot, {
+              method: "POST",
+              credentials: "include",
+              headers: { "Content-Type": "application/json", "X-CSRF-TOKEN": csrf || "" },
+              body: JSON.stringify({
+                common_analysis_id: Number(commonId),
+                media_asset_id: snapAssetId,
+                vertices: snapVerts,
+              }),
+            }).catch(() => {});
+          }
+        }catch(_snapErr){ /* silencioso */ }
 
         // Asociar polígono al lote (solo si es lote existente y hay geometría activa)
         if(!createLot && _submitGeojson){
@@ -2118,6 +2183,8 @@
       if(el.bromaFdn)  el.bromaFdn.textContent  = broma.fdn_pct   != null ? Number(broma.fdn_pct).toFixed(2)   : "--";
       if(el.bromaMcal) el.bromaMcal.textContent = broma.energia_mcal != null ? Number(broma.energia_mcal).toFixed(2) : "--";
       if(el.bromaMj)   el.bromaMj.textContent   = broma.energia_mj != null ? Number(broma.energia_mj).toFixed(2)  : "--";
+      if(el.bromaEnl)  el.bromaEnl.textContent  = broma.energia2_mcal != null ? Number(broma.energia2_mcal).toFixed(2) : "--";
+      if(el.bromaAforo) el.bromaAforo.textContent = broma.aforo_ua_ha != null ? Number(broma.aforo_ua_ha).toFixed(2) : "--";
       if(el.bromaWarning){
         if(broma.en_rango === false){
           el.bromaWarning.textContent = "Índice fuera del rango calibrado — estimación aproximada";
@@ -3209,7 +3276,8 @@
         input.addEventListener('change', updateCompareMode);
       });
     }
-    if(el.compareLotSelect){ el.compareLotSelect.addEventListener('change', updateComparisonButtonState); }
+    if(el.compareLotSelect){ el.compareLotSelect.addEventListener('change', renderCompareAnalysisOptions); }
+    if(el.compareAnalysisSelect){ el.compareAnalysisSelect.addEventListener('change', updateComparisonButtonState); }
     if(el.compareObjectiveSelect){ el.compareObjectiveSelect.addEventListener('change', updateComparisonButtonState); }
     if(el.compareLotASelect){ el.compareLotASelect.addEventListener('change', updateComparisonButtonState); }
     if(el.compareLotBSelect){ el.compareLotBSelect.addEventListener('change', updateComparisonButtonState); }
@@ -3242,9 +3310,10 @@
             if(!Number.isFinite(lotId)){
               throw new Error("Selecciona un lote valido para generar el informe.");
             }
-            const commonId = getLatestCommonAnalysisId(lotId);
-            if(!commonId){
-              throw new Error("El lote seleccionado no tiene analisis foliares registrados.");
+            const analysisRaw = el.compareAnalysisSelect ? el.compareAnalysisSelect.value : "";
+            const commonId = analysisRaw ? Number(analysisRaw) : getLatestCommonAnalysisId(lotId);
+            if(!commonId || !Number.isFinite(Number(commonId))){
+              throw new Error("Selecciona el análisis del lote para generar la comparación.");
             }
             payload.lot_id = lotId;
             payload.common_analysis_id = Number(commonId);
@@ -3286,6 +3355,10 @@
               stats: entryA.stats,
               area_stats: cloneAreaStats(areaStats),
               area_ha: layerA ? computeAreaHaForLayer(layerA) : null,
+              linked_lot_id: entryA.linkedLotId ? Number(entryA.linkedLotId) : null,
+              linked_common_analysis_id: entryA.linkedCommonAnalysisId
+                ? Number(entryA.linkedCommonAnalysisId)
+                : null,
             };
             payload.lot_b = {
               id: entryB.id,
@@ -3313,6 +3386,8 @@
             params.set("lot_a_id", String(payload.lot_a.id));
             params.set("lot_a_name", payload.lot_a.name || "");
             params.set("lot_a_area_ha", payload.lot_a.area_ha ? String(payload.lot_a.area_ha) : "");
+            if (payload.lot_a.linked_lot_id) params.set("lot_a_linked_lot_id", String(payload.lot_a.linked_lot_id));
+            if (payload.lot_a.linked_common_analysis_id) params.set("lot_a_linked_common_analysis_id", String(payload.lot_a.linked_common_analysis_id));
             params.set("lot_b_id", String(payload.lot_b.id));
             params.set("lot_b_name", payload.lot_b.name || "");
             params.set("lot_b_area_ha", payload.lot_b.area_ha ? String(payload.lot_b.area_ha) : "");

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from typing import Optional, Tuple
 
 from flask import current_app
@@ -18,6 +19,7 @@ from .helpers import (
     extract_image_info,
     generate_webp_thumbnails,
     guess_mime,
+    validate_tiff_upload,
 )
 from .models import Asset, AssetType, AssetVariant, StorageLocation
 
@@ -66,6 +68,17 @@ class MediaController:
         capture = capture_upload_to_temp(file)
         digest = capture.sha256
         size_bytes = capture.size_bytes
+
+        # Validación temprana de TIFFs: rechazar archivos estructuralmente
+        # corruptos (cabecera sin IFD, truncados, TIFF clásico >= 4 GiB) en
+        # el momento del upload, en vez de fallar después en el worker de
+        # preprocesamiento con un error críptico de GDAL.
+        if ext in {".tif", ".tiff"}:
+            validation_error = validate_tiff_upload(capture.temp_path, size_bytes)
+            if validation_error:
+                capture.discard()
+                raise ValueError(validation_error)
+
         existing_asset = (
             Asset.query.filter_by(sha256=digest, size_bytes=size_bytes)
             .order_by(Asset.id.desc())

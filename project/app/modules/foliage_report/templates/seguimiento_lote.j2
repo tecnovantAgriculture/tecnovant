@@ -1,0 +1,233 @@
+{# ----------------------------------------------------------------
+   Seguimiento Foliar Post-Aplicación
+   - Timeline de análisis del lote con rol (pre/post/unclassified)
+   - Tabla comparativa pre/post al seleccionar un follow-up
+   - Gráfico de evolución (placeholder - render client-side via fetch)
+---------------------------------------------------------------- #}
+{% extends "base.j2" %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-6" data-controller="seguimiento-lote"
+     data-seguimiento-lote-lot-id-value="{{ lot_id }}">
+
+  <nav class="text-sm text-gray-500 mb-4" aria-label="Breadcrumb">
+    <a href="/dashboard/foliage" class="hover:underline">Dashboard</a>
+    <span class="mx-1">/</span>
+    <a href="/dashboard/foliage/lots" class="hover:underline">Lotes</a>
+    <span class="mx-1">/</span>
+    <span class="text-gray-700 font-medium">{{ lot_name }} · {{ farm_name }}</span>
+  </nav>
+
+  <header class="mb-6">
+    <h1 class="text-2xl font-semibold text-gray-800">
+      Seguimiento Foliar — {{ lot_name }}
+    </h1>
+    <p class="text-gray-500 text-sm">
+      Evolución nutricional del lote, con análisis previos y posteriores a cada
+      aplicación de nutrientes.
+    </p>
+  </header>
+
+  {# ----- Sección 1: Timeline de análisis ----- #}
+  <section class="bg-white shadow rounded-lg p-4 mb-6">
+    <h2 class="text-lg font-semibold mb-3">Timeline de análisis</h2>
+    <div class="overflow-x-auto">
+      <table class="min-w-full text-sm">
+        <thead>
+          <tr class="text-left text-gray-600 border-b">
+            <th class="py-2 pr-4">Fecha</th>
+            <th class="py-2 pr-4">Rol</th>
+            <th class="py-2 pr-4">Semanas desde aplicación</th>
+            <th class="py-2 pr-4">Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="seguimiento-timeline-body">
+          <tr>
+            <td colspan="4" class="py-3 text-gray-400">Cargando…</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  {# ----- Sección 2: Comparación pre/post ----- #}
+  <section class="bg-white shadow rounded-lg p-4 mb-6">
+    <h2 class="text-lg font-semibold mb-3">Comparación pre/post</h2>
+    <p class="text-sm text-gray-500 mb-3" id="seguimiento-comparison-hint">
+      Selecciona un análisis con rol <span class="font-medium">post-aplicación</span>
+      en la timeline para ver la comparación.
+    </p>
+    <div class="overflow-x-auto">
+      <table class="min-w-full text-sm hidden" id="seguimiento-comparison-table">
+        <thead>
+          <tr class="text-left text-gray-600 border-b">
+            <th class="py-2 pr-4">Nutriente</th>
+            <th class="py-2 pr-4">Pre</th>
+            <th class="py-2 pr-4">Post</th>
+            <th class="py-2 pr-4">Δ%</th>
+            <th class="py-2 pr-4">Veredicto</th>
+          </tr>
+        </thead>
+        <tbody id="seguimiento-comparison-body"></tbody>
+      </table>
+    </div>
+  </section>
+
+  {# ----- Sección 3: Gráfico de evolución (placeholder) ----- #}
+  <section class="bg-white shadow rounded-lg p-4">
+    <h2 class="text-lg font-semibold mb-3">Gráfico de evolución</h2>
+    <p class="text-sm text-gray-500">
+      Visualización temporal del valor de cada nutriente a lo largo de los
+      análisis del lote. (Render client-side; placeholder para fase futura.)
+    </p>
+    <div id="seguimiento-evolution-chart" class="h-48 flex items-center
+                                                justify-center text-gray-400">
+      Sin datos suficientes
+    </div>
+  </section>
+</div>
+
+<script>
+(function () {
+  const lotId = document
+    .querySelector('[data-controller="seguimiento-lote"]')
+    .dataset.seguimientoLoteLotIdValue;
+  const apiBase = "/api/foliage/report";
+  const timelineBody = document.getElementById("seguimiento-timeline-body");
+  const comparisonTable = document.getElementById(
+    "seguimiento-comparison-table"
+  );
+  const comparisonBody = document.getElementById(
+    "seguimiento-comparison-body"
+  );
+  const comparisonHint = document.getElementById(
+    "seguimiento-comparison-hint"
+  );
+
+  function csrfToken() {
+    const m = document.querySelector('meta[name="csrf-token"]');
+    return m ? m.getAttribute("content") : "";
+  }
+
+  async function fetchJSON(url, opts) {
+    opts = opts || {};
+    opts.headers = Object.assign(
+      { "Content-Type": "application/json" },
+      opts.headers || {}
+    );
+    opts.credentials = "same-origin";
+    if (opts.method && opts.method.toUpperCase() !== "GET") {
+      opts.headers["X-CSRF-TOKEN"] = csrfToken();
+    }
+    const r = await fetch(url, opts);
+    if (!r.ok) {
+      throw new Error(`HTTP ${r.status} en ${url}`);
+    }
+    return r.json();
+  }
+
+  function badgeColor(role) {
+    return {
+      pre_application: "bg-blue-100 text-blue-700",
+      post_application: "bg-green-100 text-green-700",
+      unclassified: "bg-gray-100 text-gray-600",
+    }[role] || "bg-gray-100 text-gray-600";
+  }
+
+  function verdictColor(status) {
+    return {
+      improved: "bg-green-100 text-green-700",
+      worsened: "bg-red-100 text-red-700",
+      unchanged: "bg-gray-100 text-gray-600",
+      incomplete: "bg-yellow-100 text-yellow-700",
+    }[status] || "bg-gray-100 text-gray-600";
+  }
+
+  function roleLabel(role) {
+    return {
+      pre_application: "Pre-aplicación",
+      post_application: "Post-aplicación",
+      unclassified: "Sin clasificar",
+    }[role] || role;
+  }
+
+  async function loadTimeline() {
+    const data = await fetchJSON(`${apiBase}/lots/${lotId}/evolution`);
+    timelineBody.innerHTML = "";
+    if (!data.timeline || data.timeline.length === 0) {
+      timelineBody.innerHTML =
+        '<tr><td colspan="4" class="py-3 text-gray-400">' +
+        "Este lote aún no tiene análisis." +
+        "</td></tr>";
+      return;
+    }
+    data.timeline.forEach((entry) => {
+      const tr = document.createElement("tr");
+      tr.className = "border-b";
+      const weeks = entry.weeks_after_application == null
+        ? "N/A"
+        : `${entry.weeks_after_application} sem.`;
+      const actions =
+        entry.role === "post_application" && entry.follow_up_id
+          ? `<button class="text-blue-600 hover:underline"
+                    data-follow-up-id="${entry.follow_up_id}">
+                Ver comparación
+              </button>`
+          : "—";
+      tr.innerHTML = `
+        <td class="py-2 pr-4">${entry.date}</td>
+        <td class="py-2 pr-4">
+          <span class="px-2 py-1 rounded text-xs ${badgeColor(entry.role)}">
+            ${roleLabel(entry.role)}
+          </span>
+        </td>
+        <td class="py-2 pr-4">${weeks}</td>
+        <td class="py-2 pr-4">${actions}</td>`;
+      timelineBody.appendChild(tr);
+    });
+    timelineBody.querySelectorAll("button[data-follow-up-id]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        loadComparison(btn.dataset.followUpId);
+      });
+    });
+  }
+
+  async function loadComparison(followUpId) {
+    comparisonHint.textContent = "Cargando comparación…";
+    comparisonTable.classList.add("hidden");
+    const data = await fetchJSON(
+      `${apiBase}/follow-up/${followUpId}/comparison`
+    );
+    comparisonBody.innerHTML = "";
+    Object.keys(data.nutrients || {})
+      .sort()
+      .forEach((name) => {
+        const n = data.nutrients[name];
+        const tr = document.createElement("tr");
+        tr.className = "border-b";
+        const delta = n.delta_pct == null ? "—" : `${n.delta_pct}%`;
+        tr.innerHTML = `
+          <td class="py-2 pr-4 font-medium">${name}</td>
+          <td class="py-2 pr-4">${n.pre == null ? "—" : n.pre}</td>
+          <td class="py-2 pr-4">${n.post == null ? "—" : n.post}</td>
+          <td class="py-2 pr-4">${delta}</td>
+          <td class="py-2 pr-4">
+            <span class="px-2 py-1 rounded text-xs ${verdictColor(n.status)}">
+              ${n.status}
+            </span>
+          </td>`;
+        comparisonBody.appendChild(tr);
+      });
+    comparisonHint.textContent = `Comparación: pre ${data.pre.date} → post ${data.post.date} (${data.days_elapsed || "?"} días)`;
+    comparisonTable.classList.remove("hidden");
+  }
+
+  loadTimeline().catch((e) => {
+    timelineBody.innerHTML =
+      '<tr><td colspan="4" class="py-3 text-red-500">Error: ' +
+      e.message +
+      "</td></tr>";
+  });
+})();
+</script>
+{% endblock %}

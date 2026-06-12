@@ -1,6 +1,7 @@
 {% extends "base.j2" %}
 {% set dashboard = True %}
-{% from "settings/_ui_class.j2" import base_button_classes, button_bg_color, delete_button_bg_color, focus_ring_color, border_color %}
+{% set csv_download_url = url_for('agrovista_api.download_secondary_objectives_csv') %}
+{% from "settings/_ui_class.j2" import base_button_classes, button_bg_color, delete_button_bg_color, focus_ring_color, border_color, bg_color, text_color, hover_bg_color %}
 
 {% block content %}
 <div class="bg-white dark:bg-gray-900 rounded-lg shadow p-6">
@@ -12,6 +13,7 @@
     <div class="flex gap-2">
       <button id="btn-new-objective" type="button" class="{{ base_button_classes }} {{ button_bg_color }} text-white {{ focus_ring_color }}">Crear manual</button>
       <button id="btn-refresh-objectives" type="button" class="{{ base_button_classes }} border {{ border_color }} bg-white dark:bg-gray-900">Actualizar</button>
+      <a href="{{ csv_download_url }}" class="{{ base_button_classes }} border {{ border_color }} {{ bg_color }} {{ text_color }} {{ hover_bg_color }} {{ focus_ring_color }}">Descargar CSV</a>
     </div>
   </div>
 

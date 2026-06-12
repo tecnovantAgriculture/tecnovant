@@ -23,6 +23,56 @@ from logging.handlers import RotatingFileHandler
 from flask import Flask, Response, render_template, request
 from werkzeug.exceptions import HTTPException, RequestEntityTooLarge
 
+# Header names and body keys whose values must never reach the logs.
+_SENSITIVE_HEADERS = frozenset(
+    {"cookie", "authorization", "x-csrf-token", "x-csrftoken"}
+)
+_SENSITIVE_BODY_KEYS = frozenset(
+    {
+        "password",
+        "new_password",
+        "current_password",
+        "confirm_password",
+        "token",
+        "access_token",
+        "refresh_token",
+    }
+)
+# Endpoints whose body is never safe to log even if it cannot be parsed.
+_AUTH_PATH_HINTS = ("login", "refresh", "reset", "forgot")
+
+
+def _redact_headers(headers) -> str:
+    """Render request headers as a string with sensitive values masked."""
+    parts = []
+    for name, value in headers.items():
+        if name.lower() in _SENSITIVE_HEADERS:
+            value = "[REDACTED]"
+        parts.append(f"{name}: {value}")
+    return "; ".join(parts)
+
+
+def _redact_body(req) -> str:
+    """Return a log-safe representation of the request body.
+
+    Masks known credential fields; refuses to log raw bodies on auth
+    endpoints or non-parseable/binary payloads (e.g. file uploads).
+    """
+    path = (req.path or "").lower()
+    if any(hint in path for hint in _AUTH_PATH_HINTS):
+        return "[REDACTED: auth endpoint]"
+
+    data = req.get_json(silent=True)
+    if not isinstance(data, dict):
+        data = dict(req.form) if req.form else None
+    if isinstance(data, dict):
+        safe = {
+            k: ("[REDACTED]" if k.lower() in _SENSITIVE_BODY_KEYS else v)
+            for k, v in data.items()
+        }
+        return json.dumps(safe, ensure_ascii=False)
+    return "[omitted]"
+
 
 def setup_logging(log_file="errors.log"):
     """
@@ -109,7 +159,8 @@ def error_handler(app: Flask, logger) -> None:
             logger.error(
                 f"Error occurred: {str(e)}\n"
                 f"Method: {request.method}, Path: {request.path}, "
-                f"Headers: {request.headers}, Body: {request.get_data(as_text=True)}\n"
+                f"Headers: {_redact_headers(request.headers)}, "
+                f"Body: {_redact_body(request)}\n"
                 f"Traceback: {traceback.format_exc()}"
             )
 

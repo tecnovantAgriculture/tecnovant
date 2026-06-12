@@ -126,23 +126,6 @@
 
 {% block extra_js %}
 <script>
-    // Función para obtener CSRF token de las cookies
-    function getCookie(name) {
-        let cookieValue = null;
-        if (document.cookie && document.cookie !== '') {
-            const cookies = document.cookie.split(';');
-            for (let i = 0; i < cookies.length; i++) {
-                const cookie = cookies[i].trim();
-                if (cookie.substring(0, name.length + 1) === (name + '=')) {
-                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-                    break;
-                }
-            }
-        }
-        return cookieValue;
-    }
-    const csrfToken = getCookie('csrf_access_token'); // O 'csrf_refresh_token' si es necesario
-
     document.addEventListener('DOMContentLoaded', function() {
         const farmSelect = document.getElementById('farm-select');
         const lotSelect = document.getElementById('lot-select');
@@ -167,6 +150,8 @@
         let nutrientOrder = [];
         let targetValues = {};
         let actualValues = {};
+        let secondaryObjectivesMap = {};
+        let allObjectivesCache = [];
 
 
         // Function to clear and disable a select element
@@ -249,6 +234,94 @@ function updateCropInfo(cropId) {
             cropInfoDiv.classList.remove('hidden');
         });
 }
+
+        // Objetivos secundarios (Agrovista): se listan junto a los objetivos
+        // de cultivo y, al generar, se materializan como Objective de foliage
+        // (mismo patrón que la comparación de agrovista en comparacion-config).
+        function loadSecondaryObjectives() {
+            fetch('{{ url_for("agrovista_api.list_secondary_objectives") }}')
+                .then(response => response.ok ? response.json() : [])
+                .then(items => {
+                    if (!Array.isArray(items) || items.length === 0) return;
+                    const prev = objectiveSelect.querySelector('optgroup[data-secondary]');
+                    if (prev) prev.remove();
+                    const group = document.createElement('optgroup');
+                    group.label = 'Objetivos secundarios (Agrovista)';
+                    group.dataset.secondary = '1';
+                    secondaryObjectivesMap = {};
+                    items.forEach(obj => {
+                        if (!obj || obj.id == null) return;
+                        secondaryObjectivesMap[obj.id] = obj;
+                        const name = (obj.analysis_crop && obj.analysis_crop.name) || 'Referencia';
+                        const option = new Option(`${name} · Secundario #${obj.id}`, `secondary:${obj.id}`);
+                        option.dataset.cropId = '';
+                        group.appendChild(option);
+                    });
+                    objectiveSelect.appendChild(group);
+                })
+                .catch(error => console.error('Error al cargar objetivos secundarios:', error));
+        }
+
+        function updateSecondaryObjectiveInfo(secObj) {
+            if (!secObj) {
+                cropInfoDiv.classList.add('hidden');
+                cropInfoContent.innerHTML = '';
+                targetValues = {};
+                updateCalculationTable();
+                return;
+            }
+            const targets = Array.isArray(secObj.nutrient_targets) ? secObj.nutrient_targets : [];
+            const cropName = (secObj.analysis_crop && secObj.analysis_crop.name) || `Secundario #${secObj.id}`;
+            let content = `
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                    <div>
+                        <label class="block text-sm font-medium mb-1 text-gray-900 dark:text-gray-100">ID</label>
+                        <input type="text" value="Secundario #${secObj.id}" disabled class="w-full border p-1 rounded dark:bg-gray-700 dark:border-gray-600">
+                    </div>
+                    <div class="md:col-span-3">
+                        <label class="block text-sm font-medium mb-1 text-gray-900 dark:text-gray-100">Referencia</label>
+                        <input type="text" value="${cropName}" disabled class="w-full border p-1 rounded dark:bg-gray-700 dark:border-gray-600">
+                    </div>
+                </div>
+            `;
+            targetValues = {};
+            if (targets.length > 0) {
+                nutrientOrder = targets.map(t => t.nutrient_name).filter(Boolean);
+                content += `<div class="grid grid-cols-1 md:grid-cols-13 gap-13">`;
+                targets.forEach(t => {
+                    if (!t.nutrient_name) return;
+                    const value = parseFloat(t.target_value);
+                    if (!isNaN(value)) targetValues[t.nutrient_name] = value;
+                    content += `
+                        <div>
+                            <label class="block text-tiny font-medium mb-1 text-gray-900 dark:text-gray-100">${t.nutrient_name}</label>
+                            <div class="flex items-center gap-2">
+                                <input type="number" step="any" inputmode="decimal" value="${t.target_value}" data-nutrient="${t.nutrient_name}" class="w-full border p-1 rounded dark:bg-gray-700 dark:border-gray-600">
+                            </div>
+                        </div>
+                    `;
+                });
+                content += `</div>`;
+            } else {
+                content += '<p class="text-sm text-gray-500 dark:text-gray-400">El objetivo secundario no tiene nutrientes definidos.</p>';
+            }
+            cropInfoContent.innerHTML = content;
+            cropInfoDiv.classList.remove('hidden');
+            cropInfoContent.querySelectorAll('input[data-nutrient]').forEach(inp => {
+                inp.addEventListener('input', () => {
+                    const n = inp.dataset.nutrient;
+                    const v = parseFloat(inp.value);
+                    if (!isNaN(v)) {
+                        targetValues[n] = v;
+                    } else {
+                        delete targetValues[n];
+                    }
+                    updateCalculationTable();
+                });
+            });
+            updateCVInfo();
+            updateCalculationTable();
+        }
 
         function fetchCVValues(lotId) {
             if (!lotId) {
@@ -590,6 +663,7 @@ function updateCropInfo(cropId) {
                 })
                 .then(objectives => {
                     resetSelect(objectiveSelect, 'Seleccione un objetivo...');
+                    allObjectivesCache = Array.isArray(objectives) ? objectives : [];
                     objectives.forEach(obj => {
                         const option = new Option(`${obj.cultivo} - ${obj.name}`, obj.id);
 
@@ -600,6 +674,7 @@ function updateCropInfo(cropId) {
                         }
                         objectiveSelect.add(option);
                     });
+                    loadSecondaryObjectives();
                     if (document.getElementById('debug-objectives-data')) {
                         document.getElementById('debug-objectives-data').textContent = JSON.stringify(objectives, null, 2);
                     }
@@ -615,6 +690,11 @@ function updateCropInfo(cropId) {
 
         // Actualizar información del cultivo cuando cambia el objetivo seleccionado
         objectiveSelect.addEventListener('change', function() {
+            const value = this.value || '';
+            if (value.indexOf('secondary:') === 0) {
+                updateSecondaryObjectiveInfo(secondaryObjectivesMap[value.split(':')[1]]);
+                return;
+            }
             const selectedOption = this.options[this.selectedIndex];
             let cropId = selectedOption.dataset.cropId;
              if (!cropId || cropId === 'null') cropId = '';
@@ -643,99 +723,41 @@ function updateCropInfo(cropId) {
                 return;
             }
 
-            // ✅ Convertir a tipos esperados por el backend
-            const payload = {
-                lot_id: parseInt(data.lot_id),
-                common_analysis_id: parseInt(data.selected_analyses[0]),
-                objective_id: parseInt(data.objective_id),
-                title: data.report_title,
-                minimum_law_analyses: data.minimum_law_analyses
-            };
+            // Redirigir a la comparación nutricional de Agrovista para que ambos
+            // caminos (desde el NDVI tool y desde este formulario) sigan el
+            // mismo flujo: comparacion_config → "Guardar como informe" →
+            // vista_reporte.
+            let objectiveType = 'crop';
+            let objectiveIdForUrl = data.objective_id;
+            if (String(objectiveIdForUrl).indexOf('secondary:') === 0) {
+                objectiveType = 'secondary';
+                objectiveIdForUrl = objectiveIdForUrl.split(':')[1];
+            }
 
-            // New NaN checks:
-            if (isNaN(payload.lot_id)) {
-                errorMessage.textContent = 'Valor inválido para la selección de Lote. Por favor, vuelva a seleccionarlo y asegúrese de que sea un número.';
-                errorMessage.classList.remove('hidden');
-                loadingMessage.classList.add('hidden');
-                generateBtn.disabled = false;
-                return;
-            }
-            if (isNaN(payload.objective_id)) {
-                errorMessage.textContent = 'Valor inválido para la selección de Objetivo. Por favor, vuelva a seleccionarlo y asegúrese de que sea un número.';
-                errorMessage.classList.remove('hidden');
-                loadingMessage.classList.add('hidden');
-                generateBtn.disabled = false;
-                return;
-            }
-            if (isNaN(payload.common_analysis_id)) {
+            const commonAnalysisId = parseInt(data.selected_analyses[0]);
+            if (isNaN(commonAnalysisId)) {
                 errorMessage.textContent = 'Valor inválido en el Análisis seleccionado. Por favor, revise su selección.';
                 errorMessage.classList.remove('hidden');
                 loadingMessage.classList.add('hidden');
                 generateBtn.disabled = false;
                 return;
             }
-//////////////////////////////////
-// Log de depuración: Mostrar todos los datos recolectados
-    console.log("===== DATOS RECOLECTADOS DEL FORMULARIO =====");
-    
-    // 1. Mostrar todos los campos del formulario
-    console.log("FormData completo:");
-    for (const [key, value] of formData.entries()) {
-        console.log(`- ${key}:`, value);
-    }
-    
-    // 2. Mostrar análisis seleccionados
-    const selectedAnalyses = formData.getAll('selected_analyses');
-    console.log("Análisis seleccionados:", selectedAnalyses);
-    console.log("Tipo de análisis seleccionados:", typeof selectedAnalyses[0]);
-    
-    console.log("Datos en formato JSON:", JSON.stringify(data, null, 2));
-    
-  
-    console.log("Payload final:", JSON.stringify(payload, null, 2));
-    
-    // 5. Validación adicional de tipos
-    console.log("\nValidación de tipos:");
-    console.log("lot_id (debe ser número):", typeof payload.lot_id);
-    console.log("common_analysis_id (debe ser número):",
-                typeof payload.common_analysis_id);
-    console.log("objective_id (debe ser número):", typeof payload.objective_id);
-    console.log("title (debe ser string):", typeof payload.title);
-    
-    // 6. Validación de CSRF token
-    console.log("\nCSRF Token:", csrfToken ? "Presente" : "Faltante");
-//////////////////////////////////
-            fetch('{{ url_for("foliage_report_api.generate_report") }}', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': csrfToken
-                },
-                body: JSON.stringify(payload)
-            })
-            .then(response => response.json().then(body => ({ ok: response.ok, status: response.status, body })))
-            .then(({ ok, status, body }) => {
-                loadingMessage.classList.add('hidden');
-                if (ok && body.report_id) {
-                    successMessage.textContent = `Reporte ${body.report_id} generado con éxito. Redirigiendo...`;
-                    successMessage.classList.remove('hidden');
-                    const reportViewUrl = form.dataset.reportViewUrl.replace('0', body.report_id);
-                    setTimeout(() => {
-                        window.location.href = reportViewUrl;
-                    }, 1500);
-                } else {
-                    errorMessage.textContent = `Error ${status}: ${body.error || body.message}`;
-                    errorMessage.classList.remove('hidden');
-                    generateBtn.disabled = false;
-                }
-            })
-            .catch(error => {
-                console.error('Error al generar reporte:', error);
-                loadingMessage.classList.add('hidden');
-                errorMessage.textContent = 'Error de red al generar el reporte.';
-                errorMessage.classList.remove('hidden');
-                generateBtn.disabled = false;
-            });
+
+            const lotOption = lotSelect.options[lotSelect.selectedIndex];
+            const objOption = objectiveSelect.options[objectiveSelect.selectedIndex];
+            const lotLabel = lotOption ? lotOption.text : '';
+            const objectiveLabel = objOption ? objOption.text : '';
+
+            const comparisonUrl = new URL('{{ url_for("agrovista.comparison_config") }}', window.location.origin);
+            comparisonUrl.searchParams.set('mode', 'lot_vs_objective');
+            comparisonUrl.searchParams.set('lot_id', data.lot_id);
+            comparisonUrl.searchParams.set('common_analysis_id', commonAnalysisId);
+            comparisonUrl.searchParams.set('objective_id', objectiveIdForUrl);
+            comparisonUrl.searchParams.set('objective_type', objectiveType);
+            comparisonUrl.searchParams.set('objective_label', objectiveLabel);
+            comparisonUrl.searchParams.set('lot_label', lotLabel);
+
+            window.location.href = comparisonUrl.toString();
         });
     });
     // Pass the base URL for report viewing to the form's dataset for JavaScript access

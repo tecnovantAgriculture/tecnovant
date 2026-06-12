@@ -162,6 +162,15 @@
             <li>
                     <a class="function" href="#secondary_target_map">secondary_target_map</a>
             </li>
+            <li>
+                    <a class="variable" href="#NANO_PRODUCT_GRADES">NANO_PRODUCT_GRADES</a>
+            </li>
+            <li>
+                    <a class="variable" href="#DEFAULT_NANO_GRADE">DEFAULT_NANO_GRADE</a>
+            </li>
+            <li>
+                    <a class="function" href="#compute_mineral_balance">compute_mineral_balance</a>
+            </li>
     </ul>
 
 
@@ -1228,6 +1237,144 @@ notebooks without rediscovering implementation details.</p>
 </span><span id="L-1034"><a href="#L-1034"><span class="linenos">1034</span></a>        <span class="k">except</span> <span class="p">(</span><span class="ne">TypeError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">):</span>
 </span><span id="L-1035"><a href="#L-1035"><span class="linenos">1035</span></a>            <span class="k">continue</span>
 </span><span id="L-1036"><a href="#L-1036"><span class="linenos">1036</span></a>    <span class="k">return</span> <span class="n">mapping</span>
+</span><span id="L-1037"><a href="#L-1037"><span class="linenos">1037</span></a>
+</span><span id="L-1038"><a href="#L-1038"><span class="linenos">1038</span></a>
+</span><span id="L-1039"><a href="#L-1039"><span class="linenos">1039</span></a><span class="c1"># Concentración (grado) de los productos de la línea nano, por símbolo.</span>
+</span><span id="L-1040"><a href="#L-1040"><span class="linenos">1040</span></a><span class="c1"># Port del btn_Nano_formula del FRM_Balance (Foliar Digital.xlsm).</span>
+</span><span id="L-1041"><a href="#L-1041"><span class="linenos">1041</span></a><span class="n">NANO_PRODUCT_GRADES</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;N&quot;</span><span class="p">:</span> <span class="mf">16.0</span><span class="p">,</span> <span class="s2">&quot;P&quot;</span><span class="p">:</span> <span class="mf">11.0</span><span class="p">,</span> <span class="s2">&quot;K&quot;</span><span class="p">:</span> <span class="mf">19.0</span><span class="p">}</span>
+</span><span id="L-1042"><a href="#L-1042"><span class="linenos">1042</span></a><span class="n">DEFAULT_NANO_GRADE</span> <span class="o">=</span> <span class="mf">40.0</span>
+</span><span id="L-1043"><a href="#L-1043"><span class="linenos">1043</span></a>
+</span><span id="L-1044"><a href="#L-1044"><span class="linenos">1044</span></a>
+</span><span id="L-1045"><a href="#L-1045"><span class="linenos">1045</span></a><span class="k">def</span><span class="w"> </span><span class="nf">compute_mineral_balance</span><span class="p">(</span>
+</span><span id="L-1046"><a href="#L-1046"><span class="linenos">1046</span></a>    <span class="n">order</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+</span><span id="L-1047"><a href="#L-1047"><span class="linenos">1047</span></a>    <span class="n">targets</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">],</span>
+</span><span id="L-1048"><a href="#L-1048"><span class="linenos">1048</span></a>    <span class="n">actuals</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">],</span>
+</span><span id="L-1049"><a href="#L-1049"><span class="linenos">1049</span></a>    <span class="n">aforo</span><span class="p">:</span> <span class="nb">object</span><span class="p">,</span>
+</span><span id="L-1050"><a href="#L-1050"><span class="linenos">1050</span></a>    <span class="n">nutrients</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">object</span><span class="p">],</span>
+</span><span id="L-1051"><a href="#L-1051"><span class="linenos">1051</span></a>    <span class="o">*</span><span class="p">,</span>
+</span><span id="L-1052"><a href="#L-1052"><span class="linenos">1052</span></a>    <span class="n">aforo_actual</span><span class="p">:</span> <span class="nb">object</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="L-1053"><a href="#L-1053"><span class="linenos">1053</span></a>    <span class="n">digits</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="mi">2</span><span class="p">,</span>
+</span><span id="L-1054"><a href="#L-1054"><span class="linenos">1054</span></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">]:</span>
+</span><span id="L-1055"><a href="#L-1055"><span class="linenos">1055</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Compute the mineral balance table (port of FRM_Balance in Excel).</span>
+</span><span id="L-1056"><a href="#L-1056"><span class="linenos">1056</span></a>
+</span><span id="L-1057"><a href="#L-1057"><span class="linenos">1057</span></a><span class="sd">    Macros convert as ``% × aforo × 100`` and micros as ``ppm × aforo ÷ 100``</span>
+</span><span id="L-1058"><a href="#L-1058"><span class="linenos">1058</span></a><span class="sd">    to express both sides in kg/ha. The objective row converts with the</span>
+</span><span id="L-1059"><a href="#L-1059"><span class="linenos">1059</span></a><span class="sd">    objective aforo and the actual row with the actual aforo (falling back</span>
+</span><span id="L-1060"><a href="#L-1060"><span class="linenos">1060</span></a><span class="sd">    to the objective one so legacy reports without an actual aforo keep</span>
+</span><span id="L-1061"><a href="#L-1061"><span class="linenos">1061</span></a><span class="sd">    rendering). The difference keeps only deficits (surpluses clamp to 0).</span>
+</span><span id="L-1062"><a href="#L-1062"><span class="linenos">1062</span></a><span class="sd">    The formula grade is each deficit share of the total requirement, and</span>
+</span><span id="L-1063"><a href="#L-1063"><span class="linenos">1063</span></a><span class="sd">    the nano dosage divides each deficit by the nano product concentration</span>
+</span><span id="L-1064"><a href="#L-1064"><span class="linenos">1064</span></a><span class="sd">    (N 16, P 11, K 19, others 40).</span>
+</span><span id="L-1065"><a href="#L-1065"><span class="linenos">1065</span></a>
+</span><span id="L-1066"><a href="#L-1066"><span class="linenos">1066</span></a><span class="sd">    Args:</span>
+</span><span id="L-1067"><a href="#L-1067"><span class="linenos">1067</span></a><span class="sd">        order: Nutrient display order (names as the frontend knows them).</span>
+</span><span id="L-1068"><a href="#L-1068"><span class="linenos">1068</span></a><span class="sd">        targets: Reference values keyed by nutrient name (% or ppm).</span>
+</span><span id="L-1069"><a href="#L-1069"><span class="linenos">1069</span></a><span class="sd">        actuals: Leaf analysis values keyed by nutrient name (% or ppm).</span>
+</span><span id="L-1070"><a href="#L-1070"><span class="linenos">1070</span></a><span class="sd">        aforo: Forage yield of the objective side; converts the objective</span>
+</span><span id="L-1071"><a href="#L-1071"><span class="linenos">1071</span></a><span class="sd">            row and acts as fallback for the actual row.</span>
+</span><span id="L-1072"><a href="#L-1072"><span class="linenos">1072</span></a><span class="sd">        nutrients: ORM ``Nutrient`` rows to classify macro/micro and map</span>
+</span><span id="L-1073"><a href="#L-1073"><span class="linenos">1073</span></a><span class="sd">            names to symbols.</span>
+</span><span id="L-1074"><a href="#L-1074"><span class="linenos">1074</span></a><span class="sd">        aforo_actual: Forage yield of the lot/analysis side; converts the</span>
+</span><span id="L-1075"><a href="#L-1075"><span class="linenos">1075</span></a><span class="sd">            actual row. ``None`` or invalid falls back to ``aforo``.</span>
+</span><span id="L-1076"><a href="#L-1076"><span class="linenos">1076</span></a><span class="sd">        digits: Rounding applied to every numeric output.</span>
+</span><span id="L-1077"><a href="#L-1077"><span class="linenos">1077</span></a>
+</span><span id="L-1078"><a href="#L-1078"><span class="linenos">1078</span></a><span class="sd">    Returns:</span>
+</span><span id="L-1079"><a href="#L-1079"><span class="linenos">1079</span></a><span class="sd">        Dict[str, object]: ``{&quot;entries&quot;: [...], &quot;total_kg_ha&quot;: float|None,</span>
+</span><span id="L-1080"><a href="#L-1080"><span class="linenos">1080</span></a><span class="sd">        &quot;aforo_actual_fallback&quot;: bool}`` where each entry carries</span>
+</span><span id="L-1081"><a href="#L-1081"><span class="linenos">1081</span></a><span class="sd">        objective/actual raw and kg values, the deficit, grade percentage</span>
+</span><span id="L-1082"><a href="#L-1082"><span class="linenos">1082</span></a><span class="sd">        and nano dosage for one nutrient. ``aforo_actual_fallback`` is True</span>
+</span><span id="L-1083"><a href="#L-1083"><span class="linenos">1083</span></a><span class="sd">        when the actual row was converted with the objective aforo because</span>
+</span><span id="L-1084"><a href="#L-1084"><span class="linenos">1084</span></a><span class="sd">        no valid actual aforo was provided.</span>
+</span><span id="L-1085"><a href="#L-1085"><span class="linenos">1085</span></a><span class="sd">    &quot;&quot;&quot;</span>
+</span><span id="L-1086"><a href="#L-1086"><span class="linenos">1086</span></a>
+</span><span id="L-1087"><a href="#L-1087"><span class="linenos">1087</span></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">app.modules.foliage.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">NutrientCategory</span>
+</span><span id="L-1088"><a href="#L-1088"><span class="linenos">1088</span></a>
+</span><span id="L-1089"><a href="#L-1089"><span class="linenos">1089</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">_to_float</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="nb">object</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]:</span>
+</span><span id="L-1090"><a href="#L-1090"><span class="linenos">1090</span></a>        <span class="k">try</span><span class="p">:</span>
+</span><span id="L-1091"><a href="#L-1091"><span class="linenos">1091</span></a>            <span class="n">number</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>  <span class="c1"># type: ignore[arg-type]</span>
+</span><span id="L-1092"><a href="#L-1092"><span class="linenos">1092</span></a>        <span class="k">except</span> <span class="p">(</span><span class="ne">TypeError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">):</span>
+</span><span id="L-1093"><a href="#L-1093"><span class="linenos">1093</span></a>            <span class="k">return</span> <span class="kc">None</span>
+</span><span id="L-1094"><a href="#L-1094"><span class="linenos">1094</span></a>        <span class="k">return</span> <span class="n">number</span> <span class="k">if</span> <span class="n">math</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">number</span><span class="p">)</span> <span class="k">else</span> <span class="kc">None</span>
+</span><span id="L-1095"><a href="#L-1095"><span class="linenos">1095</span></a>
+</span><span id="L-1096"><a href="#L-1096"><span class="linenos">1096</span></a>    <span class="n">info</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">bool</span><span class="p">,</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]]]</span> <span class="o">=</span> <span class="p">{}</span>
+</span><span id="L-1097"><a href="#L-1097"><span class="linenos">1097</span></a>    <span class="k">for</span> <span class="n">nutrient</span> <span class="ow">in</span> <span class="n">nutrients</span><span class="p">:</span>
+</span><span id="L-1098"><a href="#L-1098"><span class="linenos">1098</span></a>        <span class="n">is_macro</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">nutrient</span><span class="p">,</span> <span class="s2">&quot;category&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="o">==</span> <span class="n">NutrientCategory</span><span class="o">.</span><span class="n">MACRONUTRIENT</span>
+</span><span id="L-1099"><a href="#L-1099"><span class="linenos">1099</span></a>        <span class="n">symbol</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">nutrient</span><span class="p">,</span> <span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+</span><span id="L-1100"><a href="#L-1100"><span class="linenos">1100</span></a>        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="nb">filter</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="p">[</span><span class="nb">getattr</span><span class="p">(</span><span class="n">nutrient</span><span class="p">,</span> <span class="s2">&quot;name&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span> <span class="n">symbol</span><span class="p">]):</span>
+</span><span id="L-1101"><a href="#L-1101"><span class="linenos">1101</span></a>            <span class="n">info</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">is_macro</span><span class="p">,</span> <span class="n">symbol</span><span class="p">)</span>
+</span><span id="L-1102"><a href="#L-1102"><span class="linenos">1102</span></a>
+</span><span id="L-1103"><a href="#L-1103"><span class="linenos">1103</span></a>    <span class="n">aforo_val</span> <span class="o">=</span> <span class="n">_to_float</span><span class="p">(</span><span class="n">aforo</span><span class="p">)</span>
+</span><span id="L-1104"><a href="#L-1104"><span class="linenos">1104</span></a>    <span class="k">if</span> <span class="n">aforo_val</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">aforo_val</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+</span><span id="L-1105"><a href="#L-1105"><span class="linenos">1105</span></a>        <span class="n">aforo_val</span> <span class="o">=</span> <span class="kc">None</span>
+</span><span id="L-1106"><a href="#L-1106"><span class="linenos">1106</span></a>    <span class="n">aforo_act_val</span> <span class="o">=</span> <span class="n">_to_float</span><span class="p">(</span><span class="n">aforo_actual</span><span class="p">)</span>
+</span><span id="L-1107"><a href="#L-1107"><span class="linenos">1107</span></a>    <span class="k">if</span> <span class="n">aforo_act_val</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">aforo_act_val</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+</span><span id="L-1108"><a href="#L-1108"><span class="linenos">1108</span></a>        <span class="n">aforo_act_val</span> <span class="o">=</span> <span class="n">aforo_val</span>
+</span><span id="L-1109"><a href="#L-1109"><span class="linenos">1109</span></a>        <span class="n">aforo_actual_fallback</span> <span class="o">=</span> <span class="n">aforo_val</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+</span><span id="L-1110"><a href="#L-1110"><span class="linenos">1110</span></a>    <span class="k">else</span><span class="p">:</span>
+</span><span id="L-1111"><a href="#L-1111"><span class="linenos">1111</span></a>        <span class="n">aforo_actual_fallback</span> <span class="o">=</span> <span class="kc">False</span>
+</span><span id="L-1112"><a href="#L-1112"><span class="linenos">1112</span></a>
+</span><span id="L-1113"><a href="#L-1113"><span class="linenos">1113</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">_round</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]:</span>
+</span><span id="L-1114"><a href="#L-1114"><span class="linenos">1114</span></a>        <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">digits</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="L-1115"><a href="#L-1115"><span class="linenos">1115</span></a>            <span class="k">return</span> <span class="n">value</span>
+</span><span id="L-1116"><a href="#L-1116"><span class="linenos">1116</span></a>        <span class="k">return</span> <span class="nb">round</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">digits</span><span class="p">)</span>
+</span><span id="L-1117"><a href="#L-1117"><span class="linenos">1117</span></a>
+</span><span id="L-1118"><a href="#L-1118"><span class="linenos">1118</span></a>    <span class="n">entries</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
+</span><span id="L-1119"><a href="#L-1119"><span class="linenos">1119</span></a>    <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">order</span><span class="p">:</span>
+</span><span id="L-1120"><a href="#L-1120"><span class="linenos">1120</span></a>        <span class="n">targ</span> <span class="o">=</span> <span class="n">_to_float</span><span class="p">(</span><span class="n">targets</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">))</span>
+</span><span id="L-1121"><a href="#L-1121"><span class="linenos">1121</span></a>        <span class="n">act</span> <span class="o">=</span> <span class="n">_to_float</span><span class="p">(</span><span class="n">actuals</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">))</span>
+</span><span id="L-1122"><a href="#L-1122"><span class="linenos">1122</span></a>        <span class="n">is_macro</span><span class="p">,</span> <span class="n">symbol</span> <span class="o">=</span> <span class="n">info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="p">(</span><span class="kc">False</span><span class="p">,</span> <span class="kc">None</span><span class="p">))</span>
+</span><span id="L-1123"><a href="#L-1123"><span class="linenos">1123</span></a>        <span class="n">entry</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+</span><span id="L-1124"><a href="#L-1124"><span class="linenos">1124</span></a>            <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">name</span><span class="p">,</span>
+</span><span id="L-1125"><a href="#L-1125"><span class="linenos">1125</span></a>            <span class="s2">&quot;objective_raw&quot;</span><span class="p">:</span> <span class="n">targ</span><span class="p">,</span>
+</span><span id="L-1126"><a href="#L-1126"><span class="linenos">1126</span></a>            <span class="s2">&quot;actual_raw&quot;</span><span class="p">:</span> <span class="n">act</span><span class="p">,</span>
+</span><span id="L-1127"><a href="#L-1127"><span class="linenos">1127</span></a>            <span class="s2">&quot;objective_kg&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="L-1128"><a href="#L-1128"><span class="linenos">1128</span></a>            <span class="s2">&quot;actual_kg&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="L-1129"><a href="#L-1129"><span class="linenos">1129</span></a>            <span class="s2">&quot;difference_kg&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="L-1130"><a href="#L-1130"><span class="linenos">1130</span></a>            <span class="s2">&quot;grade_pct&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="L-1131"><a href="#L-1131"><span class="linenos">1131</span></a>            <span class="s2">&quot;nano_kg&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="L-1132"><a href="#L-1132"><span class="linenos">1132</span></a>            <span class="s2">&quot;_symbol&quot;</span><span class="p">:</span> <span class="n">symbol</span><span class="p">,</span>
+</span><span id="L-1133"><a href="#L-1133"><span class="linenos">1133</span></a>        <span class="p">}</span>
+</span><span id="L-1134"><a href="#L-1134"><span class="linenos">1134</span></a>        <span class="k">if</span> <span class="n">targ</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">act</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">aforo_val</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="L-1135"><a href="#L-1135"><span class="linenos">1135</span></a>            <span class="n">obj_factor</span> <span class="o">=</span> <span class="n">aforo_val</span> <span class="o">*</span> <span class="mi">100</span> <span class="k">if</span> <span class="n">is_macro</span> <span class="k">else</span> <span class="n">aforo_val</span> <span class="o">/</span> <span class="mi">100</span>
+</span><span id="L-1136"><a href="#L-1136"><span class="linenos">1136</span></a>            <span class="n">act_factor</span> <span class="o">=</span> <span class="n">aforo_act_val</span> <span class="o">*</span> <span class="mi">100</span> <span class="k">if</span> <span class="n">is_macro</span> <span class="k">else</span> <span class="n">aforo_act_val</span> <span class="o">/</span> <span class="mi">100</span>
+</span><span id="L-1137"><a href="#L-1137"><span class="linenos">1137</span></a>            <span class="n">obj_kg</span> <span class="o">=</span> <span class="n">targ</span> <span class="o">*</span> <span class="n">obj_factor</span>
+</span><span id="L-1138"><a href="#L-1138"><span class="linenos">1138</span></a>            <span class="n">act_kg</span> <span class="o">=</span> <span class="n">act</span> <span class="o">*</span> <span class="n">act_factor</span>
+</span><span id="L-1139"><a href="#L-1139"><span class="linenos">1139</span></a>            <span class="n">entry</span><span class="p">[</span><span class="s2">&quot;objective_kg&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">obj_kg</span>
+</span><span id="L-1140"><a href="#L-1140"><span class="linenos">1140</span></a>            <span class="n">entry</span><span class="p">[</span><span class="s2">&quot;actual_kg&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">act_kg</span>
+</span><span id="L-1141"><a href="#L-1141"><span class="linenos">1141</span></a>            <span class="n">entry</span><span class="p">[</span><span class="s2">&quot;difference_kg&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">act_kg</span> <span class="o">-</span> <span class="n">obj_kg</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+</span><span id="L-1142"><a href="#L-1142"><span class="linenos">1142</span></a>        <span class="n">entries</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">entry</span><span class="p">)</span>
+</span><span id="L-1143"><a href="#L-1143"><span class="linenos">1143</span></a>
+</span><span id="L-1144"><a href="#L-1144"><span class="linenos">1144</span></a>    <span class="n">total</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span>
+</span><span id="L-1145"><a href="#L-1145"><span class="linenos">1145</span></a>        <span class="nb">abs</span><span class="p">(</span><span class="n">entry</span><span class="p">[</span><span class="s2">&quot;difference_kg&quot;</span><span class="p">])</span>  <span class="c1"># type: ignore[arg-type]</span>
+</span><span id="L-1146"><a href="#L-1146"><span class="linenos">1146</span></a>        <span class="k">for</span> <span class="n">entry</span> <span class="ow">in</span> <span class="n">entries</span>
+</span><span id="L-1147"><a href="#L-1147"><span class="linenos">1147</span></a>        <span class="k">if</span> <span class="n">entry</span><span class="p">[</span><span class="s2">&quot;difference_kg&quot;</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+</span><span id="L-1148"><a href="#L-1148"><span class="linenos">1148</span></a>    <span class="p">)</span>
+</span><span id="L-1149"><a href="#L-1149"><span class="linenos">1149</span></a>
+</span><span id="L-1150"><a href="#L-1150"><span class="linenos">1150</span></a>    <span class="k">for</span> <span class="n">entry</span> <span class="ow">in</span> <span class="n">entries</span><span class="p">:</span>
+</span><span id="L-1151"><a href="#L-1151"><span class="linenos">1151</span></a>        <span class="n">deficit</span> <span class="o">=</span> <span class="n">entry</span><span class="p">[</span><span class="s2">&quot;difference_kg&quot;</span><span class="p">]</span>
+</span><span id="L-1152"><a href="#L-1152"><span class="linenos">1152</span></a>        <span class="k">if</span> <span class="n">deficit</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="L-1153"><a href="#L-1153"><span class="linenos">1153</span></a>            <span class="n">magnitude</span> <span class="o">=</span> <span class="nb">abs</span><span class="p">(</span><span class="n">deficit</span><span class="p">)</span>  <span class="c1"># type: ignore[arg-type]</span>
+</span><span id="L-1154"><a href="#L-1154"><span class="linenos">1154</span></a>            <span class="k">if</span> <span class="n">total</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+</span><span id="L-1155"><a href="#L-1155"><span class="linenos">1155</span></a>                <span class="n">entry</span><span class="p">[</span><span class="s2">&quot;grade_pct&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">magnitude</span> <span class="o">/</span> <span class="n">total</span> <span class="o">*</span> <span class="mi">100</span>
+</span><span id="L-1156"><a href="#L-1156"><span class="linenos">1156</span></a>            <span class="n">grade</span> <span class="o">=</span> <span class="n">NANO_PRODUCT_GRADES</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">entry</span><span class="p">[</span><span class="s2">&quot;_symbol&quot;</span><span class="p">]</span> <span class="ow">or</span> <span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">DEFAULT_NANO_GRADE</span><span class="p">)</span>
+</span><span id="L-1157"><a href="#L-1157"><span class="linenos">1157</span></a>            <span class="n">entry</span><span class="p">[</span><span class="s2">&quot;nano_kg&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">magnitude</span> <span class="o">/</span> <span class="n">grade</span>
+</span><span id="L-1158"><a href="#L-1158"><span class="linenos">1158</span></a>        <span class="k">del</span> <span class="n">entry</span><span class="p">[</span><span class="s2">&quot;_symbol&quot;</span><span class="p">]</span>
+</span><span id="L-1159"><a href="#L-1159"><span class="linenos">1159</span></a>        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="p">(</span>
+</span><span id="L-1160"><a href="#L-1160"><span class="linenos">1160</span></a>            <span class="s2">&quot;objective_raw&quot;</span><span class="p">,</span>
+</span><span id="L-1161"><a href="#L-1161"><span class="linenos">1161</span></a>            <span class="s2">&quot;actual_raw&quot;</span><span class="p">,</span>
+</span><span id="L-1162"><a href="#L-1162"><span class="linenos">1162</span></a>            <span class="s2">&quot;objective_kg&quot;</span><span class="p">,</span>
+</span><span id="L-1163"><a href="#L-1163"><span class="linenos">1163</span></a>            <span class="s2">&quot;actual_kg&quot;</span><span class="p">,</span>
+</span><span id="L-1164"><a href="#L-1164"><span class="linenos">1164</span></a>            <span class="s2">&quot;difference_kg&quot;</span><span class="p">,</span>
+</span><span id="L-1165"><a href="#L-1165"><span class="linenos">1165</span></a>            <span class="s2">&quot;grade_pct&quot;</span><span class="p">,</span>
+</span><span id="L-1166"><a href="#L-1166"><span class="linenos">1166</span></a>            <span class="s2">&quot;nano_kg&quot;</span><span class="p">,</span>
+</span><span id="L-1167"><a href="#L-1167"><span class="linenos">1167</span></a>        <span class="p">):</span>
+</span><span id="L-1168"><a href="#L-1168"><span class="linenos">1168</span></a>            <span class="n">entry</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">_round</span><span class="p">(</span><span class="n">entry</span><span class="p">[</span><span class="n">key</span><span class="p">])</span>  <span class="c1"># type: ignore[arg-type]</span>
+</span><span id="L-1169"><a href="#L-1169"><span class="linenos">1169</span></a>
+</span><span id="L-1170"><a href="#L-1170"><span class="linenos">1170</span></a>    <span class="k">return</span> <span class="p">{</span>
+</span><span id="L-1171"><a href="#L-1171"><span class="linenos">1171</span></a>        <span class="s2">&quot;entries&quot;</span><span class="p">:</span> <span class="n">entries</span><span class="p">,</span>
+</span><span id="L-1172"><a href="#L-1172"><span class="linenos">1172</span></a>        <span class="s2">&quot;total_kg_ha&quot;</span><span class="p">:</span> <span class="n">_round</span><span class="p">(</span><span class="n">total</span><span class="p">)</span> <span class="k">if</span> <span class="n">total</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="L-1173"><a href="#L-1173"><span class="linenos">1173</span></a>        <span class="s2">&quot;aforo_actual_fallback&quot;</span><span class="p">:</span> <span class="n">aforo_actual_fallback</span><span class="p">,</span>
+</span><span id="L-1174"><a href="#L-1174"><span class="linenos">1174</span></a>    <span class="p">}</span>
 </span></pre></div>
 
 
@@ -1236,7 +1383,7 @@ notebooks without rediscovering implementation details.</p>
                     <div class="attr variable">
             <span class="name">DATA_DIR</span>        =
 <input id="DATA_DIR-view-value" class="view-value-toggle-state" type="checkbox" aria-hidden="true" tabindex="-1">
-            <label class="view-value-button pdoc-button" for="DATA_DIR-view-value"></label><span class="default_value">PosixPath(&#39;/home/j/dev/soportes/app-foliar/project_tecnoagro/tecnoagro-fase-cuatro/project/app/modules/agrovista/data&#39;)</span>
+            <label class="view-value-button pdoc-button" for="DATA_DIR-view-value"></label><span class="default_value">PosixPath(&#39;/home/j/dev/soportes/app-foliar/project_tecnoagro/cuatro/entrega/tecnoagro/project/app/modules/agrovista/data&#39;)</span>
 
         
     </div>
@@ -1248,7 +1395,7 @@ notebooks without rediscovering implementation details.</p>
                 <section id="ALLOWED_EXTS">
                     <div class="attr variable">
             <span class="name">ALLOWED_EXTS</span>        =
-<span class="default_value">{&#39;.jpg&#39;, &#39;.png&#39;, &#39;.tiff&#39;, &#39;.jp2&#39;, &#39;.tif&#39;, &#39;.jpeg&#39;}</span>
+<span class="default_value">{&#39;.tif&#39;, &#39;.png&#39;, &#39;.jp2&#39;, &#39;.jpg&#39;, &#39;.tiff&#39;, &#39;.jpeg&#39;}</span>
 
         
     </div>
@@ -2954,6 +3101,214 @@ for nutrients without a direct regression).</li>
 
 <blockquote>
   <p>Dict[int, float]: Compact lookup keyed by <code>nutrient_id</code>.</p>
+</blockquote>
+</div>
+
+
+                </section>
+                <section id="NANO_PRODUCT_GRADES">
+                    <div class="attr variable">
+            <span class="name">NANO_PRODUCT_GRADES</span><span class="annotation">: &#39;Dict[str, float]&#39;</span>        =
+<span class="default_value">{&#39;N&#39;: 16.0, &#39;P&#39;: 11.0, &#39;K&#39;: 19.0}</span>
+
+        
+    </div>
+    <a class="headerlink" href="#NANO_PRODUCT_GRADES"></a>
+    
+    
+
+                </section>
+                <section id="DEFAULT_NANO_GRADE">
+                    <div class="attr variable">
+            <span class="name">DEFAULT_NANO_GRADE</span>        =
+<span class="default_value">40.0</span>
+
+        
+    </div>
+    <a class="headerlink" href="#DEFAULT_NANO_GRADE"></a>
+    
+    
+
+                </section>
+                <section id="compute_mineral_balance">
+                            <input id="compute_mineral_balance-view-source" class="view-source-toggle-state" type="checkbox" aria-hidden="true" tabindex="-1">
+<div class="attr function">
+            
+        <span class="def">def</span>
+        <span class="name">compute_mineral_balance</span><span class="signature pdoc-code multiline">(<span class="param">	<span class="n">order</span><span class="p">:</span> <span class="s1">&#39;Sequence[str]&#39;</span>,</span><span class="param">	<span class="n">targets</span><span class="p">:</span> <span class="s1">&#39;Dict[str, object]&#39;</span>,</span><span class="param">	<span class="n">actuals</span><span class="p">:</span> <span class="s1">&#39;Dict[str, object]&#39;</span>,</span><span class="param">	<span class="n">aforo</span><span class="p">:</span> <span class="s1">&#39;object&#39;</span>,</span><span class="param">	<span class="n">nutrients</span><span class="p">:</span> <span class="s1">&#39;Sequence[object]&#39;</span>,</span><span class="param">	<span class="o">*</span>,</span><span class="param">	<span class="n">aforo_actual</span><span class="p">:</span> <span class="s1">&#39;object&#39;</span> <span class="o">=</span> <span class="kc">None</span>,</span><span class="param">	<span class="n">digits</span><span class="p">:</span> <span class="s1">&#39;int | None&#39;</span> <span class="o">=</span> <span class="mi">2</span></span><span class="return-annotation">) -> <span class="s1">&#39;Dict[str, object]&#39;</span>:</span></span>
+
+                <label class="view-source-button" for="compute_mineral_balance-view-source"><span>View Source</span></label>
+
+    </div>
+    <a class="headerlink" href="#compute_mineral_balance"></a>
+            <div class="pdoc-code codehilite"><pre><span></span><span id="compute_mineral_balance-1046"><a href="#compute_mineral_balance-1046"><span class="linenos">1046</span></a><span class="k">def</span><span class="w"> </span><span class="nf">compute_mineral_balance</span><span class="p">(</span>
+</span><span id="compute_mineral_balance-1047"><a href="#compute_mineral_balance-1047"><span class="linenos">1047</span></a>    <span class="n">order</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+</span><span id="compute_mineral_balance-1048"><a href="#compute_mineral_balance-1048"><span class="linenos">1048</span></a>    <span class="n">targets</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">],</span>
+</span><span id="compute_mineral_balance-1049"><a href="#compute_mineral_balance-1049"><span class="linenos">1049</span></a>    <span class="n">actuals</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">],</span>
+</span><span id="compute_mineral_balance-1050"><a href="#compute_mineral_balance-1050"><span class="linenos">1050</span></a>    <span class="n">aforo</span><span class="p">:</span> <span class="nb">object</span><span class="p">,</span>
+</span><span id="compute_mineral_balance-1051"><a href="#compute_mineral_balance-1051"><span class="linenos">1051</span></a>    <span class="n">nutrients</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">object</span><span class="p">],</span>
+</span><span id="compute_mineral_balance-1052"><a href="#compute_mineral_balance-1052"><span class="linenos">1052</span></a>    <span class="o">*</span><span class="p">,</span>
+</span><span id="compute_mineral_balance-1053"><a href="#compute_mineral_balance-1053"><span class="linenos">1053</span></a>    <span class="n">aforo_actual</span><span class="p">:</span> <span class="nb">object</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="compute_mineral_balance-1054"><a href="#compute_mineral_balance-1054"><span class="linenos">1054</span></a>    <span class="n">digits</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="mi">2</span><span class="p">,</span>
+</span><span id="compute_mineral_balance-1055"><a href="#compute_mineral_balance-1055"><span class="linenos">1055</span></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">]:</span>
+</span><span id="compute_mineral_balance-1056"><a href="#compute_mineral_balance-1056"><span class="linenos">1056</span></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Compute the mineral balance table (port of FRM_Balance in Excel).</span>
+</span><span id="compute_mineral_balance-1057"><a href="#compute_mineral_balance-1057"><span class="linenos">1057</span></a>
+</span><span id="compute_mineral_balance-1058"><a href="#compute_mineral_balance-1058"><span class="linenos">1058</span></a><span class="sd">    Macros convert as ``% × aforo × 100`` and micros as ``ppm × aforo ÷ 100``</span>
+</span><span id="compute_mineral_balance-1059"><a href="#compute_mineral_balance-1059"><span class="linenos">1059</span></a><span class="sd">    to express both sides in kg/ha. The objective row converts with the</span>
+</span><span id="compute_mineral_balance-1060"><a href="#compute_mineral_balance-1060"><span class="linenos">1060</span></a><span class="sd">    objective aforo and the actual row with the actual aforo (falling back</span>
+</span><span id="compute_mineral_balance-1061"><a href="#compute_mineral_balance-1061"><span class="linenos">1061</span></a><span class="sd">    to the objective one so legacy reports without an actual aforo keep</span>
+</span><span id="compute_mineral_balance-1062"><a href="#compute_mineral_balance-1062"><span class="linenos">1062</span></a><span class="sd">    rendering). The difference keeps only deficits (surpluses clamp to 0).</span>
+</span><span id="compute_mineral_balance-1063"><a href="#compute_mineral_balance-1063"><span class="linenos">1063</span></a><span class="sd">    The formula grade is each deficit share of the total requirement, and</span>
+</span><span id="compute_mineral_balance-1064"><a href="#compute_mineral_balance-1064"><span class="linenos">1064</span></a><span class="sd">    the nano dosage divides each deficit by the nano product concentration</span>
+</span><span id="compute_mineral_balance-1065"><a href="#compute_mineral_balance-1065"><span class="linenos">1065</span></a><span class="sd">    (N 16, P 11, K 19, others 40).</span>
+</span><span id="compute_mineral_balance-1066"><a href="#compute_mineral_balance-1066"><span class="linenos">1066</span></a>
+</span><span id="compute_mineral_balance-1067"><a href="#compute_mineral_balance-1067"><span class="linenos">1067</span></a><span class="sd">    Args:</span>
+</span><span id="compute_mineral_balance-1068"><a href="#compute_mineral_balance-1068"><span class="linenos">1068</span></a><span class="sd">        order: Nutrient display order (names as the frontend knows them).</span>
+</span><span id="compute_mineral_balance-1069"><a href="#compute_mineral_balance-1069"><span class="linenos">1069</span></a><span class="sd">        targets: Reference values keyed by nutrient name (% or ppm).</span>
+</span><span id="compute_mineral_balance-1070"><a href="#compute_mineral_balance-1070"><span class="linenos">1070</span></a><span class="sd">        actuals: Leaf analysis values keyed by nutrient name (% or ppm).</span>
+</span><span id="compute_mineral_balance-1071"><a href="#compute_mineral_balance-1071"><span class="linenos">1071</span></a><span class="sd">        aforo: Forage yield of the objective side; converts the objective</span>
+</span><span id="compute_mineral_balance-1072"><a href="#compute_mineral_balance-1072"><span class="linenos">1072</span></a><span class="sd">            row and acts as fallback for the actual row.</span>
+</span><span id="compute_mineral_balance-1073"><a href="#compute_mineral_balance-1073"><span class="linenos">1073</span></a><span class="sd">        nutrients: ORM ``Nutrient`` rows to classify macro/micro and map</span>
+</span><span id="compute_mineral_balance-1074"><a href="#compute_mineral_balance-1074"><span class="linenos">1074</span></a><span class="sd">            names to symbols.</span>
+</span><span id="compute_mineral_balance-1075"><a href="#compute_mineral_balance-1075"><span class="linenos">1075</span></a><span class="sd">        aforo_actual: Forage yield of the lot/analysis side; converts the</span>
+</span><span id="compute_mineral_balance-1076"><a href="#compute_mineral_balance-1076"><span class="linenos">1076</span></a><span class="sd">            actual row. ``None`` or invalid falls back to ``aforo``.</span>
+</span><span id="compute_mineral_balance-1077"><a href="#compute_mineral_balance-1077"><span class="linenos">1077</span></a><span class="sd">        digits: Rounding applied to every numeric output.</span>
+</span><span id="compute_mineral_balance-1078"><a href="#compute_mineral_balance-1078"><span class="linenos">1078</span></a>
+</span><span id="compute_mineral_balance-1079"><a href="#compute_mineral_balance-1079"><span class="linenos">1079</span></a><span class="sd">    Returns:</span>
+</span><span id="compute_mineral_balance-1080"><a href="#compute_mineral_balance-1080"><span class="linenos">1080</span></a><span class="sd">        Dict[str, object]: ``{&quot;entries&quot;: [...], &quot;total_kg_ha&quot;: float|None,</span>
+</span><span id="compute_mineral_balance-1081"><a href="#compute_mineral_balance-1081"><span class="linenos">1081</span></a><span class="sd">        &quot;aforo_actual_fallback&quot;: bool}`` where each entry carries</span>
+</span><span id="compute_mineral_balance-1082"><a href="#compute_mineral_balance-1082"><span class="linenos">1082</span></a><span class="sd">        objective/actual raw and kg values, the deficit, grade percentage</span>
+</span><span id="compute_mineral_balance-1083"><a href="#compute_mineral_balance-1083"><span class="linenos">1083</span></a><span class="sd">        and nano dosage for one nutrient. ``aforo_actual_fallback`` is True</span>
+</span><span id="compute_mineral_balance-1084"><a href="#compute_mineral_balance-1084"><span class="linenos">1084</span></a><span class="sd">        when the actual row was converted with the objective aforo because</span>
+</span><span id="compute_mineral_balance-1085"><a href="#compute_mineral_balance-1085"><span class="linenos">1085</span></a><span class="sd">        no valid actual aforo was provided.</span>
+</span><span id="compute_mineral_balance-1086"><a href="#compute_mineral_balance-1086"><span class="linenos">1086</span></a><span class="sd">    &quot;&quot;&quot;</span>
+</span><span id="compute_mineral_balance-1087"><a href="#compute_mineral_balance-1087"><span class="linenos">1087</span></a>
+</span><span id="compute_mineral_balance-1088"><a href="#compute_mineral_balance-1088"><span class="linenos">1088</span></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">app.modules.foliage.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">NutrientCategory</span>
+</span><span id="compute_mineral_balance-1089"><a href="#compute_mineral_balance-1089"><span class="linenos">1089</span></a>
+</span><span id="compute_mineral_balance-1090"><a href="#compute_mineral_balance-1090"><span class="linenos">1090</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">_to_float</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="nb">object</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]:</span>
+</span><span id="compute_mineral_balance-1091"><a href="#compute_mineral_balance-1091"><span class="linenos">1091</span></a>        <span class="k">try</span><span class="p">:</span>
+</span><span id="compute_mineral_balance-1092"><a href="#compute_mineral_balance-1092"><span class="linenos">1092</span></a>            <span class="n">number</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>  <span class="c1"># type: ignore[arg-type]</span>
+</span><span id="compute_mineral_balance-1093"><a href="#compute_mineral_balance-1093"><span class="linenos">1093</span></a>        <span class="k">except</span> <span class="p">(</span><span class="ne">TypeError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">):</span>
+</span><span id="compute_mineral_balance-1094"><a href="#compute_mineral_balance-1094"><span class="linenos">1094</span></a>            <span class="k">return</span> <span class="kc">None</span>
+</span><span id="compute_mineral_balance-1095"><a href="#compute_mineral_balance-1095"><span class="linenos">1095</span></a>        <span class="k">return</span> <span class="n">number</span> <span class="k">if</span> <span class="n">math</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">number</span><span class="p">)</span> <span class="k">else</span> <span class="kc">None</span>
+</span><span id="compute_mineral_balance-1096"><a href="#compute_mineral_balance-1096"><span class="linenos">1096</span></a>
+</span><span id="compute_mineral_balance-1097"><a href="#compute_mineral_balance-1097"><span class="linenos">1097</span></a>    <span class="n">info</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">bool</span><span class="p">,</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]]]</span> <span class="o">=</span> <span class="p">{}</span>
+</span><span id="compute_mineral_balance-1098"><a href="#compute_mineral_balance-1098"><span class="linenos">1098</span></a>    <span class="k">for</span> <span class="n">nutrient</span> <span class="ow">in</span> <span class="n">nutrients</span><span class="p">:</span>
+</span><span id="compute_mineral_balance-1099"><a href="#compute_mineral_balance-1099"><span class="linenos">1099</span></a>        <span class="n">is_macro</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">nutrient</span><span class="p">,</span> <span class="s2">&quot;category&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="o">==</span> <span class="n">NutrientCategory</span><span class="o">.</span><span class="n">MACRONUTRIENT</span>
+</span><span id="compute_mineral_balance-1100"><a href="#compute_mineral_balance-1100"><span class="linenos">1100</span></a>        <span class="n">symbol</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">nutrient</span><span class="p">,</span> <span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+</span><span id="compute_mineral_balance-1101"><a href="#compute_mineral_balance-1101"><span class="linenos">1101</span></a>        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="nb">filter</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="p">[</span><span class="nb">getattr</span><span class="p">(</span><span class="n">nutrient</span><span class="p">,</span> <span class="s2">&quot;name&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span> <span class="n">symbol</span><span class="p">]):</span>
+</span><span id="compute_mineral_balance-1102"><a href="#compute_mineral_balance-1102"><span class="linenos">1102</span></a>            <span class="n">info</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">is_macro</span><span class="p">,</span> <span class="n">symbol</span><span class="p">)</span>
+</span><span id="compute_mineral_balance-1103"><a href="#compute_mineral_balance-1103"><span class="linenos">1103</span></a>
+</span><span id="compute_mineral_balance-1104"><a href="#compute_mineral_balance-1104"><span class="linenos">1104</span></a>    <span class="n">aforo_val</span> <span class="o">=</span> <span class="n">_to_float</span><span class="p">(</span><span class="n">aforo</span><span class="p">)</span>
+</span><span id="compute_mineral_balance-1105"><a href="#compute_mineral_balance-1105"><span class="linenos">1105</span></a>    <span class="k">if</span> <span class="n">aforo_val</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">aforo_val</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+</span><span id="compute_mineral_balance-1106"><a href="#compute_mineral_balance-1106"><span class="linenos">1106</span></a>        <span class="n">aforo_val</span> <span class="o">=</span> <span class="kc">None</span>
+</span><span id="compute_mineral_balance-1107"><a href="#compute_mineral_balance-1107"><span class="linenos">1107</span></a>    <span class="n">aforo_act_val</span> <span class="o">=</span> <span class="n">_to_float</span><span class="p">(</span><span class="n">aforo_actual</span><span class="p">)</span>
+</span><span id="compute_mineral_balance-1108"><a href="#compute_mineral_balance-1108"><span class="linenos">1108</span></a>    <span class="k">if</span> <span class="n">aforo_act_val</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">aforo_act_val</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+</span><span id="compute_mineral_balance-1109"><a href="#compute_mineral_balance-1109"><span class="linenos">1109</span></a>        <span class="n">aforo_act_val</span> <span class="o">=</span> <span class="n">aforo_val</span>
+</span><span id="compute_mineral_balance-1110"><a href="#compute_mineral_balance-1110"><span class="linenos">1110</span></a>        <span class="n">aforo_actual_fallback</span> <span class="o">=</span> <span class="n">aforo_val</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+</span><span id="compute_mineral_balance-1111"><a href="#compute_mineral_balance-1111"><span class="linenos">1111</span></a>    <span class="k">else</span><span class="p">:</span>
+</span><span id="compute_mineral_balance-1112"><a href="#compute_mineral_balance-1112"><span class="linenos">1112</span></a>        <span class="n">aforo_actual_fallback</span> <span class="o">=</span> <span class="kc">False</span>
+</span><span id="compute_mineral_balance-1113"><a href="#compute_mineral_balance-1113"><span class="linenos">1113</span></a>
+</span><span id="compute_mineral_balance-1114"><a href="#compute_mineral_balance-1114"><span class="linenos">1114</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">_round</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]:</span>
+</span><span id="compute_mineral_balance-1115"><a href="#compute_mineral_balance-1115"><span class="linenos">1115</span></a>        <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">digits</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="compute_mineral_balance-1116"><a href="#compute_mineral_balance-1116"><span class="linenos">1116</span></a>            <span class="k">return</span> <span class="n">value</span>
+</span><span id="compute_mineral_balance-1117"><a href="#compute_mineral_balance-1117"><span class="linenos">1117</span></a>        <span class="k">return</span> <span class="nb">round</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">digits</span><span class="p">)</span>
+</span><span id="compute_mineral_balance-1118"><a href="#compute_mineral_balance-1118"><span class="linenos">1118</span></a>
+</span><span id="compute_mineral_balance-1119"><a href="#compute_mineral_balance-1119"><span class="linenos">1119</span></a>    <span class="n">entries</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
+</span><span id="compute_mineral_balance-1120"><a href="#compute_mineral_balance-1120"><span class="linenos">1120</span></a>    <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">order</span><span class="p">:</span>
+</span><span id="compute_mineral_balance-1121"><a href="#compute_mineral_balance-1121"><span class="linenos">1121</span></a>        <span class="n">targ</span> <span class="o">=</span> <span class="n">_to_float</span><span class="p">(</span><span class="n">targets</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">))</span>
+</span><span id="compute_mineral_balance-1122"><a href="#compute_mineral_balance-1122"><span class="linenos">1122</span></a>        <span class="n">act</span> <span class="o">=</span> <span class="n">_to_float</span><span class="p">(</span><span class="n">actuals</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">))</span>
+</span><span id="compute_mineral_balance-1123"><a href="#compute_mineral_balance-1123"><span class="linenos">1123</span></a>        <span class="n">is_macro</span><span class="p">,</span> <span class="n">symbol</span> <span class="o">=</span> <span class="n">info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="p">(</span><span class="kc">False</span><span class="p">,</span> <span class="kc">None</span><span class="p">))</span>
+</span><span id="compute_mineral_balance-1124"><a href="#compute_mineral_balance-1124"><span class="linenos">1124</span></a>        <span class="n">entry</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+</span><span id="compute_mineral_balance-1125"><a href="#compute_mineral_balance-1125"><span class="linenos">1125</span></a>            <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">name</span><span class="p">,</span>
+</span><span id="compute_mineral_balance-1126"><a href="#compute_mineral_balance-1126"><span class="linenos">1126</span></a>            <span class="s2">&quot;objective_raw&quot;</span><span class="p">:</span> <span class="n">targ</span><span class="p">,</span>
+</span><span id="compute_mineral_balance-1127"><a href="#compute_mineral_balance-1127"><span class="linenos">1127</span></a>            <span class="s2">&quot;actual_raw&quot;</span><span class="p">:</span> <span class="n">act</span><span class="p">,</span>
+</span><span id="compute_mineral_balance-1128"><a href="#compute_mineral_balance-1128"><span class="linenos">1128</span></a>            <span class="s2">&quot;objective_kg&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="compute_mineral_balance-1129"><a href="#compute_mineral_balance-1129"><span class="linenos">1129</span></a>            <span class="s2">&quot;actual_kg&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="compute_mineral_balance-1130"><a href="#compute_mineral_balance-1130"><span class="linenos">1130</span></a>            <span class="s2">&quot;difference_kg&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="compute_mineral_balance-1131"><a href="#compute_mineral_balance-1131"><span class="linenos">1131</span></a>            <span class="s2">&quot;grade_pct&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="compute_mineral_balance-1132"><a href="#compute_mineral_balance-1132"><span class="linenos">1132</span></a>            <span class="s2">&quot;nano_kg&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="compute_mineral_balance-1133"><a href="#compute_mineral_balance-1133"><span class="linenos">1133</span></a>            <span class="s2">&quot;_symbol&quot;</span><span class="p">:</span> <span class="n">symbol</span><span class="p">,</span>
+</span><span id="compute_mineral_balance-1134"><a href="#compute_mineral_balance-1134"><span class="linenos">1134</span></a>        <span class="p">}</span>
+</span><span id="compute_mineral_balance-1135"><a href="#compute_mineral_balance-1135"><span class="linenos">1135</span></a>        <span class="k">if</span> <span class="n">targ</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">act</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">aforo_val</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="compute_mineral_balance-1136"><a href="#compute_mineral_balance-1136"><span class="linenos">1136</span></a>            <span class="n">obj_factor</span> <span class="o">=</span> <span class="n">aforo_val</span> <span class="o">*</span> <span class="mi">100</span> <span class="k">if</span> <span class="n">is_macro</span> <span class="k">else</span> <span class="n">aforo_val</span> <span class="o">/</span> <span class="mi">100</span>
+</span><span id="compute_mineral_balance-1137"><a href="#compute_mineral_balance-1137"><span class="linenos">1137</span></a>            <span class="n">act_factor</span> <span class="o">=</span> <span class="n">aforo_act_val</span> <span class="o">*</span> <span class="mi">100</span> <span class="k">if</span> <span class="n">is_macro</span> <span class="k">else</span> <span class="n">aforo_act_val</span> <span class="o">/</span> <span class="mi">100</span>
+</span><span id="compute_mineral_balance-1138"><a href="#compute_mineral_balance-1138"><span class="linenos">1138</span></a>            <span class="n">obj_kg</span> <span class="o">=</span> <span class="n">targ</span> <span class="o">*</span> <span class="n">obj_factor</span>
+</span><span id="compute_mineral_balance-1139"><a href="#compute_mineral_balance-1139"><span class="linenos">1139</span></a>            <span class="n">act_kg</span> <span class="o">=</span> <span class="n">act</span> <span class="o">*</span> <span class="n">act_factor</span>
+</span><span id="compute_mineral_balance-1140"><a href="#compute_mineral_balance-1140"><span class="linenos">1140</span></a>            <span class="n">entry</span><span class="p">[</span><span class="s2">&quot;objective_kg&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">obj_kg</span>
+</span><span id="compute_mineral_balance-1141"><a href="#compute_mineral_balance-1141"><span class="linenos">1141</span></a>            <span class="n">entry</span><span class="p">[</span><span class="s2">&quot;actual_kg&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">act_kg</span>
+</span><span id="compute_mineral_balance-1142"><a href="#compute_mineral_balance-1142"><span class="linenos">1142</span></a>            <span class="n">entry</span><span class="p">[</span><span class="s2">&quot;difference_kg&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">act_kg</span> <span class="o">-</span> <span class="n">obj_kg</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+</span><span id="compute_mineral_balance-1143"><a href="#compute_mineral_balance-1143"><span class="linenos">1143</span></a>        <span class="n">entries</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">entry</span><span class="p">)</span>
+</span><span id="compute_mineral_balance-1144"><a href="#compute_mineral_balance-1144"><span class="linenos">1144</span></a>
+</span><span id="compute_mineral_balance-1145"><a href="#compute_mineral_balance-1145"><span class="linenos">1145</span></a>    <span class="n">total</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span>
+</span><span id="compute_mineral_balance-1146"><a href="#compute_mineral_balance-1146"><span class="linenos">1146</span></a>        <span class="nb">abs</span><span class="p">(</span><span class="n">entry</span><span class="p">[</span><span class="s2">&quot;difference_kg&quot;</span><span class="p">])</span>  <span class="c1"># type: ignore[arg-type]</span>
+</span><span id="compute_mineral_balance-1147"><a href="#compute_mineral_balance-1147"><span class="linenos">1147</span></a>        <span class="k">for</span> <span class="n">entry</span> <span class="ow">in</span> <span class="n">entries</span>
+</span><span id="compute_mineral_balance-1148"><a href="#compute_mineral_balance-1148"><span class="linenos">1148</span></a>        <span class="k">if</span> <span class="n">entry</span><span class="p">[</span><span class="s2">&quot;difference_kg&quot;</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+</span><span id="compute_mineral_balance-1149"><a href="#compute_mineral_balance-1149"><span class="linenos">1149</span></a>    <span class="p">)</span>
+</span><span id="compute_mineral_balance-1150"><a href="#compute_mineral_balance-1150"><span class="linenos">1150</span></a>
+</span><span id="compute_mineral_balance-1151"><a href="#compute_mineral_balance-1151"><span class="linenos">1151</span></a>    <span class="k">for</span> <span class="n">entry</span> <span class="ow">in</span> <span class="n">entries</span><span class="p">:</span>
+</span><span id="compute_mineral_balance-1152"><a href="#compute_mineral_balance-1152"><span class="linenos">1152</span></a>        <span class="n">deficit</span> <span class="o">=</span> <span class="n">entry</span><span class="p">[</span><span class="s2">&quot;difference_kg&quot;</span><span class="p">]</span>
+</span><span id="compute_mineral_balance-1153"><a href="#compute_mineral_balance-1153"><span class="linenos">1153</span></a>        <span class="k">if</span> <span class="n">deficit</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="compute_mineral_balance-1154"><a href="#compute_mineral_balance-1154"><span class="linenos">1154</span></a>            <span class="n">magnitude</span> <span class="o">=</span> <span class="nb">abs</span><span class="p">(</span><span class="n">deficit</span><span class="p">)</span>  <span class="c1"># type: ignore[arg-type]</span>
+</span><span id="compute_mineral_balance-1155"><a href="#compute_mineral_balance-1155"><span class="linenos">1155</span></a>            <span class="k">if</span> <span class="n">total</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+</span><span id="compute_mineral_balance-1156"><a href="#compute_mineral_balance-1156"><span class="linenos">1156</span></a>                <span class="n">entry</span><span class="p">[</span><span class="s2">&quot;grade_pct&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">magnitude</span> <span class="o">/</span> <span class="n">total</span> <span class="o">*</span> <span class="mi">100</span>
+</span><span id="compute_mineral_balance-1157"><a href="#compute_mineral_balance-1157"><span class="linenos">1157</span></a>            <span class="n">grade</span> <span class="o">=</span> <span class="n">NANO_PRODUCT_GRADES</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">entry</span><span class="p">[</span><span class="s2">&quot;_symbol&quot;</span><span class="p">]</span> <span class="ow">or</span> <span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">DEFAULT_NANO_GRADE</span><span class="p">)</span>
+</span><span id="compute_mineral_balance-1158"><a href="#compute_mineral_balance-1158"><span class="linenos">1158</span></a>            <span class="n">entry</span><span class="p">[</span><span class="s2">&quot;nano_kg&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">magnitude</span> <span class="o">/</span> <span class="n">grade</span>
+</span><span id="compute_mineral_balance-1159"><a href="#compute_mineral_balance-1159"><span class="linenos">1159</span></a>        <span class="k">del</span> <span class="n">entry</span><span class="p">[</span><span class="s2">&quot;_symbol&quot;</span><span class="p">]</span>
+</span><span id="compute_mineral_balance-1160"><a href="#compute_mineral_balance-1160"><span class="linenos">1160</span></a>        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="p">(</span>
+</span><span id="compute_mineral_balance-1161"><a href="#compute_mineral_balance-1161"><span class="linenos">1161</span></a>            <span class="s2">&quot;objective_raw&quot;</span><span class="p">,</span>
+</span><span id="compute_mineral_balance-1162"><a href="#compute_mineral_balance-1162"><span class="linenos">1162</span></a>            <span class="s2">&quot;actual_raw&quot;</span><span class="p">,</span>
+</span><span id="compute_mineral_balance-1163"><a href="#compute_mineral_balance-1163"><span class="linenos">1163</span></a>            <span class="s2">&quot;objective_kg&quot;</span><span class="p">,</span>
+</span><span id="compute_mineral_balance-1164"><a href="#compute_mineral_balance-1164"><span class="linenos">1164</span></a>            <span class="s2">&quot;actual_kg&quot;</span><span class="p">,</span>
+</span><span id="compute_mineral_balance-1165"><a href="#compute_mineral_balance-1165"><span class="linenos">1165</span></a>            <span class="s2">&quot;difference_kg&quot;</span><span class="p">,</span>
+</span><span id="compute_mineral_balance-1166"><a href="#compute_mineral_balance-1166"><span class="linenos">1166</span></a>            <span class="s2">&quot;grade_pct&quot;</span><span class="p">,</span>
+</span><span id="compute_mineral_balance-1167"><a href="#compute_mineral_balance-1167"><span class="linenos">1167</span></a>            <span class="s2">&quot;nano_kg&quot;</span><span class="p">,</span>
+</span><span id="compute_mineral_balance-1168"><a href="#compute_mineral_balance-1168"><span class="linenos">1168</span></a>        <span class="p">):</span>
+</span><span id="compute_mineral_balance-1169"><a href="#compute_mineral_balance-1169"><span class="linenos">1169</span></a>            <span class="n">entry</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">_round</span><span class="p">(</span><span class="n">entry</span><span class="p">[</span><span class="n">key</span><span class="p">])</span>  <span class="c1"># type: ignore[arg-type]</span>
+</span><span id="compute_mineral_balance-1170"><a href="#compute_mineral_balance-1170"><span class="linenos">1170</span></a>
+</span><span id="compute_mineral_balance-1171"><a href="#compute_mineral_balance-1171"><span class="linenos">1171</span></a>    <span class="k">return</span> <span class="p">{</span>
+</span><span id="compute_mineral_balance-1172"><a href="#compute_mineral_balance-1172"><span class="linenos">1172</span></a>        <span class="s2">&quot;entries&quot;</span><span class="p">:</span> <span class="n">entries</span><span class="p">,</span>
+</span><span id="compute_mineral_balance-1173"><a href="#compute_mineral_balance-1173"><span class="linenos">1173</span></a>        <span class="s2">&quot;total_kg_ha&quot;</span><span class="p">:</span> <span class="n">_round</span><span class="p">(</span><span class="n">total</span><span class="p">)</span> <span class="k">if</span> <span class="n">total</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="compute_mineral_balance-1174"><a href="#compute_mineral_balance-1174"><span class="linenos">1174</span></a>        <span class="s2">&quot;aforo_actual_fallback&quot;</span><span class="p">:</span> <span class="n">aforo_actual_fallback</span><span class="p">,</span>
+</span><span id="compute_mineral_balance-1175"><a href="#compute_mineral_balance-1175"><span class="linenos">1175</span></a>    <span class="p">}</span>
+</span></pre></div>
+
+
+            <div class="docstring"><p>Compute the mineral balance table (port of FRM_Balance in Excel).</p>
+
+<p>Macros convert as <code>% × aforo × 100</code> and micros as <code>ppm × aforo ÷ 100</code>
+to express both sides in kg/ha. The objective row converts with the
+objective aforo and the actual row with the actual aforo (falling back
+to the objective one so legacy reports without an actual aforo keep
+rendering). The difference keeps only deficits (surpluses clamp to 0).
+The formula grade is each deficit share of the total requirement, and
+the nano dosage divides each deficit by the nano product concentration
+(N 16, P 11, K 19, others 40).</p>
+
+<h6 id="arguments">Arguments:</h6>
+
+<ul>
+<li><strong>order:</strong>  Nutrient display order (names as the frontend knows them).</li>
+<li><strong>targets:</strong>  Reference values keyed by nutrient name (% or ppm).</li>
+<li><strong>actuals:</strong>  Leaf analysis values keyed by nutrient name (% or ppm).</li>
+<li><strong>aforo:</strong>  Forage yield of the objective side; converts the objective
+row and acts as fallback for the actual row.</li>
+<li><strong>nutrients:</strong>  ORM <code>Nutrient</code> rows to classify macro/micro and map
+names to symbols.</li>
+<li><strong>aforo_actual:</strong>  Forage yield of the lot/analysis side; converts the
+actual row. <code>None</code> or invalid falls back to <code>aforo</code>.</li>
+<li><strong>digits:</strong>  Rounding applied to every numeric output.</li>
+</ul>
+
+<h6 id="returns">Returns:</h6>
+
+<blockquote>
+  <p>Dict[str, object]: <code>{"entries": [...], "total_kg_ha": float|None,
+"aforo_actual_fallback": bool}</code> where each entry carries
+  objective/actual raw and kg values, the deficit, grade percentage
+  and nano dosage for one nutrient. <code>aforo_actual_fallback</code> is True
+  when the actual row was converted with the objective aforo because
+  no valid actual aforo was provided.</p>
 </blockquote>
 </div>
 

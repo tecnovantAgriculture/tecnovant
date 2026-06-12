@@ -601,7 +601,7 @@
 </span><span id="L-374"><a href="#L-374"><span class="linenos"> 374</span></a>            <span class="k">return</span> <span class="n">response</span>
 </span><span id="L-375"><a href="#L-375"><span class="linenos"> 375</span></a>
 </span><span id="L-376"><a href="#L-376"><span class="linenos"> 376</span></a>        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-</span><span id="L-377"><a href="#L-377"><span class="linenos"> 377</span></a>            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Login error: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</span><span id="L-377"><a href="#L-377"><span class="linenos"> 377</span></a>            <span class="n">current_app</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Login error: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 </span><span id="L-378"><a href="#L-378"><span class="linenos"> 378</span></a>            <span class="k">return</span> <span class="n">jsonify</span><span class="p">({</span><span class="s2">&quot;msg&quot;</span><span class="p">:</span> <span class="s2">&quot;Invalid request&quot;</span><span class="p">}),</span> <span class="mi">400</span>
 </span><span id="L-379"><a href="#L-379"><span class="linenos"> 379</span></a>
 </span><span id="L-380"><a href="#L-380"><span class="linenos"> 380</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">_invalid_credentials</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">user</span><span class="p">,</span> <span class="n">password</span><span class="p">):</span>
@@ -2168,7 +2168,7 @@ error correctamente.</p>
 </span><span id="LoginView-375"><a href="#LoginView-375"><span class="linenos">375</span></a>            <span class="k">return</span> <span class="n">response</span>
 </span><span id="LoginView-376"><a href="#LoginView-376"><span class="linenos">376</span></a>
 </span><span id="LoginView-377"><a href="#LoginView-377"><span class="linenos">377</span></a>        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-</span><span id="LoginView-378"><a href="#LoginView-378"><span class="linenos">378</span></a>            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Login error: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</span><span id="LoginView-378"><a href="#LoginView-378"><span class="linenos">378</span></a>            <span class="n">current_app</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Login error: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 </span><span id="LoginView-379"><a href="#LoginView-379"><span class="linenos">379</span></a>            <span class="k">return</span> <span class="n">jsonify</span><span class="p">({</span><span class="s2">&quot;msg&quot;</span><span class="p">:</span> <span class="s2">&quot;Invalid request&quot;</span><span class="p">}),</span> <span class="mi">400</span>
 </span><span id="LoginView-380"><a href="#LoginView-380"><span class="linenos">380</span></a>
 </span><span id="LoginView-381"><a href="#LoginView-381"><span class="linenos">381</span></a>    <span class="k">def</span><span class="w"> </span><span class="nf">_invalid_credentials</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">user</span><span class="p">,</span> <span class="n">password</span><span class="p">):</span>
@@ -2294,7 +2294,7 @@ error correctamente.</p>
 </span><span id="LoginView.post-375"><a href="#LoginView.post-375"><span class="linenos">375</span></a>            <span class="k">return</span> <span class="n">response</span>
 </span><span id="LoginView.post-376"><a href="#LoginView.post-376"><span class="linenos">376</span></a>
 </span><span id="LoginView.post-377"><a href="#LoginView.post-377"><span class="linenos">377</span></a>        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-</span><span id="LoginView.post-378"><a href="#LoginView.post-378"><span class="linenos">378</span></a>            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Login error: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</span><span id="LoginView.post-378"><a href="#LoginView.post-378"><span class="linenos">378</span></a>            <span class="n">current_app</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Login error: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 </span><span id="LoginView.post-379"><a href="#LoginView.post-379"><span class="linenos">379</span></a>            <span class="k">return</span> <span class="n">jsonify</span><span class="p">({</span><span class="s2">&quot;msg&quot;</span><span class="p">:</span> <span class="s2">&quot;Invalid request&quot;</span><span class="p">}),</span> <span class="mi">400</span>
 </span></pre></div>
 
@@ -2942,7 +2942,7 @@ error correctamente.</p>
                             <div id="UserView.methods" class="classattr">
                                 <div class="attr variable">
             <span class="name">methods</span><span class="annotation">: &#39;t.ClassVar[t.Collection[str] | None]&#39;</span>        =
-<span class="default_value">{&#39;DELETE&#39;, &#39;PUT&#39;, &#39;POST&#39;, &#39;GET&#39;}</span>
+<span class="default_value">{&#39;GET&#39;, &#39;POST&#39;, &#39;DELETE&#39;, &#39;PUT&#39;}</span>
 
         
     </div>
@@ -3454,7 +3454,7 @@ error correctamente.</p>
                             <div id="OrgView.methods" class="classattr">
                                 <div class="attr variable">
             <span class="name">methods</span><span class="annotation">: &#39;t.ClassVar[t.Collection[str] | None]&#39;</span>        =
-<span class="default_value">{&#39;DELETE&#39;, &#39;PUT&#39;, &#39;POST&#39;, &#39;GET&#39;}</span>
+<span class="default_value">{&#39;GET&#39;, &#39;POST&#39;, &#39;DELETE&#39;, &#39;PUT&#39;}</span>
 
         
     </div>
@@ -4290,7 +4290,7 @@ and new password data from the form.</p>
                             <div id="ProfileView.methods" class="classattr">
                                 <div class="attr variable">
             <span class="name">methods</span><span class="annotation">: &#39;t.ClassVar[t.Collection[str] | None]&#39;</span>        =
-<span class="default_value">{&#39;GET&#39;, &#39;PUT&#39;}</span>
+<span class="default_value">{&#39;PUT&#39;, &#39;GET&#39;}</span>
 
         
     </div>
@@ -4795,7 +4795,7 @@ and new password data from the form.</p>
                             <div id="InstallationView.methods" class="classattr">
                                 <div class="attr variable">
             <span class="name">methods</span><span class="annotation">: &#39;t.ClassVar[t.Collection[str] | None]&#39;</span>        =
-<span class="default_value">{&#39;POST&#39;, &#39;GET&#39;}</span>
+<span class="default_value">{&#39;GET&#39;, &#39;POST&#39;}</span>
 
         
     </div>

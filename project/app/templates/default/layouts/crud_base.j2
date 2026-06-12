@@ -216,6 +216,9 @@ text_color, bg_color, badge_neutral %}
                         </td>
                         {% endfor %}
                         <td class="{{ table_cell_class }} font-medium sm:table-cell">
+                            {% if row_action_extra is defined and row_action_extra %}
+                                {{ row_action_extra(item) }}
+                            {% endif %}
                             {{ action_dropdown(item.id) }}
                         </td>
                     </tr>

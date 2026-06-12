@@ -23,6 +23,14 @@ from .models import NDVIImage
 @web.route("/", methods=["GET"])
 @login_required
 def hello():
+    """Página principal de Agrovista: herramienta de análisis NDVI.
+
+    Carga el contexto del primer cliente y finca del usuario para
+    pre-seleccionar el asset inicial en el visor de imágenes
+    multiespectrales.
+
+    :status 200: Página de análisis NDVI con contexto inicial
+    """
     user_id = get_jwt_identity()
     organizations = get_clients_for_user(user_id) if user_id else []
     org = organizations[0] if organizations else None
@@ -74,6 +82,13 @@ def secondary_objectives():
 @web.route("/comparacion", methods=["GET"])
 @login_required
 def comparison_config():
+    """Página de comparación nutricional (balance de minerales).
+
+    Permite seleccionar análisis foliares y ejecutar comparaciones
+    lado a lado con balances minerales server-side.
+
+    :status 200: Página de configuración de comparación nutricional
+    """
     user_id = get_jwt_identity()
     claims = get_jwt()
     organizations = get_clients_for_user(user_id) if user_id else []

@@ -11,6 +11,7 @@ endpoints específicos que requieren validación JWT explícita (ej: vista_repor
 
 import json
 from decimal import Decimal
+from types import SimpleNamespace
 
 from flask import current_app, render_template, request, url_for
 from flask_jwt_extended import get_jwt, jwt_required
@@ -19,7 +20,18 @@ from werkzeug.exceptions import Forbidden
 from app.core.controller import check_resource_access, login_required
 from app.extensions import db
 from app.helpers.dashboard_helpers import get_dashboard_menu
-from app.modules.foliage.models import CommonAnalysis, Crop, Farm, Lot, Recommendation
+from app.modules.agrovista.helpers import compute_mineral_balance
+from app.modules.agrovista.services.lot_snapshot import resolve_lot_snapshot_url
+from app.modules.foliage.models import (
+    CommonAnalysis,
+    Crop,
+    Farm,
+    Lot,
+    LotCrop,
+    Nutrient,
+    ProductPrice,
+    Recommendation,
+)
 
 from . import foliage_report as web
 from .controller import ReportView
@@ -28,20 +40,43 @@ from .helpers import (
     NutrientOptimizer,
     ObjectiveResource,
     calcular_cv_nutriente,
+    compute_nano_dose_rows,
     contribuciones_de_producto,
     determinar_coeficientes_variacion,
+    precios_de_producto,
 )
+from .models import RecommendationDose
 
 
 @web.route("/listar_reportes/")
 @login_required
 def listar_reportes():
+    """Página: Listado paginado de informes de recomendación generados.
+
+    Filtra por finca y lote vía query params. Aplica multi-tenant:
+    solo muestra reportes cuyas fincas pertenecen a organizaciones
+    del usuario autenticado.
+
+    :param farm_id: ID de finca para filtrar (opcional, int)
+    :param lot_id: ID de lote para filtrar (opcional, int)
+    :param page: Número de página, default 1
+    :param per_page: Items por página, default 50, max 100
+    :status 200: Listado de informes con paginación
+    """
     claims = get_jwt()
     user_role = claims.get("rol")
 
     # Obtener parámetros de filtro de la URL
     farm_id = request.args.get("farm_id", type=int)
     lot_id = request.args.get("lot_id", type=int)
+    page = request.args.get("page", default=1, type=int)
+    per_page = request.args.get("per_page", default=50, type=int)
+
+    # Validar parámetros de paginación
+    if page < 1:
+        page = 1
+    if per_page < 1 or per_page > 100:
+        per_page = 10
 
     context = {
         "dashboard": True,
@@ -57,12 +92,16 @@ def listar_reportes():
     }
 
     # Query base
-    query = Recommendation.query.options(
-        db.joinedload(Recommendation.lot)
-        .joinedload(Lot.farm)
-        .joinedload(Farm.organization),
-        db.joinedload(Recommendation.crop),
-    ).filter(Recommendation.active == True)
+    query = (
+        Recommendation.query.options(
+            db.joinedload(Recommendation.lot)
+            .joinedload(Lot.farm)
+            .joinedload(Farm.organization),
+            db.joinedload(Recommendation.crop),
+        )
+        .filter(Recommendation.active == True)
+        .order_by(Recommendation.id.asc())
+    )
 
     # APLICAR FILTROS AQUÍ
     if lot_id:
@@ -79,6 +118,18 @@ def listar_reportes():
         if check_resource_access(rec.lot.farm, claims):
             accessible_recommendations.append(rec)
 
+    # El crop solo se muestra si el lote realmente lo tiene asociado
+    # (LotCrop). Los reportes de comparación agrovista usan un crop "host"
+    # para el objetivo temporal que no debe aparecer en el listado.
+    lot_ids = {rec.lot_id for rec in accessible_recommendations}
+    lot_crop_pairs = set()
+    if lot_ids:
+        lot_crop_pairs = set(
+            db.session.query(LotCrop.lot_id, LotCrop.crop_id)
+            .filter(LotCrop.lot_id.in_(lot_ids))
+            .all()
+        )
+
     # Serializar solo los datos necesarios para la tabla
     items_list = []
     for rec in accessible_recommendations:
@@ -91,7 +142,11 @@ def listar_reportes():
                     if rec.lot and rec.lot.farm
                     else "N/A"
                 ),
-                "crop": rec.crop.name if rec.crop else "N/A",
+                "crop": (
+                    rec.crop.name
+                    if rec.crop and (rec.lot_id, rec.crop_id) in lot_crop_pairs
+                    else ""
+                ),
                 "date": rec.date.strftime("%Y-%m-%d") if rec.date else "N/A",
                 "autor": rec.author or "Sistema",
             }
@@ -99,12 +154,32 @@ def listar_reportes():
 
     total_informes = len(items_list)
 
+    # Paginación manual sobre la lista ya filtrada por acceso
+    pages = (total_informes + per_page - 1) // per_page if per_page > 0 else 0
+    if page > pages and pages > 0:
+        page = pages
+    start = (page - 1) * per_page
+    end = start + per_page
+    paginated_items = items_list[start:end]
+
+    pagination = SimpleNamespace(
+        page=page,
+        pages=pages,
+        total=total_informes,
+        per_page=per_page,
+        has_prev=page > 1,
+        has_next=page < pages,
+        prev_num=page - 1 if page > 1 else 1,
+        next_num=page + 1 if page < pages else pages,
+    )
+
     return render_template(
         "listar_reportes.j2",
         **context,
         request=request,
         total_informes=total_informes,
-        items=items_list,
+        items=paginated_items,
+        pagination=pagination,
     )
 
 
@@ -154,12 +229,28 @@ def calculate_trends(historical_data):
                         "monthly_change": monthly_change,
                     }
 
+    # Restaurar las fechas a string: el template serializa historical_data
+    # con tojson y un datetime se volvería un http-date ilegible en el chart.
+    for entry in historical_data:
+        entry["fecha"] = entry["fecha"].strftime("%b %Y")
+
     return trends
 
 
 @web.route("/vista_reporte/<int:report_id>")
 @jwt_required()
 def vista_reporte(report_id):
+    """Página: Vista detallada de un informe de recomendación nutricional.
+
+    Renderiza análisis foliar, Ley del Mínimo, balance de minerales,
+    dosis nano, tendencias históricas y snapshot RGB del lote. Aplica
+    validación multi-tenant sobre la finca del lote asociado.
+
+    :param report_id: ID de la recomendación a visualizar
+    :status 200: Vista detallada del informe
+    :status 403: Usuario sin acceso a la finca del lote
+    :status 404: Recomendación no encontrada
+    """
     claims = get_jwt()
     context = {
         "dashboard": True,
@@ -181,6 +272,41 @@ def vista_reporte(report_id):
     minimum_law_analyses = data_response.get("minimum_law_analyses", {})
     automatic_recommendations = data_response.get("automatic_recommendations", {})
     text_recommendations = data_response.get("text_recommendations", "")
+
+    # Referencia de comparación: persistida en el snapshot por los informes
+    # de agrovista (comparison_label). Fallback para informes anteriores:
+    # el crop validado contra LotCrop (objetivo ideal) o etiqueta genérica.
+    comparison_label = (
+        minimum_law_analyses.get("comparison_label")
+        if isinstance(minimum_law_analyses, dict)
+        else None
+    )
+    if not comparison_label:
+        crop_info = data_response.get("crop")
+        if crop_info and crop_info.get("name"):
+            comparison_label = f"Datos cultivo ideal {crop_info['name']}"
+        else:
+            comparison_label = "Referencia personalizada"
+
+    # Cargar filas de dosis por ha persistidas por RecommendationGenerator.
+    # Una por producto en la combinación del optimizer. El template las
+    # renderiza en la pestaña Recomendaciones con tabla estructurada
+    # (kg/ha polvo | L/ha líquido + costo/ha). Si la lista está vacía
+    # (Recomendaciones legacy anteriores a la fase 002_add_recommendation_dose)
+    # se cae al fallback de texto plano de automatic_recommendations.
+    dose_rows = (
+        RecommendationDose.query.filter_by(recommendation_id=report_id)
+        .order_by(RecommendationDose.id.asc())
+        .all()
+    )
+    recommendation_doses = [d.to_dict() for d in dose_rows]
+
+    # Snapshot RGB del lote (generado por agrovista al guardar el análisis).
+    # Opcional: si el análisis base no tiene snapshot, el template no muestra nada.
+    lot_image_url = None
+    recommendation = db.session.get(Recommendation, report_id)
+    if recommendation is not None and recommendation.base_analysis is not None:
+        lot_image_url = resolve_lot_snapshot_url(recommendation.base_analysis)
 
     # Obtener CV de nutrientes para la tabla de Ley del Mínimo
     lot_id = (
@@ -222,15 +348,96 @@ def vista_reporte(report_id):
         }
     )
 
+    # --- Balance de Minerales (mismo cálculo que agrovista.comparison_config) ---
+    # Usa los datos foliares y el objetivo productivo ya persistidos en el
+    # reporte para computar déficits, grados y dosis de producto nano por ha.
+    mineral_balance = {}
+    nano_doses = {}
+    productive_obj = data_response.get("productiveObjective") or {}
+    foliar_data = (
+        analysis_data.get("foliar", {}) if isinstance(analysis_data, dict) else {}
+    )
+    if foliar_data and isinstance(foliar_data, dict):
+        nutrients = Nutrient.query.order_by(Nutrient.id.asc()).all()
+        # Mapa: clave foliar (nombre sin espacios ni tildes) → símbolo químico
+        name_to_symbol = {n.name.lower().replace(" ", ""): n.symbol for n in nutrients}
+        order = []
+        targets = {}
+        actuals = {}
+        for key, entry in foliar_data.items():
+            if key == "id" or not isinstance(entry, dict):
+                continue
+            symbol = name_to_symbol.get(key)
+            if not symbol:
+                continue
+            order.append(symbol)
+            if entry.get("ideal") is not None:
+                targets[symbol] = float(entry["ideal"])
+            if entry.get("valor") is not None:
+                actuals[symbol] = float(entry["valor"])
+        # Sort order to match agrovista/comparacion column layout
+        # (Nutrient.id order: N, P, K, Ca, Mg, S, Cu, Zn, Mn, B, Mo, Cl, Fe, Si).
+        symbol_position = {n.symbol: i for i, n in enumerate(nutrients)}
+        order.sort(key=lambda s: symbol_position.get(s, 9999))
+        # Aforo objetivo: meta productiva (fallback al actual); aforo actual:
+        # el del common analysis, convierte la fila Actual (kg/ha).
+        aforo_actual = productive_obj.get("current", {}).get("yield")
+        aforo = productive_obj.get("target", {}).get("yield") or aforo_actual
+        if order and aforo:
+            try:
+                mineral_balance = compute_mineral_balance(
+                    order,
+                    targets,
+                    actuals,
+                    aforo,
+                    nutrients,
+                    aforo_actual=aforo_actual,
+                )
+            except Exception:
+                current_app.logger.warning(
+                    "mineral_balance computation failed for report %s", report_id
+                )
+                mineral_balance = {}
+
+        # Costeo de los déficits con la línea nano: por cada déficit del
+        # balance se elige el producto con aporte (ProductContribution)
+        # que cubre el requerimiento al menor costo. Reemplaza la tabla
+        # de dosis del optimizer en el template; recommendation_doses
+        # queda como fallback para reportes sin balance computable.
+        if mineral_balance.get("entries"):
+            try:
+                now = datetime.now()
+                price_units = {
+                    pp.product.name: pp.price_unit
+                    for pp in ProductPrice.query.filter(
+                        ProductPrice.start_date <= now,
+                        ProductPrice.end_date >= now,
+                    ).all()
+                }
+                nano_doses = compute_nano_dose_rows(
+                    mineral_balance,
+                    {n.symbol: n.name for n in nutrients},
+                    contribuciones_de_producto(),
+                    precios_de_producto(),
+                    price_units,
+                )
+            except Exception:
+                current_app.logger.warning(
+                    "nano dose costing failed for report %s", report_id
+                )
+                nano_doses = {}
+
     return render_template(
         "view_report.j2",
         **context,
         request=request,
+        lot_image_url=lot_image_url,
         analysisData=analysis_data,
         nutrient_names=nutrient_names,
         minimum_law_analyses=minimum_law_analyses,
         automatic_recommendations=automatic_recommendations,
         text_recommendations=text_recommendations,
+        recommendation_doses=recommendation_doses,
         crop_name=(
             data_response.get("crop", {}).get("name")
             if data_response.get("crop")
@@ -239,347 +446,49 @@ def vista_reporte(report_id):
         report_title=data_response.get("title", ""),
         report_author=data_response.get("author", ""),
         recommendation_id=report_id,
+        productiveObjective=productive_obj,
+        comparison_label=comparison_label,
+        lot_area=(data_response.get("lot") or {}).get("area"),
+        mineral_balance=mineral_balance,
+        nano_doses=nano_doses,
     )
 
 
-@web.route("/vista_report")
+@web.route("/seguimiento/<int:lot_id>")
 @login_required
-def vista_report():
+def seguimiento_lote(lot_id: int):
+    """Página de seguimiento foliar post-aplicación para un lote."""
+    lot = Lot.query.get_or_404(lot_id)
+    claims = get_jwt()
+    if not check_resource_access(lot.farm, claims):
+        raise Forbidden("No tienes acceso a este lote.")
+    # author = usuario autenticado (full_name, fallback username, fallback "Sistema")
+    author = claims.get("full_name") or claims.get("username") or "Sistema"
     context = {
         "dashboard": True,
-        "title": "Dashboard TecnoAgro",
-        "description": "Panel de control.",
-        "author": "Johnny De Castro",
-        "site_title": "Panel de Control",
-        "og_image": "/img/og-image.jpg",
-        "twitter_image": "/img/twitter-image.jpg",
+        "title": "Seguimiento Foliar",
+        "description": "Evolución nutricional post-aplicación.",
+        "author": author,
+        "site_title": "Seguimiento Foliar",
         "data_menu": get_dashboard_menu(),
+        "lot_id": lot_id,
+        "lot_name": lot.name,
+        "farm_name": lot.farm.name,
     }
-
-    analysisData = {
-        "common": {
-            "id": 3,
-            "fechaAnalisis": "2025-03-26",
-            "finca": "El nuevo rocío",
-            "lote": "Lote 1",
-            "proteinas": 6.0,
-            "descanso": 5.0,
-            "diasDescanso": 5,
-            "mes": 5,
-        },
-        "foliar": {
-            "id": 1,
-            "nitrogeno": 2.5,
-            "fosforo": 0.3,
-            "potasio": 1.8,
-            "calcio": 1.2,
-            "magnesio": 0.4,
-            "azufre": 0.2,
-            "hierro": 85,
-            "manganeso": 45,
-            "zinc": 18,
-            "cobre": 6,
-            "boro": 25,
-        },
-        "soil": {
-            "id": 1,
-            "ph": 6.5,
-            "materiaOrganica": 3.2,
-            "nitrogeno": 0.15,
-            "fosforo": 12,
-            "potasio": 180,
-            "calcio": 1200,
-            "magnesio": 180,
-            "azufre": 15,
-            "textura": "Franco-arcillosa",
-            "cic": 15.2,
-        },
-    }
-
-    optimalLevels = {
-        "foliar": {
-            "nitrogeno": {"min": 2.8, "max": 3.5},
-            "fosforo": {"min": 0.2, "max": 0.4},
-            "potasio": {"min": 2.0, "max": 3.0},
-            "calcio": {"min": 1.0, "max": 2.0},
-            "magnesio": {"min": 0.3, "max": 0.6},
-            "azufre": {"min": 0.2, "max": 0.4},
-            "hierro": {"min": 50, "max": 150},
-            "manganeso": {"min": 25, "max": 100},
-            "zinc": {"min": 20, "max": 50},
-            "cobre": {"min": 5, "max": 15},
-            "boro": {"min": 20, "max": 50},
-        },
-        "soil": {
-            "ph": {"min": 6.0, "max": 7.0},
-            "materiaOrganica": {"min": 3.0, "max": 5.0},
-            "nitrogeno": {"min": 0.15, "max": 0.25},
-            "fosforo": {"min": 15, "max": 30},
-            "potasio": {"min": 150, "max": 250},
-            "calcio": {"min": 1000, "max": 2000},
-            "magnesio": {"min": 150, "max": 300},
-            "azufre": {"min": 10, "max": 20},
-            "cic": {"min": 12, "max": 25},
-        },
-    }
-
-    foliarChartData = [
-        {
-            "name": "N",
-            "actual": analysisData["foliar"]["nitrogeno"],
-            "min": optimalLevels["foliar"]["nitrogeno"]["min"],
-            "max": optimalLevels["foliar"]["nitrogeno"]["max"],
-        },
-        {
-            "name": "P",
-            "actual": analysisData["foliar"]["fosforo"],
-            "min": optimalLevels["foliar"]["fosforo"]["min"],
-            "max": optimalLevels["foliar"]["fosforo"]["max"],
-        },
-        {
-            "name": "K",
-            "actual": analysisData["foliar"]["potasio"],
-            "min": optimalLevels["foliar"]["potasio"]["min"],
-            "max": optimalLevels["foliar"]["potasio"]["max"],
-        },
-        {
-            "name": "Ca",
-            "actual": analysisData["foliar"]["calcio"],
-            "min": optimalLevels["foliar"]["calcio"]["min"],
-            "max": optimalLevels["foliar"]["calcio"]["max"],
-        },
-        {
-            "name": "Mg",
-            "actual": analysisData["foliar"]["magnesio"],
-            "min": optimalLevels["foliar"]["magnesio"]["min"],
-            "max": optimalLevels["foliar"]["magnesio"]["max"],
-        },
-        {
-            "name": "S",
-            "actual": analysisData["foliar"]["azufre"],
-            "min": optimalLevels["foliar"]["azufre"]["min"],
-            "max": optimalLevels["foliar"]["azufre"]["max"],
-        },
-    ]
-
-    soilChartData = [
-        {
-            "name": "pH",
-            "actual": analysisData["soil"]["ph"],
-            "min": optimalLevels["soil"]["ph"]["min"],
-            "max": optimalLevels["soil"]["ph"]["max"],
-            "unit": "",
-        },
-        {
-            "name": "M.O.",
-            "actual": analysisData["soil"]["materiaOrganica"],
-            "min": optimalLevels["soil"]["materiaOrganica"]["min"],
-            "max": optimalLevels["soil"]["materiaOrganica"]["max"],
-            "unit": "%",
-        },
-        {
-            "name": "N",
-            "actual": analysisData["soil"]["nitrogeno"],
-            "min": optimalLevels["soil"]["nitrogeno"]["min"],
-            "max": optimalLevels["soil"]["nitrogeno"]["max"],
-            "unit": "%",
-        },
-        {
-            "name": "P",
-            "actual": analysisData["soil"]["fosforo"],
-            "min": optimalLevels["soil"]["fosforo"]["min"],
-            "max": optimalLevels["soil"]["fosforo"]["max"],
-            "unit": "ppm",
-        },
-        {
-            "name": "K",
-            "actual": analysisData["soil"]["potasio"],
-            "min": optimalLevels["soil"]["potasio"]["min"],
-            "max": optimalLevels["soil"]["potasio"]["max"],
-            "unit": "ppm",
-        },
-        {
-            "name": "CIC",
-            "actual": analysisData["soil"]["cic"],
-            "min": optimalLevels["soil"]["cic"]["min"],
-            "max": optimalLevels["soil"]["cic"]["max"],
-            "unit": "meq/100g",
-        },
-    ]
-
-    historicalData = [
-        {"fecha": "Ene 2025", "nitrogeno": 2.3, "fosforo": 0.25, "potasio": 1.5},
-        {"fecha": "Feb 2025", "nitrogeno": 2.4, "fosforo": 0.28, "potasio": 1.6},
-        {"fecha": "Mar 2025", "nitrogeno": 2.5, "fosforo": 0.3, "potasio": 1.8},
-    ]
-
-    nutrientNames = {
-        "nitrogeno": "Nitrógeno",
-        "fosforo": "Fósforo",
-        "potasio": "Potasio",
-        "calcio": "Calcio",
-        "magnesio": "Magnesio",
-        "azufre": "Azufre",
-        "hierro": "Hierro",
-        "manganeso": "Manganeso",
-        "zinc": "Zinc",
-        "cobre": "Cobre",
-        "boro": "Boro",
-        "ph": "pH",
-        "materiaOrganica": "Materia Orgánica",
-        "cic": "CIC",
-    }
-
-    def getNutrientStatus(actual, min, max):
-        if actual < min:
-            return "deficiente"
-        if actual > max:
-            return "excesivo"
-        return "óptimo"
-
-    def getStatusColor(status):
-        match status:
-            case "deficiente":
-                return "text-red-500"
-            case "excesivo":
-                return "text-yellow-500"
-            case "óptimo":
-                return "text-green-500"
-            case _:
-                return ""
-
-    def getStatusIcon(status):
-        match status:
-            case "deficiente":
-                return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4 text-red-500"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>'
-            case "excesivo":
-                return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4 text-yellow-500"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>'
-            case "óptimo":
-                return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4 text-green-500"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="12 2 2 7.86 12 12"></polyline><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>'
-            case _:
-                return ""
-
-    def findLimitingNutrient():
-        limitingNutrient = None
-        lowestPercentage = 100
-
-        for nutrient, value in analysisData["foliar"].items():
-            if nutrient in optimalLevels["foliar"]:
-                min_value = optimalLevels["foliar"][nutrient]["min"]
-                max_value = optimalLevels["foliar"][nutrient]["max"]
-                optimalMid = (min_value + max_value) / 2
-                percentage = (value / optimalMid) * 100
-                if percentage < lowestPercentage and percentage < 90:
-                    lowestPercentage = percentage
-                    limitingNutrient = {
-                        "name": nutrient,
-                        "value": value,
-                        "optimal": optimalMid,
-                        "percentage": percentage,
-                        "type": "foliar",
-                    }
-
-        for nutrient, value in analysisData["soil"].items():
-            if nutrient in optimalLevels["soil"] and nutrient != "ph":
-                min_value = optimalLevels["soil"][nutrient]["min"]
-                max_value = optimalLevels["soil"][nutrient]["max"]
-                optimalMid = (min_value + max_value) / 2
-                percentage = (value / optimalMid) * 100
-                if percentage < lowestPercentage and percentage < 90:
-                    lowestPercentage = percentage
-                    limitingNutrient = {
-                        "name": nutrient,
-                        "value": value,
-                        "optimal": optimalMid,
-                        "percentage": percentage,
-                        "type": "soil",
-                    }
-
-        return limitingNutrient
-
-    def generateRecommendations():
-        recommendations = []
-
-        limitingNutrient = findLimitingNutrient()
-
-        if limitingNutrient:
-            nutrientName = (
-                nutrientNames[limitingNutrient["name"]] or limitingNutrient["name"]
-            )
-            recommendations.append(
-                {
-                    "title": f"Corregir deficiencia de {nutrientName}",
-                    "description": f"El {nutrientName} es el nutriente limitante según la Ley de Liebig. Está al limitingNutrient['percentage']% del nivel óptimo.",
-                    "priority": "alta",
-                    "action": (
-                        "Aplicar fertilizante foliar rico en {nutrientName}"
-                        if limitingNutrient["type"] == "foliar"
-                        else f"Incorporar {nutrientName} al suelo mediante fertilización"
-                    ),
-                }
-            )
-
-        phStatus = getNutrientStatus(
-            analysisData["soil"]["ph"],
-            optimalLevels["soil"]["ph"]["min"],
-            optimalLevels["soil"]["ph"]["max"],
-        )
-        if phStatus != "óptimo":
-            recommendations.append(
-                {
-                    "title": (
-                        "Corregir acidez del suelo"
-                        if phStatus == "deficiente"
-                        else "Reducir alcalinidad del suelo"
-                    ),
-                    "description": f"El pH actual ({analysisData['soil']['ph']}) está {'por debajo' if phStatus == 'deficiente' else 'por encima'} del rango óptimo.",
-                    "priority": "media",
-                    "action": (
-                        "Aplicar cal agrícola para elevar el pH"
-                        if phStatus == "deficiente"
-                        else "Aplicar azufre elemental o materia orgánica para reducir el pH"
-                    ),
-                }
-            )
-
-        moStatus = getNutrientStatus(
-            analysisData["soil"]["materiaOrganica"],
-            optimalLevels["soil"]["materiaOrganica"]["min"],
-            optimalLevels["soil"]["materiaOrganica"]["max"],
-        )
-        if moStatus == "deficiente":
-            recommendations.append(
-                {
-                    "title": "Aumentar materia orgánica",
-                    "description": f"El nivel de materia orgánica ({analysisData['soil']['materiaOrganica']}%) está por debajo del óptimo.",
-                    "priority": "media",
-                    "action": "Incorporar compost, estiércol bien descompuesto o abonos verdes",
-                }
-            )
-
-        return recommendations
-
-    limitingNutrient = findLimitingNutrient()
-    recommendations = generateRecommendations()
-
-    return render_template(
-        "ver_reporte2.j2",
-        **context,
-        request=request,
-        analysisData=analysisData,
-        optimalLevels=optimalLevels,
-        foliarChartData=foliarChartData,
-        soilChartData=soilChartData,
-        historicalData=historicalData,
-        nutrientNames=nutrientNames,
-        limitingNutrient=limitingNutrient,
-        recommendations=recommendations,
-    )
+    return render_template("seguimiento_lote.j2", **context, request=request)
 
 
 @web.route("/solicitar_informe")
 @login_required
 def generar_informe():
+    """Página: Formulario de solicitud de informe nutricional.
+
+    Permite seleccionar finca, lote, cultivo y objetivo para generar
+    un nuevo reporte de recomendación. El formulario envía los datos
+    a la API para su procesamiento.
+
+    :status 200: Formulario de solicitud de informe
+    """
     context = {
         "dashboard": True,
         "title": "Dashboard TecnoAgro",
