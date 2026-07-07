@@ -52,6 +52,7 @@ def hello():
         "entity_name_lower": "reporte",
         "context_client": org.name if org else "Sin cliente",
         "context_farm": farm.name if farm else "Sin finca",
+        "context_farm_id": farm.id if farm else None,
         "context_asset": None,
     }
     return render_template("agrovista/ndvi-tool.j2", **context)

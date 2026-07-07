@@ -1,28 +1,66 @@
-{# partials/header.j2 #}
+﻿{# partials/header.j2 #}
 {# header layout, topbar -> logo, menu #}
- <header class="z-30 bg-white dark:bg-gray-900 shadow-md border-b border-gray-200 dark:border-b-gray-800">
-    <div class="container mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="flex items-center justify-between h-16">
+
+<header class="z-30 bg-white dark:bg-gray-900 shadow-md border-b border-gray-200 dark:border-b-gray-800"
+        style="height:34px; min-height:34px; max-height:34px; overflow:visible;">
+
+    <div class="container mx-auto px-4 sm:px-6 lg:px-8"
+         style="height:34px; position:relative; overflow:visible;">
+
+        <!-- Contenido subido dentro de la barra -->
+        <div class="flex items-center justify-between"
+             style="height:34px; min-height:34px; max-height:34px; position:relative; top:-6px; overflow:visible;">
+
             <!-- Logo -->
-            
             <div class="flex-shrink-0 lg:pl-12 sm:pl-12 xs:pl-12">
                 <a href="/" class="flex items-center">
-                    <img class="h-12 w-auto" src="/img/logo.png" alt="TecnoAgro - Inicio">
+                    <span class="sr-only">TecnoAgro - Inicio</span>
                 </a>
             </div>
 
-            <!-- Title (hidden on mobile) -->
-              <h1 class="hidden md:block text-2xl font-semibold text-gray-900 dark:text-white">{{ page_title }}</h1>
+            <!-- Brand image (hidden on mobile) -->
+            <div class="hidden md:flex flex-1 justify-center items-center">
+                <img
+                    src="{{ page_logo|default('/img/iamgentec.png') }}"
+                    alt="{{ page_title|default('TecnoVant') }}"
+                    class="h-11 w-auto max-w-[260px] object-contain"
+                >
+            </div>
 
             {% block navigation %}
-            <nav class="flex items-center">
+            <nav class="flex items-center gap-3" style="height:34px;">
                 {% include 'partials/navigation.j2' %}
+
+                <button id="darkModeToggle"
+                        type="button"
+                        style="display:inline-flex; width:34px; height:34px; min-width:34px; aspect-ratio:1 / 1; align-items:center; justify-content:center; padding:0; border:0; border-radius:9999px; overflow:hidden;"
+                        class="inline-flex items-center justify-center rounded-full bg-gray-100 text-gray-700 shadow-sm transition hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                        aria-label="Cambiar modo oscuro">
+                    <svg xmlns="http://www.w3.org/2000/svg"
+                         class="h-4 w-4"
+                         fill="none"
+                         viewBox="0 0 24 24"
+                         stroke="currentColor">
+                        <path stroke-linecap="round"
+                              stroke-linejoin="round"
+                              stroke-width="2"
+                              d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                    </svg>
+                </button>
             </nav>
             {% endblock %}
+
         </div>
 
+        <!-- Brand image (visible only on mobile) -->
+        <div class="md:hidden flex justify-center items-center"
+             style="height:34px; position:relative; top:-4px; overflow:visible;">
+            <img
+                src="{{ page_logo|default('/img/iamgentec.png') }}"
+                alt="{{ page_title|default('TecnoVant') }}"
+                class="h-10 w-auto max-w-[220px] object-contain"
+            >
+        </div>
 
-        <!-- Title (visible only on mobile) -->
-          <h1 class="md:hidden text-2xl font-semibold text-gray-900 dark:text-white text-center py-2">{{ page_title }}</h1>
     </div>
 </header>

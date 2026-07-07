@@ -1,0 +1,251 @@
+{% extends "base.j2" %}
+{% set flush_content_shell = true %}
+{% set suppress_base_flashes = true %}
+
+{% block extra_css %}
+{{ super() }}
+<style>
+  .drone-page { display: grid; gap: 18px; color: #17221e; }
+  .drone-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; }
+  .drone-title p, .drone-muted { color: #6b766f; }
+  .drone-title h1 { margin: 6px 0 0; color: #10201b; font-size: 28px; font-weight: 600; line-height: 1.12; }
+  .drone-eyebrow { color: #0f8a5f; font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+
+  .drone-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 38px; padding: 0 14px; border: 1px solid #dbe6dd; border-radius: 999px; background: #fff; color: #173f36; font-size: 13px; font-weight: 650; transition: background 140ms ease, border-color 140ms ease, transform 140ms ease; }
+  .drone-btn:hover { border-color: #b8dfae; background: #f5fbf2; transform: translateY(-1px); }
+  .drone-btn-primary { border-color: #173f36; background: #173f36; color: #f7fff7; }
+  .drone-btn-primary:hover { border-color: #235446; background: #235446; color: #fff; }
+  .drone-btn-danger { border-color: #fecaca; background: #fff7f7; color: #b91c1c; }
+  .drone-btn-danger:hover { border-color: #fca5a5; background: #fff1f1; }
+
+  .drone-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+  .drone-stat, .drone-card, .drone-modal-panel { border: 1px solid #dfe8df; border-radius: 16px; background: rgba(255,255,255,.96); box-shadow: 0 10px 24px rgba(15,23,42,.05); }
+  .drone-stat { display: flex; align-items: center; gap: 14px; padding: 16px; }
+  .drone-stat-icon { display: inline-flex; width: 42px; height: 42px; min-width: 42px; align-items: center; justify-content: center; border-radius: 14px; background: #eef8ee; color: #173f36; font-size: 17px; }
+  .drone-stat-icon[data-tone="green"] { background: #eaf9ef; color: #166534; }
+  .drone-stat-icon[data-tone="blue"] { background: #eaf5ff; color: #075985; }
+  .drone-stat span { color: #7a867f; font-size: 11px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; }
+  .drone-stat strong { display: block; margin-top: 8px; color: #10201b; font-size: 25px; font-weight: 600; line-height: 1; }
+
+  .drone-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(246px, 1fr)); gap: 16px; align-items: start; }
+  .drone-card { overflow: hidden; padding: 14px; max-width: 300px; }
+  .drone-visual { display: grid; min-height: 150px; place-items: center; border-radius: 14px; background: linear-gradient(145deg, #ffffff, #f4f7f4); }
+  .drone-visual svg { width: 92%; max-width: 235px; filter: drop-shadow(0 14px 14px rgba(15,23,42,.16)); }
+  .drone-card-body { padding: 14px 1px 1px; }
+  .drone-card-top { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: start; }
+  .drone-card h2 { color: #10201b; font-size: 17px; font-weight: 600; line-height: 1.2; text-transform: uppercase; }
+  .drone-model { color: #10201b; font-size: 14px; font-weight: 650; line-height: 1.1; text-align: right; word-break: break-word; }
+  .drone-serial { margin-top: 8px; color: #708095; font-size: 13px; }
+  .drone-meta { display: grid; grid-template-columns: 1fr auto; gap: 14px; margin-top: 18px; align-items: end; }
+  .drone-label { color: #66768d; font-size: 11px; }
+  .drone-hours { margin-top: 3px; color: #23362f; font-size: 17px; font-weight: 650; }
+  .drone-status { display: inline-flex; align-items: center; min-height: 30px; padding: 0 12px; border: 1px solid #9de6a4; border-radius: 999px; background: #dff9df; color: #17833a; font-size: 12px; font-weight: 650; white-space: nowrap; }
+  .drone-status[data-status="No aeronavegable"], .drone-status[data-status="Mantenimiento"] { border-color: #fcd34d; background: #fff7d6; color: #92400e; }
+
+  .drone-card-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 16px; }
+  .drone-card-actions form { display: block; width: 100%; min-width: 0; }
+  .drone-action-btn { display: inline-flex; width: 100%; align-items: center; justify-content: center; gap: 7px; min-height: 36px; border: 1px solid #dbe6dd; border-radius: 999px; background: #fff; color: #173f36; font-size: 12px; font-weight: 700; white-space: nowrap; }
+  .drone-action-btn:hover { background: #f5fbf2; border-color: #b8dfae; }
+  .drone-action-danger { border-color: #fecaca; color: #b91c1c; }
+  .drone-action-danger:hover { background: #fff1f2; border-color: #fca5a5; }
+
+  .drone-empty { display: grid; min-height: 190px; place-items: center; border: 1px dashed #d7e3d8; border-radius: 16px; background: rgba(255,255,255,.74); color: #7a867f; text-align: center; }
+  .drone-modal { position: fixed; inset: 0; z-index: 60; display: none; overflow-y: auto; padding: 24px; }
+  .drone-modal.is-open { display: grid; place-items: center; }
+  .drone-modal-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,.55); backdrop-filter: blur(4px); }
+  .drone-modal-panel { position: relative; width: min(100%, 560px); padding: 20px; }
+  .drone-modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding-bottom: 16px; border-bottom: 1px solid #edf2ed; }
+  .drone-modal-head h2 { margin: 0; color: #17221e; font-size: 19px; font-weight: 650; }
+  .drone-form { display: grid; gap: 14px; margin-top: 16px; }
+  .drone-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .drone-field { display: grid; gap: 7px; }
+  .drone-field label { color: #46564d; font-size: 12px; font-weight: 650; }
+  .drone-field input, .drone-field select { width: 100%; min-height: 40px; border: 1px solid #d6e0d8; border-radius: 10px; background: #fff; padding: 0 12px; color: #17221e; font-size: 13px; outline: none; }
+  .drone-field input:focus, .drone-field select:focus { border-color: #80c979; box-shadow: 0 0 0 3px rgba(128,201,121,.18); }
+  .drone-modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 4px; }
+
+  .dark .drone-page, .dark .drone-title h1, .dark .drone-stat strong, .dark .drone-modal-head h2, .dark .drone-field input, .dark .drone-field select { color: #f4fbf5; }
+  .dark .drone-title p, .dark .drone-muted, .dark .drone-stat span, .dark .drone-field label { color: #a9b8ae; }
+  .dark .drone-stat, .dark .drone-card, .dark .drone-modal-panel, .dark .drone-empty { border-color: rgba(148,163,184,.16); background: rgba(22,32,27,.94); }
+  .dark .drone-visual { background: linear-gradient(145deg, rgba(31,41,55,.9), rgba(17,24,39,.92)); }
+  .dark .drone-card h2, .dark .drone-model, .dark .drone-hours { color: #e8f7ef; }
+  .dark .drone-serial, .dark .drone-label { color: #a9b8ae; }
+  .dark .drone-field input, .dark .drone-field select { border-color: rgba(148,163,184,.22); background: rgba(31,41,55,.72); }
+
+  @media (max-width: 760px) { .drone-head, .drone-form-grid { grid-template-columns: 1fr; } .drone-head { align-items: flex-start; flex-direction: column; } .drone-stats { grid-template-columns: 1fr; } .drone-card { max-width: none; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="drone-page">
+  <section class="drone-head">
+    <div class="drone-title">
+      <p class="drone-eyebrow">Mantenimiento</p>
+      <h1>Drones</h1>
+      <p class="mt-2 max-w-3xl text-sm">Administra los equipos registrados, sus horas acumuladas y su estado operativo.</p>
+    </div>
+    <button type="button" class="drone-btn drone-btn-primary" data-drone-modal-open>
+      <i class="fas fa-plus"></i> Registrar drone
+    </button>
+  </section>
+
+  <section class="drone-stats">
+    <article class="drone-stat"><i class="drone-stat-icon fas fa-helicopter"></i><div><span>Equipos registrados</span><strong>{{ drones|length }}</strong></div></article>
+    <article class="drone-stat"><i class="drone-stat-icon fas fa-check-circle" data-tone="green"></i><div><span>Aeronavegables</span><strong>{{ active_count }}</strong></div></article>
+    <article class="drone-stat"><i class="drone-stat-icon fas fa-clock" data-tone="blue"></i><div><span>Horas acumuladas</span><strong>{{ "%.1f"|format(total_hours) }}</strong></div></article>
+  </section>
+
+  {% if drones %}
+    <section class="drone-grid">
+      {% for drone in drones %}
+        <article class="drone-card">
+          <div class="drone-visual" aria-hidden="true">
+            <svg viewBox="0 0 260 150" role="img">
+              <defs><linearGradient id="wingGrad{{ drone.id }}" x1="0" x2="1"><stop offset="0" stop-color="#bfc6c6"/><stop offset="0.54" stop-color="#f5f6f3"/><stop offset="1" stop-color="#aeb7b7"/></linearGradient></defs>
+              <path d="M32 78 L128 61 L232 74 L229 83 L130 76 L35 88 Z" fill="url(#wingGrad{{ drone.id }})" />
+              <path d="M121 42 L140 42 L146 112 L135 120 L126 91 Z" fill="#d8dddd" />
+              <path d="M96 72 L151 68 L156 81 L99 84 Z" fill="#aab4b4" />
+              <circle cx="157" cy="88" r="17" fill="#d7dede"/><circle cx="157" cy="88" r="10" fill="#8f999b"/>
+              <path d="M26 77 h28 M40 63 v28 M218 72 h28 M232 58 v28 M118 38 h26 M131 25 v28" stroke="#6f7b7c" stroke-width="3" stroke-linecap="round"/>
+              <path d="M103 71 L80 101 M154 77 L184 106" stroke="#7e898b" stroke-width="4" stroke-linecap="round"/>
+              <text x="103" y="70" fill="#e64b3d" font-size="8" font-weight="700" transform="rotate(-10 103 70)">TECNO</text>
+            </svg>
+          </div>
+          <div class="drone-card-body">
+            <div class="drone-card-top">
+              <div>
+                <h2>{{ drone.brand }}</h2>
+                <p class="drone-serial"><i class="fas fa-barcode mr-1"></i> Serie: {{ drone.serial_number }}</p>
+              </div>
+              <div class="drone-model">{{ drone.model }}</div>
+            </div>
+            <div class="drone-meta">
+              <div><div class="drone-label">Horas</div><div class="drone-hours">{{ "%.1f"|format(drone.flight_hours|float) }}</div></div>
+              <span class="drone-status" data-status="{{ drone.status }}">{{ drone.status }}</span>
+            </div>
+            <div class="drone-card-actions">
+              <button type="button" class="drone-action-btn" data-drone-edit data-id="{{ drone.id }}" data-serial="{{ drone.serial_number }}" data-brand="{{ drone.brand }}" data-model="{{ drone.model }}" data-hours="{{ '%.1f'|format(drone.flight_hours|float) }}" data-status="{{ drone.status }}"><i class="fas fa-pen"></i> Editar</button>
+              <form method="post" action="{{ url_for('core.maintenance_drones_delete', drone_id=drone.id) }}" onsubmit="return confirm('¿Eliminar este drone?');">
+                <button type="submit" class="drone-action-btn drone-action-danger"><i class="fas fa-trash"></i> Eliminar</button>
+              </form>
+            </div>
+          </div>
+        </article>
+      {% endfor %}
+    </section>
+  {% else %}
+    <section class="drone-empty"><div><p class="font-semibold">Aún no hay drones registrados.</p><p class="mt-1 text-sm">Registra el primer equipo para iniciar el control de mantenimiento.</p></div></section>
+  {% endif %}
+</div>
+
+<div id="drone-register-modal" class="drone-modal" aria-hidden="true" role="dialog" aria-labelledby="drone-register-title" data-modal-managed="true">
+  <div class="drone-modal-backdrop" data-drone-modal-close></div>
+  <div class="drone-modal-panel">
+    <div class="drone-modal-head"><div><p class="drone-eyebrow" data-modal-eyebrow>Nuevo equipo</p><h2 id="drone-register-title" data-modal-title>Registrar drone</h2></div><button type="button" class="drone-btn" data-drone-modal-close aria-label="Cerrar modal"><i class="fas fa-times"></i></button></div>
+    <form id="drone-form" class="drone-form" method="post" action="{{ url_for('core.maintenance_drones') }}" data-create-action="{{ url_for('core.maintenance_drones') }}">
+      <div class="drone-field"><label for="serial_number">Número de serie</label><input id="serial_number" name="serial_number" required maxlength="80" placeholder="Ej: AGH12250GSD5"></div>
+      <div class="drone-form-grid"><div class="drone-field"><label for="brand">Marca</label><input id="brand" name="brand" required maxlength="80" placeholder="Ej: AUTEL"></div><div class="drone-field"><label for="model">Modelo</label><input id="model" name="model" required maxlength="120" placeholder="Ej: UAS-7"></div></div>
+      <div class="drone-form-grid"><div class="drone-field"><label for="flight_hours">Horas de vuelo</label><input id="flight_hours" name="flight_hours" required type="number" min="0" step="0.1" value="0.0"></div><div class="drone-field"><label for="status">Estado</label><select id="status" name="status"><option value="Aeronavegable">Aeronavegable</option><option value="Mantenimiento">Mantenimiento</option><option value="No aeronavegable">No aeronavegable</option></select></div></div>
+      <div class="drone-modal-actions"><button type="button" class="drone-btn" data-drone-modal-close>Cancelar</button><button type="submit" class="drone-btn drone-btn-primary"><i class="fas fa-save"></i> <span data-submit-label>Guardar drone</span></button></div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{{ super() }}
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    {% set category = messages[-1][0] %}
+    {% set message = messages[-1][1] %}
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>
+      document.addEventListener('DOMContentLoaded', function () {
+        const category = {{ category|tojson }};
+        const message = {{ message|tojson }};
+        const isSuccess = category === 'success';
+        if (window.Swal) {
+          Swal.fire({
+            icon: isSuccess ? 'success' : 'error',
+            title: isSuccess ? 'Guardado' : 'Revisión',
+            text: message,
+            confirmButtonText: 'OK',
+            customClass: { confirmButton: 'login-alert-button' }
+          });
+        } else {
+          alert(message);
+        }
+      });
+    </script>
+  {% endif %}
+{% endwith %}
+
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const modal = document.getElementById('drone-register-modal');
+    const form = document.getElementById('drone-form');
+    const fields = {
+      serial: document.getElementById('serial_number'),
+      brand: document.getElementById('brand'),
+      model: document.getElementById('model'),
+      hours: document.getElementById('flight_hours'),
+      status: document.getElementById('status')
+    };
+    const modalTitle = document.querySelector('[data-modal-title]');
+    const modalEyebrow = document.querySelector('[data-modal-eyebrow]');
+    const submitLabel = document.querySelector('[data-submit-label]');
+
+    function openModal() {
+      if (!modal) return;
+      modal.classList.add('is-open');
+      modal.setAttribute('aria-hidden', 'false');
+      document.body.classList.add('overflow-hidden');
+      window.setTimeout(function () { if (fields.serial) fields.serial.focus(); }, 50);
+    }
+
+    function closeModal() {
+      if (!modal) return;
+      modal.classList.remove('is-open');
+      modal.setAttribute('aria-hidden', 'true');
+      document.body.classList.remove('overflow-hidden');
+    }
+
+    function resetCreateMode() {
+      if (!form) return;
+      form.action = form.dataset.createAction;
+      form.reset();
+      if (fields.hours) fields.hours.value = '0.0';
+      if (fields.status) fields.status.value = 'Aeronavegable';
+      if (modalTitle) modalTitle.textContent = 'Registrar drone';
+      if (modalEyebrow) modalEyebrow.textContent = 'Nuevo equipo';
+      if (submitLabel) submitLabel.textContent = 'Guardar drone';
+    }
+
+    document.querySelectorAll('[data-drone-modal-open]').forEach(function (button) {
+      button.addEventListener('click', function () { resetCreateMode(); openModal(); });
+    });
+
+    document.querySelectorAll('[data-drone-edit]').forEach(function (button) {
+      button.addEventListener('click', function () {
+        if (!form) return;
+        form.action = `/dashboard/mantenimiento/drones/${button.dataset.id}/editar`;
+        fields.serial.value = button.dataset.serial || '';
+        fields.brand.value = button.dataset.brand || '';
+        fields.model.value = button.dataset.model || '';
+        fields.hours.value = button.dataset.hours || '0.0';
+        fields.status.value = button.dataset.status || 'Aeronavegable';
+        if (modalTitle) modalTitle.textContent = 'Editar drone';
+        if (modalEyebrow) modalEyebrow.textContent = 'Equipo registrado';
+        if (submitLabel) submitLabel.textContent = 'Actualizar drone';
+        openModal();
+      });
+    });
+
+    document.querySelectorAll('[data-drone-modal-close]').forEach(function (button) { button.addEventListener('click', closeModal); });
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape') closeModal();
+    });
+  });
+</script>
+{% endblock %}
+

@@ -1,0 +1,75 @@
+{% extends "pilot_portal/base.j2" %}
+
+{% block body %}
+<main class="pilot-shell">
+  <header class="app-header">
+    <div>
+      <p class="pilot-eyebrow">Mi perfil</p>
+      <h1 class="app-title">Hola, {{ pilot.first_name }}</h1>
+      <p class="app-subtitle">Panel operativo de vuelo</p>
+    </div>
+    <a class="icon-button" href="{{ url_for('core.pilot_logout') }}" aria-label="Salir"><i class="fas fa-sign-out-alt"></i></a>
+  </header>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="pilot-alerts">
+        {% for category, message in messages %}
+          <div class="pilot-alert pilot-alert-{{ 'success' if category == 'success' else 'error' }}">{{ message }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <section class="hero-profile">
+    <div class="hero-profile-head">
+      <div class="avatar">{{ pilot.first_name[:1] }}{{ pilot.last_name[:1] }}</div>
+      <div>
+        <h2>{{ pilot.full_name }}</h2>
+        <p>{{ pilot.certification_status }} · {{ pilot.username }}</p>
+      </div>
+    </div>
+    <div class="metric-strip">
+      <div class="metric-pill"><span>Hoy</span><strong>{{ today_count }}</strong></div>
+      <div class="metric-pill"><span>Semana</span><strong>{{ week_count }}</strong></div>
+      <div class="metric-pill"><span>Horas</span><strong>{{ total_hours }}</strong></div>
+    </div>
+  </section>
+
+  <section class="section-title">
+    <h2>Proximas actividades</h2>
+    <a href="{{ url_for('core.pilot_calendar') }}">Ver todas</a>
+  </section>
+
+  <section aria-label="Operaciones asignadas">
+    {% for activity in activities %}
+      <a class="task-card" data-status="{{ activity.status }}" href="{{ url_for('core.pilot_activity_detail', activity_id=activity.id) }}">
+        <div class="task-time">
+          <span>{{ activity.starts_at.strftime("%I:%M %p") }}</span>
+          <span>{{ activity.ends_at.strftime("%I:%M %p") }}</span>
+        </div>
+        <div class="task-main">
+          <div class="pilot-item-head" style="margin-bottom: 4px;">
+            <strong>{{ activity.title }}</strong>
+            <span class="pilot-badge" data-status="{{ activity.status }}">{{ status_label(activity.status) }}</span>
+          </div>
+          <small>{{ activity.place }}</small>
+          <small>{{ activity.drone.brand }} {{ activity.drone.model }} · {{ activity.operation_type }}</small>
+        </div>
+      </a>
+    {% else %}
+      <div class="empty-state">No tienes operaciones programadas.</div>
+    {% endfor %}
+  </section>
+
+
+</main>
+
+<nav class="pilot-nav" aria-label="Portal piloto">
+  <a class="is-active" href="{{ url_for('core.pilot_panel') }}"><i class="fas fa-th-large"></i><span>Inicio</span></a>
+  <a href="{{ url_for('core.pilot_calendar') }}"><i class="fas fa-calendar-alt"></i><span>Agenda</span></a>
+  <a href="{{ url_for('core.pilot_orthophotos') }}"><i class="fas fa-images"></i><span>Ortofotos</span></a>
+  <a href="{{ url_for('core.pilot_flight_log') }}"><i class="fas fa-clipboard-list"></i><span>Bitacora</span></a>
+</nav>
+{% endblock %}
+

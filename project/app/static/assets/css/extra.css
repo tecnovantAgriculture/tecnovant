@@ -47,12 +47,443 @@ h1, h2, h3, h4, h5, h6 {
   min-height: calc(100vh - 136px) !important;
 }
 
+#darkModeToggle {
+  display: inline-grid !important;
+  width: 2.5rem !important;
+  height: 2.5rem !important;
+  min-width: 2.5rem !important;
+  min-height: 2.5rem !important;
+  aspect-ratio: 1 / 1 !important;
+  place-items: center !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 9999px !important;
+  overflow: hidden !important;
+}
+
+#darkModeToggle svg {
+  width: 1.25rem !important;
+  height: 1.25rem !important;
+}
+
+.sidebar-brand {
+  display: flex;
+  justify-content: center;
+  margin-top: 1rem;
+  margin-bottom: 2rem;
+}
+
+.sidebar-brand__logo {
+  width: 12.5rem;
+  height: auto;
+}
+
+#sidebar .sidebar-menu-list {
+  width: min(100%, 13rem);
+  margin: 2.75rem auto 0 !important;
+}
+
+#sidebar,
+#sidebar > div {
+  background: #ffffff !important;
+  color: #24342d !important;
+}
+
+#sidebar > .tv-sidebar-inner {
+  padding-top: 3rem !important;
+}
+
+.dark #sidebar,
+.dark #sidebar > div {
+  background: #101915 !important;
+  color: #e7f2ea !important;
+}
+
+#sidebar {
+  border-right: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+#sidebar .sidebar-menu-list {
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+
+#sidebar .sidebar__item > a,
+#sidebar .sidebar__item > button {
+  min-height: 2.25rem;
+  padding: 0.5rem 0.75rem !important;
+  border-radius: 999px !important;
+  color: #526158 !important;
+  font-weight: 500 !important;
+}
+
+#sidebar .sidebar__item > a:hover,
+#sidebar .sidebar__item > button:hover {
+  background: #f3f7f3 !important;
+  color: #163e33 !important;
+}
+
+#sidebar .sidebar__item > a[data-active="True"],
+#sidebar .sidebar__item > button[data-active="True"],
+#sidebar .sidebar__item > a[data-active="true"],
+#sidebar .sidebar__item > button[data-active="true"] {
+  background: #bdf68f !important;
+  color: #173f36 !important;
+  box-shadow: none !important;
+}
+
+#sidebar .sidebar__item > a[data-active="True"] .sidebar__label,
+#sidebar .sidebar__item > button[data-active="True"] .sidebar__label,
+#sidebar .sidebar__item > a[data-active="true"] .sidebar__label,
+#sidebar .sidebar__item > button[data-active="true"] .sidebar__label {
+  color: #173f36 !important;
+  font-weight: 600 !important;
+}
+
+#sidebar .sidebar__item svg {
+  width: 1rem;
+  height: 1rem;
+  color: #7a857e !important;
+}
+
+#sidebar .sidebar__item > a[data-active="True"] svg,
+#sidebar .sidebar__item > button[data-active="True"] svg,
+#sidebar .sidebar__item > a[data-active="true"] svg,
+#sidebar .sidebar__item > button[data-active="true"] svg {
+  color: #173f36 !important;
+}
+
+#sidebar .sidebar__label {
+  margin-inline-start: 0.625rem !important;
+  color: inherit !important;
+  font-weight: inherit !important;
+}
+
+#sidebar #sidebar-toggle-desktop {
+  width: min(100%, 13rem);
+  margin-inline: auto;
+}
+
+#sidebar [data-visible="onClick"] ul {
+  margin-top: 0.35rem !important;
+  padding: 0.25rem 0 0.25rem 1.25rem !important;
+  background: transparent !important;
+}
+
+#sidebar [data-visible="onClick"] ul a {
+  min-height: 1.9rem;
+  padding: 0.4rem 0.65rem !important;
+  border-radius: 999px !important;
+  color: #657168 !important;
+  font-size: 0.78rem;
+  font-weight: 500 !important;
+}
+
+#sidebar [data-visible="onClick"] ul a:hover {
+  background: #f3f7f3 !important;
+  color: #173f36 !important;
+}
+
+#sidebar [data-visible="onClick"] ul a.bg-emerald-200,
+#sidebar [data-visible="onClick"] ul a.dark\:bg-emerald-800 {
+  background: rgba(189, 246, 143, 0.78) !important;
+  color: #173f36 !important;
+}
+
+.dark #sidebar .sidebar__item > a,
+.dark #sidebar .sidebar__item > button,
+.dark #sidebar [data-visible="onClick"] ul a {
+  color: #b8c6bd !important;
+}
+
+.dark #sidebar .sidebar__item > a:hover,
+.dark #sidebar .sidebar__item > button:hover,
+.dark #sidebar [data-visible="onClick"] ul a:hover {
+  background: rgba(189, 246, 143, 0.14) !important;
+  color: #e7f2ea !important;
+}
+
+.dark #sidebar .sidebar__item > a[data-active="True"],
+.dark #sidebar .sidebar__item > button[data-active="True"],
+.dark #sidebar .sidebar__item > a[data-active="true"],
+.dark #sidebar .sidebar__item > button[data-active="true"] {
+  background: rgba(189, 246, 143, 0.22) !important;
+  color: #c8fb8d !important;
+}
+
+.login-screen {
+  position: relative;
+  display: grid;
+  min-height: 100vh;
+  place-items: center end;
+  padding: 2rem clamp(2rem, 12vw, 14rem) 2rem 2rem;
+  overflow: hidden;
+  background:
+    linear-gradient(90deg, rgba(0, 42, 45, 0.22), rgba(0, 42, 45, 0.08) 45%, rgba(0, 42, 45, 0.18)),
+    var(--login-bg-image) center / cover no-repeat;
+}
+
+.login-screen::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 40, 42, 0.02);
+  pointer-events: none;
+}
+
+.login-panel {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 360px);
+  transform: translateY(2.5rem);
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.45rem;
+  width: 100%;
+  padding: 1rem 0;
+  font-family: "Montserrat", "Segoe UI", Arial, Helvetica, sans-serif;
+}
+
+.login-title {
+  margin: 0;
+  padding: 0;
+  color: #ffffff;
+  font-family: "Montserrat", "Segoe UI", Arial, Helvetica, sans-serif;
+  font-size: clamp(1.8rem, 3.6vw, 2.35rem);
+  font-weight: 750;
+  line-height: 1;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  text-shadow: 0 3px 14px rgba(0, 0, 0, 0.22);
+}
+
+.login-field {
+  position: relative;
+  width: 100%;
+  height: 46px;
+}
+
+.login-field input {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(104, 132, 134, 0.82);
+  color: #042d33;
+  font-size: 0.88rem;
+  font-weight: 650;
+  font-family: "Montserrat", "Segoe UI", Arial, Helvetica, sans-serif;
+  outline: none;
+  box-shadow: none;
+  transition: background 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.login-field input::placeholder {
+  color: rgba(3, 42, 48, 0.86);
+  opacity: 1;
+}
+
+.login-field input:focus {
+  background: rgba(126, 153, 155, 0.92);
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.22);
+}
+
+.login-field__icon {
+  position: absolute;
+  top: 50%;
+  z-index: 2;
+  display: grid;
+  width: 52px;
+  height: 52px;
+  place-items: center;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #082f36;
+  font-size: 1.15rem;
+  transform: translateY(-50%);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.16);
+}
+
+.login-field--username .login-field__icon {
+  left: 0;
+}
+
+.login-field--username input {
+  padding: 0 1.25rem 0 4.5rem;
+}
+
+.login-field--password .login-field__icon {
+  right: 0;
+}
+
+.login-field--password input {
+  padding: 0 4.5rem 0 1.25rem;
+}
+
+.login-submit {
+  width: 100%;
+  min-height: 46px;
+  border: 0;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #082f36;
+  font-size: 1rem;
+  font-weight: 800;
+  font-family: "Montserrat", "Segoe UI", Arial, Helvetica, sans-serif;
+  line-height: 1;
+  text-align: center;
+  cursor: pointer;
+  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.18);
+  transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+.login-submit:hover {
+  background: #f4fbfa;
+  transform: translateY(-1px);
+  box-shadow: 0 16px 30px rgba(0, 0, 0, 0.22);
+}
+
+.login-submit:focus-visible {
+  outline: 4px solid rgba(255, 255, 255, 0.36);
+  outline-offset: 4px;
+}
+
+.login-message {
+  min-height: 1.25rem;
+  margin-top: -0.75rem;
+  color: #ffffff;
+  font-size: 0.82rem;
+  font-weight: 700;
+  font-family: "Montserrat", "Segoe UI", Arial, Helvetica, sans-serif;
+  text-align: center;
+}
+
+.login-message--success {
+  color: #bbf7d0;
+}
+
+.login-message--error {
+  color: #fecaca;
+}
+
+.login-links {
+  margin-top: -0.95rem;
+  text-align: center;
+}
+
+.login-links a {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.82rem;
+  font-weight: 700;
+  font-family: "Montserrat", "Segoe UI", Arial, Helvetica, sans-serif;
+  text-decoration: none;
+}
+
+.login-links a:hover {
+  color: #ffffff;
+  text-decoration: underline;
+}
+
+.login-contact {
+  position: absolute;
+  top: 1.5rem;
+  right: clamp(1.25rem, 5vw, 4rem);
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  min-width: 132px;
+  min-height: 40px;
+  padding: 0 1.25rem;
+  border: 1px solid rgba(255, 255, 255, 0.58);
+  border-radius: 999px;
+  background: rgba(104, 132, 134, 0.72);
+  color: #ffffff;
+  font-size: 0.86rem;
+  font-weight: 750;
+  font-family: "Montserrat", "Segoe UI", Arial, Helvetica, sans-serif;
+  line-height: 1;
+  text-decoration: none;
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.14);
+  transition: background 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+
+.login-contact:hover {
+  background: rgba(126, 153, 155, 0.9);
+  color: #ffffff;
+  transform: translateY(-1px);
+  box-shadow: 0 14px 26px rgba(0, 0, 0, 0.18);
+}
+
+.login-contact i {
+  font-size: 0.9rem;
+  line-height: 1;
+}
+
+@media (max-width: 520px) {
+  .login-screen {
+    place-items: center;
+    padding: 5rem 1rem 2rem;
+  }
+
+  .login-contact {
+    top: 1rem;
+    right: 1rem;
+    min-width: 112px;
+    min-height: 36px;
+    padding: 0 1rem;
+    font-size: 0.8rem;
+  }
+
+  .login-panel {
+    width: min(100%, 320px);
+    transform: translateY(1.25rem);
+  }
+
+  .login-form {
+    gap: 1.25rem;
+  }
+
+  .login-field {
+    height: 44px;
+  }
+
+  .login-field__icon {
+    width: 50px;
+    height: 50px;
+    font-size: 1.1rem;
+  }
+
+  .login-field--username input {
+    padding-left: 4.25rem;
+  }
+
+  .login-field--password input {
+    padding-right: 4.25rem;
+  }
+}
+
 /* ===== SIDEBAR COLLAPSIBLE FUNCTIONALITY (DESKTOP ONLY) ===== */
 @media (min-width: 1024px) {
   /* Collapsed state controlled by class on body */
   .sidebar-collapsed #sidebar {
     width: 4rem; /* 64px - collapsed width */
     transition: width 0.25s ease;
+  }
+
+  .sidebar-collapsed .sidebar-brand {
+    margin-bottom: 1.5rem;
+  }
+
+  .sidebar-collapsed .sidebar-brand__logo {
+    width: 2.35rem;
+    object-fit: contain;
   }
 
   .sidebar-collapsed .sidebar__label {

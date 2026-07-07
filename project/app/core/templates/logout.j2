@@ -13,7 +13,7 @@
         })
             .then(response => {
                 if (response.ok) {
-                    window.location.href = '{{ url_for("core.index") }}';
+                    window.location.href = '{{ url_for("core.login") }}';
                 } else {
                     console.error('Error al cerrar sesión');
                 }

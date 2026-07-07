@@ -40,6 +40,7 @@
         {% endif %}
 
         <main id="main-content" class="{{ main_clases }} {% if is_full_width %} w-full {% endif %}" role="main" tabindex="-1">
+            {% if not suppress_base_flashes|default(false) %}
             {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
             <ul class="space-y-2">
@@ -52,7 +53,8 @@
             </ul>
             {% endif %}
             {% endwith %}
-            <div class="{{ bg_color }} {{ rounded }} {{ shadow }} {{ padding }}">
+            {% endif %}
+            <div class="{% if flush_content_shell is not defined or not flush_content_shell %}{{ bg_color }} {{ rounded }} {{ shadow }} {{ padding }}{% endif %}">
                 {% block content %}
                 {% if heading %}
                  <h1 class="text-4xl font-semibold mb-4 dark:text-gray-100">{{ heading }}</h1>

@@ -5,6 +5,7 @@
 {% set rounded = "" %}
 {% set shadow = "" %}
 {% set padding = "" %}
+{% set flush_content_shell = true %}
 {% set main_clases = "flex-grow overflow-y-auto p-0" %}
 {% from "settings/_ui_class.j2" import base_button_classes, input_bg_color, border_color, hover_bg_color, focus_ring_color, button_bg_color, delete_button_bg_color, input_focus_bg_color, text_color %}
 {% from "macros/_forms.j2" import render_alert %}
@@ -60,8 +61,8 @@
 {% endblock %}
 
 {% block content %}
-<div id="workzone" class="w-full bg-gray-100 dark:bg-gray-900 min-h-screen">
-  <div class="w-full px-2 py-2 space-y-4">
+<div id="workzone" class="w-full bg-transparent min-h-screen">
+  <div class="w-full px-0 py-0 space-y-4">
     <nav class="text-sm text-gray-500 dark:text-gray-400">
       <ol class="flex items-center gap-2">
         <li><a href="{{ url_for('core.dashboard') }}" class="hover:text-gray-700 dark:hover:text-gray-300">Inicio</a></li>
@@ -203,6 +204,24 @@
           </div>
           <div id="status" class="text-xs text-gray-500 dark:text-gray-400" aria-live="polite">Sube una imagen para analizar</div>
         </div>
+
+        {# Codex: vista previa nutricional, aislada de la lógica principal #}
+        <section id="polygonComparisonPreview" class="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 shadow-sm">
+          <div class="mb-3 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 class="text-sm font-semibold text-gray-900 dark:text-gray-100"><i class="fas fa-balance-scale mr-2 text-emerald-700"></i>Vista previa nutricional</h2>
+              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Selecciona un objetivo y dibuja uno o más polígonos para ver sus datos calculados.</p>
+            </div>
+            <div class="min-w-[240px]">
+              <label for="polygonComparisonObjective" class="mb-1 block text-xs font-semibold text-gray-600 dark:text-gray-400">Objetivo</label>
+              <select id="polygonComparisonObjective" class="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 py-1.5 px-3 text-sm shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500">
+                <option value="">Selecciona un objetivo</option>
+              </select>
+            </div>
+          </div>
+          <div id="polygonComparisonHint" class="rounded-xl bg-gray-50 dark:bg-gray-700 px-3 py-2 text-xs text-gray-500 dark:text-gray-400">Dibuja un polígono para ver aquí la comparación previa.</div>
+          <div id="polygonComparisonCards" class="mt-3 space-y-3 overflow-y-auto pr-2" style="max-height: 760px;"></div>
+        </section>
       </div>
 
       <aside class="space-y-4 lg:col-span-4 xl:col-span-3">
@@ -399,7 +418,7 @@
           </div>
         </section>
 
-        <section class="rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/70 dark:bg-emerald-900/20 p-4 shadow-sm space-y-3">
+        <section class="hidden rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/70 dark:bg-emerald-900/20 p-4 shadow-sm space-y-3">
           <h2 class="text-sm font-semibold text-emerald-900 dark:text-emerald-300">
             <i class="fas fa-balance-scale mr-2"></i>Preparar comparación nutricional
           </h2>
@@ -653,7 +672,8 @@
       foliageLotCrops:"/api/foliage/lots_crops/",
       commonAnalyses:"/api/foliage/common_analyses/",
       leafAnalyses:"/api/foliage/leaf_analyses/",
-      lotSnapshot:"/api/agrovista/lot-snapshot"
+      lotSnapshot:"/api/agrovista/lot-snapshot",
+      mineralBalance:"/api/agrovista/mineral-balance"
     };
     const RIGHT_RULER_W = 64;  // px
     const TOP_RULER_H   = 28;  // px
@@ -2940,6 +2960,7 @@
           }
         }
         setStatus(mppX != null ? `Escala automática: ~${mppX} m/px` : "Escala en píxeles (mpp no disponible)");
+        await restoreDraftPolygons();
         drawnItems.eachLayer(layer => { if(layer instanceof L.Polygon || layer instanceof L.Rectangle){ updateAreaForLayer(layer); } });
       }catch(e){
         setStatus("Error al procesar el archivo");
@@ -2978,6 +2999,7 @@
           }
         }
         setStatus(mppX != null ? `Escala automática: ~${mppX} m/px` : "Escala en píxeles (mpp no disponible)");
+        await restoreDraftPolygons();
         drawnItems.eachLayer(layer => { if(layer instanceof L.Polygon || layer instanceof L.Rectangle){ updateAreaForLayer(layer); } });
       }catch(e){ setStatus("Error al procesar el archivo"); }
     });
@@ -3017,6 +3039,88 @@
         setActiveLayer(layer);
         updateStatsForLayer(layer);
       });
+    }
+
+    let restoringDraftPolygons = false;
+    function polygonDraftKey(){
+      const id = imageId || imageMeta?.asset_id || imageMeta?.media_asset_id || imageMeta?.filename || "sin-imagen";
+      return `agrovista:poligonos:${id}`;
+    }
+    function serializeDraftPolygons(){
+      const items = [];
+      drawnItems.eachLayer(layer => {
+        if(!(layer instanceof L.Polygon || layer instanceof L.Rectangle)){ return; }
+        try{
+          const entry = ensureLotEntry(layer);
+          items.push({
+            name: entry?.name || null,
+            geojson: layer.toGeoJSON(),
+          });
+        }catch(err){
+          console.warn("No se pudo serializar polígono", err);
+        }
+      });
+      return items;
+    }
+    function saveDraftPolygons(){
+      if(restoringDraftPolygons || !imageMeta){ return; }
+      try{
+        const items = serializeDraftPolygons();
+        const key = polygonDraftKey();
+        if(items.length){
+          localStorage.setItem(key, JSON.stringify({version:1, savedAt:new Date().toISOString(), items}));
+        }else{
+          localStorage.removeItem(key);
+        }
+      }catch(err){
+        console.warn("No se pudieron guardar los polígonos locales", err);
+      }
+    }
+    function clearDraftPolygons(){
+      if(!imageMeta){ return; }
+      try{ localStorage.removeItem(polygonDraftKey()); }catch(err){}
+    }
+    async function restoreDraftPolygons(){
+      if(!imageMeta){ return; }
+      let payload = null;
+      try{
+        const raw = localStorage.getItem(polygonDraftKey());
+        payload = raw ? JSON.parse(raw) : null;
+      }catch(err){
+        payload = null;
+      }
+      drawnItems.clearLayers();
+      areaStatsCache.clear();
+      lotState.clear();
+      lotCounter = 0;
+      activeLayerId = null;
+      renderLotsList();
+      if(!payload || !Array.isArray(payload.items) || !payload.items.length){
+        return;
+      }
+      restoringDraftPolygons = true;
+      try{
+        for(const item of payload.items){
+          const layer = L.geoJSON(item.geojson).getLayers()[0];
+          if(!layer){ continue; }
+          if(typeof layer.setStyle === "function"){
+            layer.setStyle(polygonStyleNormal);
+          }
+          drawnItems.addLayer(layer);
+          const entry = ensureLotEntry(layer);
+          if(entry && item.name){ entry.name = item.name; }
+          wireArea(layer);
+          await updateStatsForLayer(layer);
+        }
+        const firstLayer = drawnItems.getLayers()[0];
+        if(firstLayer){ setActiveLayer(firstLayer); }
+        renderLotsList();
+        toggleKmzButton();
+        updateSaveButtonState();
+        setStatus("Polígonos restaurados del borrador local.");
+      }finally{
+        restoringDraftPolygons = false;
+      }
     }
 
     async function updateStatsForLayer(layer){
@@ -3108,6 +3212,7 @@
         await updateStatsForLayer(layer);
         toggleKmzButton();
         updateSaveButtonState(); // Actualizar estado del botón de guardar
+        saveDraftPolygons();
       }
     });
 
@@ -3120,10 +3225,12 @@
         }
       });
       updateSaveButtonState(); // Actualizar estado del botón tras editar
+      saveDraftPolygons();
     });
     map.on(L.Draw.Event.DELETED, ()=>{
       resetMapState(false);
       updateSaveButtonState(); // Actualizar estado del botón tras borrar polígono
+      saveDraftPolygons();
     });
 
     /* ---------- Fullscreen ---------- */
@@ -3453,6 +3560,7 @@
     if(el.resetMapBtn){
       el.resetMapBtn.addEventListener('click', () => {
         resetMapState(true);
+        clearDraftPolygons();
       });
     }
 
@@ -3687,6 +3795,273 @@
       // El ndvi_tool.js debe establecer window.currentFarmId
       loadLotsForCurrentFarm();
     })();
+
+  // Codex: vista previa nutricional aislada. No modifica cálculos ni endpoints existentes.
+  (function(){
+    const section = document.getElementById("polygonComparisonPreview");
+    const select = document.getElementById("polygonComparisonObjective");
+    const hint = document.getElementById("polygonComparisonHint");
+    const cards = document.getElementById("polygonComparisonCards");
+    let lastSignature = "";
+    const balanceCache = new Map();
+    const MACRO_SYMBOLS = new Set(["N", "P", "K", "Ca", "Mg", "S"]);
+
+    function syncObjectiveOptions(){
+      const source = document.getElementById("compareObjectiveSelect");
+      if(!select || !source || source.options.length <= 1){ return; }
+      if(select.dataset.synced === String(source.options.length)){ return; }
+      const current = select.value;
+      select.innerHTML = source.innerHTML;
+      if(current){ select.value = current; }
+      select.dataset.synced = String(source.options.length);
+    }
+    function normalizeName(value){
+      return String(value || "")
+        .trim()
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-z0-9]+/g, "");
+    }
+    const NUTRIENT_ALIASES = new Map([
+      ["cloro", "cl"], ["cl", "cl"], ["cloruro", "cl"], ["clorine", "cl"],
+      ["nitrogeno", "n"], ["n", "n"], ["fosforo", "p"], ["p", "p"],
+      ["potasio", "k"], ["k", "k"], ["calcio", "ca"], ["ca", "ca"],
+      ["magnesio", "mg"], ["mg", "mg"], ["azufre", "s"], ["s", "s"],
+      ["silicio", "si"], ["si", "si"], ["boro", "b"], ["b", "b"],
+      ["cobre", "cu"], ["cu", "cu"], ["hierro", "fe"], ["fe", "fe"],
+      ["manganeso", "mn"], ["mn", "mn"], ["molibdeno", "mo"], ["mo", "mo"],
+      ["zinc", "zn"], ["zn", "zn"],
+    ]);
+    function canonicalNutrientKey(item){
+      const symbol = normalizeName(item && (item.nutrient_symbol || item.symbol || item.simbolo));
+      const name = normalizeName(item && (item.nutrient_name || item.name || item.nombre));
+      if(symbol && NUTRIENT_ALIASES.has(symbol)){ return NUTRIENT_ALIASES.get(symbol); }
+      if(name && NUTRIENT_ALIASES.has(name)){ return NUTRIENT_ALIASES.get(name); }
+      const id = item && (item.nutrient_id || item.id_nutrient || item.nutrientId);
+      if(id != null && id !== ""){ return "id:" + String(id); }
+      return symbol || name || "";
+    }
+    function getPreviewEntries(){
+      const entries = [];
+      if(typeof lotState !== "undefined" && lotState && typeof lotState.values === "function"){
+        Array.from(lotState.values()).forEach(entry => {
+          if(entry && entry.areaStats && Array.isArray(entry.areaStats.nutrients) && entry.areaStats.nutrients.length){
+            entries.push(entry);
+          }
+        });
+      }
+      if(entries.length){ return entries; }
+      if(lastAreaStats && Array.isArray(lastAreaStats.nutrients) && lastAreaStats.nutrients.length){
+        const activeEntry = activeLayerId !== null && typeof lotState !== "undefined" && lotState ? lotState.get(activeLayerId) : null;
+        return [{
+          id: activeEntry && activeEntry.id ? activeEntry.id : "activo",
+          name: activeEntry && activeEntry.name ? activeEntry.name : "Polígono activo",
+          areaStats: lastAreaStats
+        }];
+      }
+      return [];
+    }
+    function getSelectedObjective(){
+      if(!select || !select.value){ return null; }
+      const parsed = parseObjectiveValue(select.value);
+      const source = parsed.type === "secondary" ? secondaryObjectives : cropObjectives;
+      return (source || []).find(item => Number(item && item.id) === Number(parsed.id)) || null;
+    }
+    function mapTargets(objective){
+      const map = new Map();
+      const rows = Array.isArray(objective && objective.nutrient_targets) ? objective.nutrient_targets : [];
+      rows.forEach(item => {
+        const key = canonicalNutrientKey(item);
+        const ideal = Number(item.target_value);
+        if(!key){ return; }
+        map.set(key, {name:item.nutrient_name || item.nutrient_symbol || "Nutriente", symbol:item.nutrient_symbol || "", unit:item.nutrient_unit || "", ideal:Number.isFinite(ideal) ? ideal : null});
+      });
+      return map;
+    }
+    function mapActuals(stats){
+      const map = new Map();
+      const rows = Array.isArray(stats && stats.nutrients) ? stats.nutrients : [];
+      rows.forEach(item => {
+        const key = canonicalNutrientKey(item);
+        const actual = Number(item.target_value);
+        if(!key){ return; }
+        map.set(key, {name:item.nutrient_name || item.nutrient_symbol || "Nutriente", symbol:item.nutrient_symbol || "", unit:item.nutrient_unit || "", actual:Number.isFinite(actual) ? actual : null});
+      });
+      return map;
+    }
+    function isMacro(row){
+      const key = canonicalNutrientKey(row || {});
+      const symbol = normalizeName(row && row.symbol);
+      const name = normalizeName(row && row.name);
+      const macroKeys = new Set(["n", "p", "k", "ca", "mg", "s", "si"]);
+      return macroKeys.has(key) || macroKeys.has(symbol) || macroKeys.has(name);
+    }
+    function buildRows(stats, objective){
+      const actuals = mapActuals(stats);
+      const targets = mapTargets(objective);
+      const keys = Array.from(new Set([...actuals.keys(), ...targets.keys()]));
+      return keys.map(key => {
+        const a = actuals.get(key) || {};
+        const b = targets.get(key) || {};
+        const row = {key, name:a.name || b.name || "Nutriente", symbol:a.symbol || b.symbol || "", unit:a.unit || b.unit || "", actual:a.actual != null ? a.actual : null, ideal:b.ideal != null ? b.ideal : null};
+        row.type = isMacro(row) ? "Macronutriente" : "Micronutriente";
+        row.pct = row.actual != null && row.ideal != null && row.ideal > 0 ? (row.actual / row.ideal) * 100 : null;
+        return row;
+      }).sort((a,b) => a.type !== b.type ? (a.type === "Macronutriente" ? -1 : 1) : (a.symbol || a.name).localeCompare(b.symbol || b.name));
+    }
+    function pctColor(pct){
+      if(pct == null){ return "bg-gray-300"; }
+      if(pct < 60){ return "bg-red-500"; }
+      if(pct < 88){ return "bg-amber-500"; }
+      if(pct <= 125){ return "bg-emerald-500"; }
+      return "bg-emerald-800";
+    }
+    function chart(title, rows){
+      const visible = rows.filter(row => row.pct != null);
+      if(!visible.length){ return '<div class="rounded-xl border border-gray-200 bg-white p-3 text-[11px] text-gray-500 shadow-sm">Sin datos para ' + escapeHtml(title) + '.</div>'; }
+      return '<div class="rounded-xl border border-gray-200 bg-white p-3 shadow-sm">'
+        + '<h4 class="mb-2 text-center text-sm font-semibold text-emerald-800">' + escapeHtml(title) + '</h4>'
+        + '<div class="overflow-x-auto"><table class="min-w-full text-[11px]"><thead><tr class="text-gray-400">'
+        + '<th class="w-12 px-1 py-1 text-left font-semibold">Nutr.</th><th class="px-1 py-1 text-left font-semibold">Barra</th><th class="w-20 px-1 py-1 text-right font-semibold">Actual</th><th class="w-20 px-1 py-1 text-right font-semibold">Ideal</th><th class="w-14 px-1 py-1 text-right font-semibold">%</th></tr></thead><tbody>'
+        + visible.map(row => {
+          const width = Math.max(2, Math.min(100, row.pct));
+          const unit = row.unit ? ' ' + escapeHtml(row.unit) : '';
+          return '<tr class="border-t border-gray-100">'
+            + '<td class="px-1 py-1.5 text-gray-500" title="' + escapeHtml(row.name) + '">' + escapeHtml(row.symbol || row.name) + '</td>'
+            + '<td class="px-1 py-1.5"><div class="h-2 min-w-[120px] rounded bg-gray-100"><div class="h-2 rounded ' + pctColor(row.pct) + '" style="width:' + width.toFixed(1) + '%"></div></div></td>'
+            + '<td class="px-1 py-1.5 text-right font-semibold text-emerald-800 whitespace-nowrap">' + formatNutrientValue(row.actual) + unit + '</td>'
+            + '<td class="px-1 py-1.5 text-right text-sky-700 whitespace-nowrap">' + formatNutrientValue(row.ideal) + unit + '</td>'
+            + '<td class="px-1 py-1.5 text-right font-semibold whitespace-nowrap">' + row.pct.toFixed(1) + '%</td></tr>';
+        }).join('')
+        + '</tbody></table></div></div>';
+    }
+    function detailedTable(rows){
+      return '<div class="overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm"><table class="min-w-full divide-y divide-gray-200 text-[11px]"><thead class="bg-emerald-600 text-white"><tr><th class="px-3 py-2 text-left">Nutriente</th><th class="px-3 py-2 text-left">Símbolo</th><th class="px-3 py-2 text-left">Valor Actual</th><th class="px-3 py-2 text-left">Unidad</th><th class="px-3 py-2 text-left">Valor Ideal</th><th class="px-3 py-2 text-left">Tipo</th><th class="px-3 py-2 text-left">% del Ideal</th></tr></thead><tbody class="divide-y divide-gray-100 bg-white">' + rows.map(row => {
+        const pct = row.pct != null ? row.pct.toFixed(1) + '%' : '--';
+        const badge = row.type === "Macronutriente" ? "bg-emerald-100 text-emerald-700" : "bg-sky-100 text-sky-700";
+        const barWidth = row.pct != null ? Math.max(4, Math.min(100, row.pct)) : 0;
+        return '<tr><td class="px-3 py-2">' + escapeHtml(row.name) + '</td><td class="px-3 py-2 font-semibold">' + escapeHtml(row.symbol || '--') + '</td><td class="px-3 py-2 font-semibold text-emerald-800">' + formatNutrientValue(row.actual) + '</td><td class="px-3 py-2">' + escapeHtml(row.unit || '--') + '</td><td class="px-3 py-2 text-sky-700">' + formatNutrientValue(row.ideal) + '</td><td class="px-3 py-2"><span class="rounded-full px-2.5 py-1 text-xs font-semibold ' + badge + '">' + row.type + '</span></td><td class="px-3 py-2"><div class="flex items-center gap-2"><strong class="w-14">' + pct + '</strong><span class="h-2 w-24 rounded-full bg-gray-200"><span class="block h-2 rounded-full ' + pctColor(row.pct) + '" style="width:' + barWidth.toFixed(1) + '%"></span></span></div></td></tr>';
+      }).join('') + '</tbody></table></div>';
+    }
+    function balancePayload(rows, stats, objective){
+      const order = [], targets = {}, actuals = {};
+      rows.forEach(row => { order.push(row.name); if(row.ideal != null){ targets[row.name] = row.ideal; } if(row.actual != null){ actuals[row.name] = row.actual; } });
+      const broma = stats && stats.bromatologia ? stats.bromatologia : {};
+      const firstNumber = (...values) => {
+        for(const value of values){
+          const num = Number(value);
+          if(Number.isFinite(num) && num > 0){ return num; }
+        }
+        return null;
+      };
+      const aforoActual = firstNumber(broma.aforo_ua_ha, broma.aforo, stats.yield_estimate, stats.aforo_ua_ha, stats.aforo, stats.aforo_actual);
+      const aforoObjective = firstNumber(objective && objective.target_value, objective && objective.aforo, objective && objective.aforo_objective);
+      const protein = firstNumber(objective && objective.protein, objective && objective.protein_average);
+      return {order, targets, actuals, aforo_objective:aforoObjective, aforo_actual:aforoActual, protein:protein};
+    }
+    async function getBalance(entry, rows, objective){
+      if(!ENDPOINTS.mineralBalance || !rows.length){ return null; }
+      const payload = balancePayload(rows, entry.areaStats || {}, objective);
+      const key = JSON.stringify({id:entry.id, objective:select ? select.value : '', payload});
+      if(balanceCache.has(key)){ return balanceCache.get(key); }
+      const res = await fetch(ENDPOINTS.mineralBalance, {method:'POST', credentials:'include', headers:{'Content-Type':'application/json', 'X-CSRF-TOKEN':getCsrfToken() || ''}, body:JSON.stringify(payload)});
+      if(!res.ok){ return null; }
+      const data = await res.json().catch(() => null);
+      balanceCache.set(key, data);
+      return data;
+    }
+    function balanceTable(balance, entry, objective){
+      const entries = balance && Array.isArray(balance.entries) ? balance.entries : [];
+      if(!entries.length){ return '<div class="rounded-2xl border border-gray-200 bg-white p-4 text-xs text-gray-500 shadow-sm">Balance mineral pendiente de datos suficientes.</div>'; }
+      const stats = entry && entry.areaStats ? entry.areaStats : {};
+      const broma = stats.bromatologia || {};
+      const firstNumber = (...values) => {
+        for(const value of values){
+          const num = Number(value);
+          if(Number.isFinite(num) && num > 0){ return num; }
+        }
+        return null;
+      };
+      const proteinObjective = firstNumber(objective && objective.protein, objective && objective.protein_average);
+      const aforoObjective = firstNumber(balance && balance.aforo_objective, objective && objective.target_value, objective && objective.aforo, objective && objective.aforo_objective);
+      const proteinActual = firstNumber(stats.protein, stats.protein_average, broma.proteina_pct, broma.proteina);
+      const aforoActual = firstNumber(broma.aforo_ua_ha, broma.aforo, stats.yield_estimate, stats.aforo_ua_ha, stats.aforo, stats.aforo_actual, balance && balance.aforo_actual);
+      const formatSummary = (value, suffix) => Number.isFinite(value) && value > 0 ? value.toFixed(2) + (suffix || '') : '--';
+      const sumFor = key => entries.reduce((total, item) => {
+        const value = Number(item[key]);
+        return Number.isFinite(value) ? total + value : total;
+      }, 0);
+      const totalCell = (value, suffix) => '<td class="px-2 py-1.5 text-center font-bold">' + (value == null ? '--' : formatNutrientValue(value) + (suffix || '')) + '</td>';
+      const row = (label, key, cls, totalValue, suffix) => '<tr class="' + (cls || '') + '"><td class="sticky left-0 w-28 bg-inherit px-2 py-1.5 font-semibold">' + label + '</td>' + entries.map(item => '<td class="px-2 py-1.5 text-center">' + formatNutrientValue(item[key]) + '</td>').join('') + totalCell(totalValue, suffix) + '</tr>';
+      const objectiveKgTotal = sumFor('objective_kg');
+      const actualKgTotal = sumFor('actual_kg');
+      const diffTotal = sumFor('difference_kg');
+      const gradeTotal = sumFor('grade_pct');
+      return '<div class="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm"><div class="mb-3 flex flex-wrap items-center justify-between gap-2"><h4 class="text-sm font-semibold text-gray-800">Balance de Minerales</h4><span class="rounded-full bg-gray-100 px-2.5 py-1 text-[11px] text-gray-600">Déficits convertidos a kg/ha según el aforo</span></div>'
+        + '<div class="mb-3 grid grid-cols-4 divide-x divide-gray-200 overflow-hidden rounded-lg border border-gray-200 text-center text-[11px]"><div class="bg-gray-100 px-3 py-2"><div class="uppercase tracking-wide text-gray-500">Proteína objetivo</div><strong class="mt-1 block text-sm text-gray-900">' + formatSummary(proteinObjective, '') + '</strong></div><div class="bg-gray-100 px-3 py-2"><div class="uppercase tracking-wide text-gray-500">Aforo objetivo</div><strong class="mt-1 block text-sm text-gray-900">' + formatSummary(aforoObjective, '') + '</strong></div><div class="bg-gray-200 px-3 py-2"><div class="uppercase tracking-wide text-gray-500">Proteína actual</div><strong class="mt-1 block text-sm text-gray-900">' + formatSummary(proteinActual, '') + '</strong></div><div class="bg-gray-200 px-3 py-2"><div class="uppercase tracking-wide text-gray-500">Aforo actual</div><strong class="mt-1 block text-sm text-gray-900">' + formatSummary(aforoActual, '') + '</strong></div></div>'
+        + '<div class="overflow-x-auto"><table class="w-full min-w-[1120px] table-fixed text-[11px]"><thead class="bg-gray-50"><tr><th class="sticky left-0 w-28 bg-gray-50 px-2 py-1.5 text-left">Concepto</th>' + entries.map(item => '<th class="px-2 py-1.5 text-center">' + escapeHtml(item.name) + '</th>').join('') + '<th class="px-2 py-1.5 text-center">Total</th></tr></thead><tbody>'
+        + row('Objetivo (% · ppm)', 'objective_raw', 'bg-indigo-50', null)
+        + row('Objetivo (kg/ha)', 'objective_kg', 'bg-indigo-50', objectiveKgTotal, ' kg/ha')
+        + row('Actual (% · ppm)', 'actual_raw', 'bg-sky-50', null)
+        + row('Actual (kg/ha)', 'actual_kg', 'bg-sky-50', actualKgTotal, ' kg/ha')
+        + row('Diferencia (kg/ha)', 'difference_kg', 'bg-red-50 text-red-600', diffTotal, ' kg/ha')
+        + row('Grado fórmula (%)', 'grade_pct', 'bg-yellow-50', gradeTotal, '%')
+        + '<tr class="bg-emerald-50"><td class="sticky left-0 bg-emerald-50 px-2 py-1.5 font-semibold">Nano (kg/ha)</td>' + entries.map(item => '<td class="px-2 py-1.5 text-center font-semibold text-emerald-800">' + formatNutrientValue(item.nano_kg) + '</td>').join('') + '<td class="px-2 py-1.5 text-center font-bold">' + (balance.total_kg_ha != null ? formatNutrientValue(balance.total_kg_ha) + ' kg/ha' : '--') + '</td></tr></tbody></table></div>'
+        + '<p class="mt-3 text-[11px] text-gray-600">Objetivo se expresa en kg/ha con el aforo objetivo y Actual con el aforo actual. La Diferencia solo refleja déficits y Nano es la cantidad estimada del producto a aplicar según su concentración.</p></div>';
+    }
+    function renderEntry(entry, rows, label){
+      const macro = rows.filter(row => row.type === 'Macronutriente');
+      const micro = rows.filter(row => row.type === 'Micronutriente');
+      const id = String(entry.id).replace(/[^a-zA-Z0-9_-]/g, '');
+      return '<details open class="group rounded-2xl border border-gray-200 bg-white shadow-sm">'
+        + '<summary class="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 px-4 py-3">'
+        + '<div><h3 class="text-base font-semibold text-gray-900">' + escapeHtml(entry.name || 'Polígono') + '</h3>'
+        + '<p class="text-xs text-gray-500">Resultados comparados contra: ' + escapeHtml(label || 'Objetivo seleccionado') + '</p></div>'
+        + '<div class="flex items-center gap-2"><span class="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">Vista previa</span>'
+        + '<span class="rounded-full border border-gray-200 px-2.5 py-1 text-[11px] font-semibold text-gray-500 group-open:hidden">Abrir</span>'
+        + '<span class="hidden rounded-full border border-gray-200 px-2.5 py-1 text-[11px] font-semibold text-gray-500 group-open:inline-flex">Cerrar</span></div>'
+        + '</summary>'
+        + '<div class="space-y-4 border-t border-gray-100 p-4">'
+        + '<div class="grid gap-4 lg:grid-cols-2">' + chart('Macronutrientes', macro) + chart('Micronutrientes', micro) + '</div>'
+        + '<div><h4 class="mb-2 text-sm font-semibold text-emerald-800">Valores Detallados</h4>' + detailedTable(rows) + '</div>'
+        + '<div id="previewBalance-' + id + '" class="rounded-2xl border border-gray-200 bg-white p-4 text-xs text-gray-500 shadow-sm">Calculando balance mineral...</div>'
+        + '</div></details>';
+    }
+    async function renderBalances(entries, objective){
+      for(const entry of entries){
+        const id = String(entry.id).replace(/[^a-zA-Z0-9_-]/g, '');
+        const node = document.getElementById('previewBalance-' + id);
+        if(!node){ continue; }
+        try{ node.outerHTML = balanceTable(await getBalance(entry, buildRows(entry.areaStats || {}, objective), objective), entry, objective); }
+        catch(err){ node.textContent = 'No se pudo calcular el balance mineral para este polígono.'; }
+      }
+    }
+    function renderPreview(){
+      if(!section || !hint || !cards){ return; }
+      syncObjectiveOptions();
+      const entries = getPreviewEntries();
+      const objective = getSelectedObjective();
+      const label = select && select.selectedIndex >= 0 ? (select.options[select.selectedIndex].textContent || '').trim() : '';
+      const signature = entries.map(entry => [entry.id, entry.name, !!entry.areaStats].join(':')).join('|') + '::' + (select ? select.value : '');
+      if(signature === lastSignature){ return; }
+      lastSignature = signature;
+      if(!entries.length){ hint.textContent = 'Dibuja un polígono para ver aquí la comparación previa.'; cards.innerHTML = ''; return; }
+      if(!objective){ hint.textContent = 'Selecciona un objetivo para completar la tabla de comparación.'; cards.innerHTML = ''; return; }
+      hint.textContent = 'Comparación previa calculada con los datos del polígono y el objetivo seleccionado.';
+      try{
+        cards.innerHTML = entries.map(entry => renderEntry(entry, buildRows(entry.areaStats || {}, objective), label)).join('');
+        renderBalances(entries, objective);
+      }catch(err){
+        console.error('Error renderizando vista previa nutricional', err);
+        cards.innerHTML = '<div class="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">No se pudo pintar la vista previa nutricional. Revisa los datos del polígono activo.</div>';
+      }
+    }
+    if(select){ select.addEventListener('change', () => { balanceCache.clear(); lastSignature = ''; renderPreview(); }); }
+    renderPreview();
+    window.setInterval(renderPreview, 800);
+  })();
+
   })();
   </script>
 {% endblock %}

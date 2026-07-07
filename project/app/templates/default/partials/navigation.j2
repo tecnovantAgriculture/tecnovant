@@ -1,125 +1,197 @@
-{# partials/navigation.j2 #}
-{# top navigation menu #}
-{% from "settings/_ui_class.j2" import close_menu_button, menu_link_style, bg_color, menu_bg_color, shadow, rounded %}
+﻿{# partials/navigation.j2 #}
+{# top navigation menu compacto para header de 34px #}
+
+{% from "settings/_ui_class.j2" import close_menu_button, menu_bg_color, shadow, rounded %}
 {% from "settings/_flowbite_solid_icons.j2" import icon_users %}
 
-<button id="mobile-menu-button" class="md:hidden {{ close_menu_button }}" aria-controls="menu" aria-expanded="false">
+{% set compact_link_style = "inline-flex items-center justify-center gap-1 rounded-lg px-3 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors leading-none whitespace-nowrap" %}
+{% set compact_icon_style = "inline-flex items-center justify-center rounded-lg text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors leading-none" %}
+{% set dropdown_link_style = "block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" %}
+
+<button
+    id="mobile-menu-button"
+    class="md:hidden {{ close_menu_button }}"
+    aria-controls="menu"
+    aria-expanded="false"
+    style="height:28px; width:28px; display:flex; align-items:center; justify-content:center; padding:0;"
+>
     <span class="sr-only">Toggle menu</span>
-    <svg class="h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
     </svg>
 </button>
 
-<nav id="menu" class="hidden md:block {{ menu_bg_color }} {{ shadow }} {{ rounded }}">
-    <button id="close-menu-button" class="hidden absolute top-4 right-4 {{ close_menu_button }}">
+<nav
+    id="menu"
+    class="hidden md:flex items-center {{ menu_bg_color }} {{ shadow }} {{ rounded }}"
+    style="height:28px; min-height:28px; max-height:28px; align-items:center; overflow:visible;"
+>
+    <button
+        id="close-menu-button"
+        class="hidden absolute top-4 right-4 {{ close_menu_button }}"
+    >
         <span class="sr-only">Close menu</span>
-        <svg class="h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
         </svg>
     </button>
 
-
     {% if not dashboard %}
-        <!-- Home Menu (core.index) -->
-        <ul class="md:flex md:space-x-4">
-            <li><a href="{{ url_for('core.index') }}" class="{{ menu_link_style }}">Home</a></li>
+
+        <!-- Home Menu -->
+        <ul
+            class="md:flex md:items-center md:space-x-1 px-1"
+            style="height:28px; min-height:28px; max-height:28px; align-items:center;"
+        >
+            <li class="flex items-center" style="height:28px;">
+                <a href="{{ url_for('core.index') }}" class="{{ compact_link_style }}" style="height:26px; padding-top:0; padding-bottom:0;">
+                    Home
+                </a>
+            </li>
 
             {% if user_id %}
-            <li><a href="{{ url_for('core.dashboard') }}" class="{{ menu_link_style }}">Dashboard</a></li>
+            <li class="flex items-center" style="height:28px;">
+                <a href="{{ url_for('core.dashboard') }}" class="{{ compact_link_style }}" style="height:26px; padding-top:0; padding-bottom:0;">
+                    Dashboard
+                </a>
+            </li>
             {% endif %}
 
             {% if user_id and DEBUG %}
-            <li><a href="/info" class="{{ menu_link_style }}">Info</a></li>
+            <li class="flex items-center" style="height:28px;">
+                <a href="/info" class="{{ compact_link_style }}" style="height:26px; padding-top:0; padding-bottom:0;">
+                    Info
+                </a>
+            </li>
             {% endif %}
 
             {% if user_id and (rol == "administrator" or rol == "reseller") %}
-            <li class="relative group">
-                <button class="{{ menu_link_style }} flex items-center" aria-expanded="false" aria-haspopup="true">
-                    {{ icon_users|safe }}
-                    <span class="ml-2">Administración</span>
-                    <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <li class="relative group flex items-center" style="height:28px;">
+                <button
+                    class="{{ compact_link_style }}"
+                    style="height:26px; padding-top:0; padding-bottom:0;"
+                    aria-expanded="false"
+                    aria-haspopup="true"
+                >
+                    <span class="inline-flex items-center justify-center" style="width:15px; height:15px; overflow:hidden;">
+                        {{ icon_users|safe }}
+                    </span>
+                    <span>Administración</span>
+                    <svg class="w-3.5 h-3.5 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
                     </svg>
                 </button>
-                <div class="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
+
+                <div class="absolute right-0 top-full mt-1 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
                     <div class="py-1">
-                        <a href="{{ url_for('core.amd_users') }}" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Usuarios</a>
-                        <a href="{{ url_for('foliage.nutrientes') }}" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Nutrientes</a>
-                        <a href="{{ url_for('foliage.amd_crops') }}" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Tipos de cultivos</a>
-                        <a href="{{ url_for('foliage.amd_objectives') }}" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Objetivos de cultivo</a>
-                        <a href="{{ url_for('foliage.amd_products') }}" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Productos</a>
-                        <a href="{{ url_for('foliage.amd_product_contributions') }}" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Aportes de productos</a>
-                        <a href="{{ url_for('foliage.amd_product_prices') }}" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Precios de productos</a>
+                        <a href="{{ url_for('core.amd_users') }}" class="{{ dropdown_link_style }}">Usuarios</a>
+                        <a href="{{ url_for('foliage.nutrientes') }}" class="{{ dropdown_link_style }}">Nutrientes</a>
+                        <a href="{{ url_for('foliage.amd_crops') }}" class="{{ dropdown_link_style }}">Tipos de cultivos</a>
+                        <a href="{{ url_for('foliage.amd_objectives') }}" class="{{ dropdown_link_style }}">Objetivos de cultivo</a>
+                        <a href="{{ url_for('foliage.amd_products') }}" class="{{ dropdown_link_style }}">Productos</a>
+                        <a href="{{ url_for('foliage.amd_product_contributions') }}" class="{{ dropdown_link_style }}">Aportes de productos</a>
+                        <a href="{{ url_for('foliage.amd_product_prices') }}" class="{{ dropdown_link_style }}">Precios de productos</a>
                     </div>
                 </div>
             </li>
             {% endif %}
 
             {% if user_id %}
-            <li class="relative group">
-                <button class="{{ menu_link_style }} flex items-center" aria-expanded="false" aria-haspopup="true">
-                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <li class="relative group flex items-center" style="height:28px;">
+                <button
+                    class="{{ compact_icon_style }}"
+                    style="height:26px; width:26px; padding:0;"
+                    aria-expanded="false"
+                    aria-haspopup="true"
+                >
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                         <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4m0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"></path>
                     </svg>
                 </button>
-                <div class="absolute right-0 mt-2 w-40 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
+
+                <div class="absolute right-0 top-full mt-1 w-40 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
                     <div class="py-1">
-                        <a href="{{ url_for('core.profile') }}" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Profile</a>
-                        <a href="{{ url_for('core.logout') }}" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Logout</a>
+                        <a href="{{ url_for('core.profile') }}" class="{{ dropdown_link_style }}">Profile</a>
+                        <a href="{{ url_for('core.logout') }}" class="{{ dropdown_link_style }}">Logout</a>
                     </div>
                 </div>
             </li>
             {% endif %}
         </ul>
+
     {% else %}
-        <!-- Dashboard Menu (core.dashboard and protected routes) -->
+
+        <!-- Dashboard Menu -->
         {% if data_menu %}
-        <ul class="md:flex md:space-x-4">
+        <ul
+            class="md:flex md:items-center md:space-x-1 px-1"
+            style="height:28px; min-height:28px; max-height:28px; align-items:center;"
+        >
             {% for item in data_menu.menu %}
-            <li><a href="{{ item.url }}" class="{{ menu_link_style }}">{{ item.name }}</a></li>
+            <li class="flex items-center" style="height:28px;">
+                <a href="{{ item.url }}" class="{{ compact_link_style }}" style="height:26px; padding-top:0; padding-bottom:0;">
+                    {{ item.name }}
+                </a>
+            </li>
             {% endfor %}
 
-            <!-- Administración Dropdown (visible solo para admin/reseller) -->
+            <!-- Administración Dropdown -->
             {% if rol == "administrator" or rol == "reseller" %}
-            <li class="relative group">
-                <button class="{{ menu_link_style }} flex items-center" aria-expanded="false" aria-haspopup="true">
-                    {{ icon_users|safe }}
-                    <span class="ml-2">Administración</span>
-                    <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <li class="relative group flex items-center" style="height:28px;">
+                <button
+                    class="{{ compact_link_style }}"
+                    style="height:26px; padding-top:0; padding-bottom:0;"
+                    aria-expanded="false"
+                    aria-haspopup="true"
+                >
+                    <span class="inline-flex items-center justify-center" style="width:15px; height:15px; overflow:hidden;">
+                        {{ icon_users|safe }}
+                    </span>
+                    <span>Administración</span>
+                    <svg class="w-3.5 h-3.5 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
                     </svg>
                 </button>
-                <div class="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
+
+                <div class="absolute right-0 top-full mt-1 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
                     <div class="py-1">
-                        <a href="{{ url_for('core.amd_users') }}" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Usuarios</a>
-                        <a href="{{ url_for('foliage.nutrientes') }}" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Nutrientes</a>
-                        <a href="{{ url_for('foliage.amd_crops') }}" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Tipos de cultivos</a>
-                        <a href="{{ url_for('foliage.amd_objectives') }}" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Objetivos de cultivo</a>
-                        <a href="{{ url_for('foliage.amd_products') }}" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Productos</a>
-                        <a href="{{ url_for('foliage.amd_product_contributions') }}" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Aportes de productos</a>
-                        <a href="{{ url_for('foliage.amd_product_prices') }}" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Precios de productos</a>
+                        <a href="{{ url_for('core.amd_users') }}" class="{{ dropdown_link_style }}">Usuarios</a>
+                        <a href="{{ url_for('foliage.nutrientes') }}" class="{{ dropdown_link_style }}">Nutrientes</a>
+                        <a href="{{ url_for('foliage.amd_crops') }}" class="{{ dropdown_link_style }}">Tipos de cultivos</a>
+                        <a href="{{ url_for('foliage.amd_objectives') }}" class="{{ dropdown_link_style }}">Objetivos de cultivo</a>
+                        <a href="{{ url_for('foliage.amd_products') }}" class="{{ dropdown_link_style }}">Productos</a>
+                        <a href="{{ url_for('foliage.amd_product_contributions') }}" class="{{ dropdown_link_style }}">Aportes de productos</a>
+                        <a href="{{ url_for('foliage.amd_product_prices') }}" class="{{ dropdown_link_style }}">Precios de productos</a>
                     </div>
                 </div>
             </li>
             {% endif %}
 
-            <!-- User Dropdown (visible only in dashboard when authenticated) -->
+            <!-- User Dropdown -->
             {% if user_id %}
-            <li class="relative group">
-                <button class="{{ menu_link_style }} flex items-center" aria-expanded="false" aria-haspopup="true">
-                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <li class="relative group flex items-center" style="height:28px;">
+                <button
+                    class="{{ compact_icon_style }}"
+                    style="height:26px; width:26px; padding:0;"
+                    aria-expanded="false"
+                    aria-haspopup="true"
+                >
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                         <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4m0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"></path>
                     </svg>
                 </button>
-                <div class="absolute right-0 mt-2 w-40 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
+
+                <div class="absolute right-0 top-full mt-1 w-40 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
                     <div class="py-1">
-                        <a href="{{ url_for('core.profile') }}" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Profile</a>
-                        <a href="{{ url_for('core.logout') }}" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Logout</a>
+                        <a href="{{ url_for('core.profile') }}" class="{{ dropdown_link_style }}">Profile</a>
+                        <a href="{{ url_for('core.logout') }}" class="{{ dropdown_link_style }}">Logout</a>
                     </div>
                 </div>
             </li>
             {% endif %}
         </ul>
         {% endif %}
+
     {% endif %}
 </nav>
+

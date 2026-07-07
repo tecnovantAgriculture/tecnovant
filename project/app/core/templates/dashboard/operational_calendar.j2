@@ -1,0 +1,1036 @@
+{% extends "base.j2" %}
+{% set flush_content_shell = true %}
+
+{% block extra_css %}
+{{ super() }}
+<style>
+  .ops-calendar {
+    display: grid;
+    gap: 18px;
+    color: #17221e;
+  }
+
+  .ops-head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 18px;
+  }
+
+  .ops-eyebrow {
+    color: #0f8a5f;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+  }
+
+  .ops-head h1 {
+    margin: 6px 0 0;
+    color: #10201b;
+    font-size: 28px;
+    font-weight: 600;
+    line-height: 1.12;
+  }
+
+  .ops-muted {
+    color: #6b766f;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .ops-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .ops-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 38px;
+    padding: 0 14px;
+    border: 1px solid #dbe6dd;
+    border-radius: 999px;
+    background: #fff;
+    color: #173f36;
+    font-size: 13px;
+    font-weight: 650;
+    transition: background 140ms ease, border-color 140ms ease, transform 140ms ease;
+  }
+
+  .ops-btn:hover {
+    border-color: #b8dfae;
+    background: #f5fbf2;
+    transform: translateY(-1px);
+  }
+
+  .ops-btn-primary {
+    border-color: #173f36;
+    background: #173f36;
+    color: #f7fff7;
+  }
+
+  .ops-btn-primary:hover,
+  .ops-btn-primary:focus,
+  .ops-btn-primary:active {
+    border-color: #235446;
+    background: #235446;
+    color: #f7fff7;
+  }
+
+  .ops-btn-danger {
+    border-color: #fecaca;
+    background: #fff7f7;
+    color: #b91c1c;
+  }
+
+  .ops-stats {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 14px;
+  }
+
+  .ops-card {
+    border: 1px solid #dfe8df;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, .96);
+    box-shadow: 0 10px 24px rgba(15, 23, 42, .05);
+  }
+
+  .ops-stat {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 16px;
+  }
+
+  .ops-stat-icon {
+    display: inline-flex;
+    width: 42px;
+    height: 42px;
+    min-width: 42px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 14px;
+    background: #eef8ee;
+    color: #173f36;
+    font-size: 17px;
+  }
+
+  .ops-stat-icon[data-tone="blue"] { background: #eaf5ff; color: #075985; }
+  .ops-stat-icon[data-tone="amber"] { background: #fff7e6; color: #9a5b05; }
+  .ops-stat-icon[data-tone="green"] { background: #eaf9ef; color: #166534; }
+  .ops-stat-icon[data-tone="red"] { background: #fff1f2; color: #be123c; }
+
+  .ops-stat span {
+    color: #7a867f;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .03em;
+    text-transform: uppercase;
+  }
+
+  .ops-stat strong {
+    display: block;
+    margin-top: 8px;
+    color: #10201b;
+    font-size: 25px;
+    font-weight: 600;
+    line-height: 1;
+  }
+
+  .ops-shell {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 340px;
+    gap: 16px;
+    align-items: start;
+  }
+
+  .ops-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 16px;
+    border-bottom: 1px solid #edf2ed;
+  }
+
+  .ops-period {
+    color: #10201b;
+    font-size: 17px;
+    font-weight: 600;
+  }
+
+  .ops-segment {
+    display: inline-flex;
+    gap: 4px;
+    padding: 4px;
+    border: 1px solid #dfe8df;
+    border-radius: 999px;
+    background: #f8faf8;
+  }
+
+  .ops-segment button {
+    min-height: 30px;
+    padding: 0 12px;
+    border-radius: 999px;
+    color: #657168;
+    font-size: 12px;
+    font-weight: 650;
+  }
+
+  .ops-segment button.is-active {
+    background: #173f36;
+    color: #fff;
+  }
+
+  .ops-calendar-body {
+    padding: 16px;
+  }
+
+  .ops-month-grid {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    border-top: 1px solid #edf2ed;
+    border-left: 1px solid #edf2ed;
+  }
+
+  .ops-weekday {
+    padding: 10px;
+    border-right: 1px solid #edf2ed;
+    color: #7a867f;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+
+  .ops-day {
+    min-height: 118px;
+    padding: 10px;
+    border-right: 1px solid #edf2ed;
+    border-bottom: 1px solid #edf2ed;
+    background: #fff;
+    cursor: pointer;
+  }
+
+  .ops-day:hover {
+    background: #f8fbf7;
+  }
+
+  .ops-day.is-muted {
+    background: #fafafa;
+    color: #a0a8a3;
+  }
+
+  .ops-day-number {
+    font-size: 12px;
+    font-weight: 650;
+  }
+
+  .ops-event {
+    margin-top: 7px;
+    padding: 7px 8px;
+    border-radius: 9px;
+    background: #ecfdf3;
+    color: #166534;
+    font-size: 11px;
+    font-weight: 650;
+    line-height: 1.25;
+    cursor: pointer;
+  }
+
+  .ops-event[data-status="completed"] {
+    background: #edf7ed;
+    color: #267142;
+  }
+
+  .ops-event[data-status="cancelled"] {
+    background: #fff1f2;
+    color: #be123c;
+  }
+
+  .ops-event[data-status="in_progress"] {
+    background: #fff7ed;
+    color: #c2410c;
+  }
+
+  .ops-time-list {
+    display: grid;
+    gap: 8px;
+  }
+
+  .ops-time-row {
+    display: grid;
+    grid-template-columns: 76px minmax(0, 1fr);
+    gap: 10px;
+    min-height: 52px;
+    border-bottom: 1px solid #edf2ed;
+  }
+
+  .ops-time-slot {
+    color: #7a867f;
+    font-size: 12px;
+    font-weight: 650;
+    padding-top: 10px;
+  }
+
+  .ops-time-drop {
+    padding: 8px;
+    cursor: pointer;
+  }
+
+  .ops-side {
+    display: grid;
+    gap: 14px;
+  }
+
+  .ops-side-head {
+    padding: 16px 16px 0;
+  }
+
+  .ops-side-list {
+    display: grid;
+    gap: 8px;
+    padding: 12px 16px 16px;
+  }
+
+  .ops-list-item {
+    display: grid;
+    gap: 5px;
+    padding: 11px;
+    border: 1px solid #edf2ed;
+    border-radius: 12px;
+    background: #fff;
+    cursor: pointer;
+  }
+
+  .ops-list-item strong {
+    color: #17221e;
+    font-size: 13px;
+    font-weight: 650;
+  }
+
+  .ops-badge {
+    display: inline-flex;
+    width: fit-content;
+    align-items: center;
+    min-height: 24px;
+    padding: 0 9px;
+    border-radius: 999px;
+    background: #eef4ed;
+    color: #526158;
+    font-size: 11px;
+    font-weight: 650;
+  }
+
+  .ops-badge[data-status="completed"] {
+    background: #dcfce7;
+    color: #166534;
+  }
+
+  .ops-badge[data-status="cancelled"] {
+    background: #ffe4e6;
+    color: #be123c;
+  }
+
+  .ops-badge[data-status="scheduled"] {
+    background: #e0f2fe;
+    color: #075985;
+  }
+
+  .ops-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 70;
+    display: none;
+    overflow-y: auto;
+    padding: 24px;
+  }
+
+  .ops-modal.is-open {
+    display: grid;
+    place-items: center;
+  }
+
+  .ops-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, .48);
+    backdrop-filter: blur(4px);
+  }
+
+  .ops-modal-panel {
+    position: relative;
+    width: min(100%, 760px);
+    border: 1px solid #dfe8df;
+    border-radius: 16px;
+    background: #fff;
+    padding: 20px;
+    box-shadow: 0 24px 70px rgba(15, 23, 42, .22);
+  }
+
+  .ops-modal-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid #edf2ed;
+  }
+
+  .ops-modal-head h2 {
+    margin: 0;
+    color: #17221e;
+    font-size: 19px;
+    font-weight: 650;
+  }
+
+  .ops-form {
+    display: grid;
+    gap: 14px;
+    margin-top: 16px;
+  }
+
+  .ops-form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .ops-field {
+    display: grid;
+    gap: 7px;
+  }
+
+  .ops-field label {
+    color: #46564d;
+    font-size: 12px;
+    font-weight: 650;
+  }
+
+  .ops-field input,
+  .ops-field select,
+  .ops-field textarea {
+    width: 100%;
+    min-height: 40px;
+    border: 1px solid #d6e0d8;
+    border-radius: 10px;
+    background: #fff;
+    padding: 0 12px;
+    color: #17221e;
+    font-size: 13px;
+    outline: none;
+  }
+
+  .ops-field textarea {
+    min-height: 78px;
+    padding-top: 10px;
+    resize: vertical;
+  }
+
+  .ops-form-alert {
+    display: none;
+    border: 1px solid #fecaca;
+    border-radius: 10px;
+    background: #fff7f7;
+    padding: 10px 12px;
+    color: #b91c1c;
+    font-size: 13px;
+  }
+
+  .ops-form-alert.is-open {
+    display: block;
+  }
+
+  .ops-modal-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 4px;
+  }
+
+  @media (max-width: 1100px) {
+    .ops-shell {
+      grid-template-columns: 1fr;
+    }
+
+    .ops-stats {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 760px) {
+    .ops-head,
+    .ops-toolbar,
+    .ops-form-grid {
+      grid-template-columns: 1fr;
+      align-items: flex-start;
+      flex-direction: column;
+    }
+
+    .ops-stats {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="ops-calendar"
+     data-create-activity-url="{{ url_for('core.operational_calendar_create_activity') }}"
+     data-create-pilot-url="{{ url_for('core.operational_calendar_create_pilot') }}">
+  <section class="ops-head">
+    <div>
+      <p class="ops-eyebrow">Operaciones</p>
+      <h1>Calendario Operativo</h1>
+      <p class="ops-muted mt-2">Planifica actividades, asigna pilotos y drones disponibles, y controla estados operativos.</p>
+    </div>
+    <div class="ops-actions">
+      <button type="button" class="ops-btn" data-open-pilot>
+        <i class="fas fa-user-plus"></i>
+        Registrar piloto
+      </button>
+      <button type="button" class="ops-btn ops-btn-primary" data-open-activity>
+        <i class="fas fa-plus"></i>
+        Nueva solicitud
+      </button>
+    </div>
+  </section>
+
+  <section class="ops-stats">
+    <article class="ops-card ops-stat">
+      <i class="ops-stat-icon fas fa-calendar-day"></i>
+      <div><span>Hoy</span><strong data-stat="today">{{ stats.today }}</strong></div>
+    </article>
+    <article class="ops-card ops-stat">
+      <i class="ops-stat-icon fas fa-calendar-week" data-tone="blue"></i>
+      <div><span>Semana</span><strong data-stat="week">{{ stats.week }}</strong></div>
+    </article>
+    <article class="ops-card ops-stat">
+      <i class="ops-stat-icon fas fa-hourglass-half" data-tone="amber"></i>
+      <div><span>Pendientes</span><strong data-stat="pending">{{ stats.pending }}</strong></div>
+    </article>
+    <article class="ops-card ops-stat">
+      <i class="ops-stat-icon fas fa-check-circle" data-tone="green"></i>
+      <div><span>Finalizadas</span><strong data-stat="completed">{{ stats.completed }}</strong></div>
+    </article>
+    <article class="ops-card ops-stat">
+      <i class="ops-stat-icon fas fa-ban" data-tone="red"></i>
+      <div><span>Canceladas</span><strong data-stat="cancelled">{{ stats.cancelled }}</strong></div>
+    </article>
+  </section>
+
+  <section class="ops-shell">
+    <article class="ops-card">
+      <div class="ops-toolbar">
+        <div class="ops-actions">
+          <button type="button" class="ops-btn" data-calendar-prev><i class="fas fa-chevron-left"></i></button>
+          <button type="button" class="ops-btn" data-calendar-today>Hoy</button>
+          <button type="button" class="ops-btn" data-calendar-next><i class="fas fa-chevron-right"></i></button>
+        </div>
+        <div class="ops-period" data-calendar-title></div>
+        <div class="ops-segment">
+          <button type="button" data-calendar-view="day">Dia</button>
+          <button type="button" data-calendar-view="week">Semana</button>
+          <button type="button" data-calendar-view="month" class="is-active">Mes</button>
+        </div>
+      </div>
+      <div class="ops-calendar-body" data-calendar-body></div>
+    </article>
+
+    <aside class="ops-side">
+      <article class="ops-card">
+        <div class="ops-side-head">
+          <h2 class="text-lg font-semibold text-gray-900">Actividades proximas</h2>
+          <p class="ops-muted mt-1">Haz clic sobre una actividad para editarla o cerrarla.</p>
+        </div>
+        <div class="ops-side-list" data-upcoming-list></div>
+      </article>
+      <article class="ops-card">
+        <div class="ops-side-head">
+          <h2 class="text-lg font-semibold text-gray-900">Recursos</h2>
+        </div>
+        <div class="ops-side-list">
+          <div class="ops-list-item">
+            <strong>{{ pilots|length }} pilotos</strong>
+            <span class="ops-muted">Perfiles operativos registrados.</span>
+          </div>
+          <div class="ops-list-item">
+            <strong>{{ drones|length }} drones</strong>
+            <span class="ops-muted">Drones leidos desde Mantenimiento.</span>
+          </div>
+        </div>
+      </article>
+    </aside>
+  </section>
+</div>
+
+<div id="activity-modal" class="ops-modal" aria-hidden="true" role="dialog" aria-labelledby="activity-modal-title">
+  <div class="ops-modal-backdrop" data-close-modal></div>
+  <div class="ops-modal-panel">
+    <div class="ops-modal-head">
+      <div>
+        <p class="ops-eyebrow">Agenda</p>
+        <h2 id="activity-modal-title">Nueva solicitud</h2>
+      </div>
+      <button type="button" class="ops-btn" data-close-modal><i class="fas fa-times"></i></button>
+    </div>
+    <form id="activity-form" class="ops-form">
+      <input type="hidden" name="activity_id" id="activity_id">
+      <div id="activity-alert" class="ops-form-alert"></div>
+      <div class="ops-form-grid">
+        <div class="ops-field">
+          <label for="activity_title">Titulo</label>
+          <input id="activity_title" name="title" required placeholder="Ej: Vuelo finca La Esperanza">
+        </div>
+        <div class="ops-field">
+          <label for="operation_type">Tipo de operacion</label>
+          <select id="operation_type" name="operation_type" required>
+            <option value="">Seleccionar</option>
+            <option>Vuelo fotogrametrico</option>
+            <option>Inspeccion</option>
+            <option>Aplicacion agricola</option>
+            <option>Fumigacion agricola</option>
+            <option>Levantamiento topografico</option>
+            <option>Visita tecnica</option>
+          </select>
+        </div>
+      </div>
+      <div class="ops-form-grid">
+        <div class="ops-field">
+          <label for="start_date">Fecha de inicio</label>
+          <input id="start_date" name="start_date" required type="date">
+        </div>
+        <div class="ops-field">
+          <label for="end_date">Fecha fin</label>
+          <input id="end_date" name="end_date" required type="date">
+        </div>
+      </div>
+      <div class="ops-form-grid">
+        <div class="ops-field">
+          <label for="start_time">Hora inicio</label>
+          <input id="start_time" name="start_time" required type="time">
+        </div>
+        <div class="ops-field">
+          <label for="end_time">Hora fin</label>
+          <input id="end_time" name="end_time" required type="time">
+        </div>
+      </div>
+      <div class="ops-form-grid">
+        <div class="ops-field">
+          <label for="place">Lugar</label>
+          <input id="place" name="place" required placeholder="Municipio / finca / zona">
+        </div>
+        <div class="ops-field">
+          <label for="client_project">Cliente / proyecto</label>
+          <input id="client_project" name="client_project" placeholder="Proyecto asociado">
+        </div>
+      </div>
+      <div class="ops-form-grid">
+        <div class="ops-field">
+          <label for="farm_name">Finca</label>
+          <input id="farm_name" name="farm_name" placeholder="Ej: Amazonas">
+        </div>
+        <div class="ops-field">
+          <label for="lot_code">Lote</label>
+          <input id="lot_code" name="lot_code" placeholder="Ej: 1, 2 o PP">
+        </div>
+      </div>
+      <div class="ops-form-grid">
+        <div class="ops-field">
+          <label for="area_hectares">Area</label>
+          <input id="area_hectares" name="area_hectares" inputmode="decimal" placeholder="Ej: 9,9">
+        </div>
+        <div class="ops-field">
+          <label for="rest_days">Dias de descanso</label>
+          <input id="rest_days" name="rest_days" type="number" min="0" step="1" placeholder="Ej: 10">
+        </div>
+      </div>
+      <div class="ops-field">
+        <label for="paddocks">Potreros</label>
+        <textarea id="paddocks" name="paddocks" placeholder="Ej: 42, 41, 9, 8, 7, 20, 15, 14, 12"></textarea>
+      </div>
+      <div class="ops-form-grid">
+        <div class="ops-field">
+          <label for="pilot_id">Piloto</label>
+          <select id="pilot_id" name="pilot_id" required>
+            <option value="">Seleccionar piloto</option>
+            {% for pilot in pilots %}
+              <option value="{{ pilot.id }}">{{ pilot.full_name }} - {{ pilot.certification_status }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="ops-field">
+          <label for="drone_id">Dron</label>
+          <select id="drone_id" name="drone_id" required>
+            <option value="">Seleccionar dron</option>
+            {% for drone in drones %}
+              <option value="{{ drone.id }}">{{ drone.brand }} {{ drone.model }} - {{ drone.serial_number }}{% if drone.status != "Aeronavegable" %} ({{ drone.status }}){% endif %}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <div class="ops-form-grid">
+        <div class="ops-field">
+          <label for="activity_status">Estado</label>
+          <select id="activity_status" name="status">
+            <option value="scheduled">Pendiente</option>
+            <option value="in_progress">En proceso</option>
+          </select>
+        </div>
+        <div class="ops-field">
+          <label>Duracion</label>
+          <input id="duration_preview" readonly value="0 min">
+        </div>
+      </div>
+      <div class="ops-field">
+        <label for="observations">Observaciones</label>
+        <textarea id="observations" name="observations" placeholder="Notas operativas, restricciones o detalles del vuelo"></textarea>
+      </div>
+      <div class="ops-modal-actions">
+        <button type="button" class="ops-btn ops-btn-danger hidden" data-cancel-activity>Cancelar solicitud</button>
+        <button type="button" class="ops-btn hidden" data-complete-activity>Finalizar</button>
+        <button type="button" class="ops-btn" data-close-modal>Cerrar</button>
+        <button type="submit" class="ops-btn ops-btn-primary">Guardar solicitud</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="pilot-modal" class="ops-modal" aria-hidden="true" role="dialog" aria-labelledby="pilot-modal-title">
+  <div class="ops-modal-backdrop" data-close-pilot></div>
+  <div class="ops-modal-panel">
+    <div class="ops-modal-head">
+      <div>
+        <p class="ops-eyebrow">Pilotos</p>
+        <h2 id="pilot-modal-title">Registrar piloto</h2>
+      </div>
+      <button type="button" class="ops-btn" data-close-pilot><i class="fas fa-times"></i></button>
+    </div>
+    <form id="pilot-form" class="ops-form">
+      <div id="pilot-alert" class="ops-form-alert"></div>
+      <div class="ops-form-grid">
+        <div class="ops-field"><label for="pilot_username">Usuario</label><input id="pilot_username" name="username" required></div>
+        <div class="ops-field"><label for="pilot_password">Clave</label><input id="pilot_password" name="password" required type="password"></div>
+      </div>
+      <div class="ops-form-grid">
+        <div class="ops-field"><label for="first_name">Nombres</label><input id="first_name" name="first_name" required></div>
+        <div class="ops-field"><label for="last_name">Apellidos</label><input id="last_name" name="last_name" required></div>
+      </div>
+      <div class="ops-form-grid">
+        <div class="ops-field"><label for="document_number">Documento</label><input id="document_number" name="document_number"></div>
+        <div class="ops-field"><label for="pilot_role">Rol</label><input id="pilot_role" name="role" value="pilot"></div>
+      </div>
+      <div class="ops-form-grid">
+        <div class="ops-field"><label for="pilot_phone">Telefono</label><input id="pilot_phone" name="phone"></div>
+        <div class="ops-field"><label for="pilot_email">Email</label><input id="pilot_email" name="email" type="email"></div>
+      </div>
+      <div class="ops-form-grid">
+        <div class="ops-field"><label for="certification_name">Certificacion</label><input id="certification_name" name="certification_name" placeholder="UAS / UAEAC / DJI"></div>
+        <div class="ops-field"><label for="certificate_number">Numero certificado</label><input id="certificate_number" name="certificate_number"></div>
+      </div>
+      <div class="ops-form-grid">
+        <div class="ops-field"><label for="certification_issuer">Emisor</label><input id="certification_issuer" name="certification_issuer"></div>
+        <div class="ops-field"><label for="certification_expires_at">Vence</label><input id="certification_expires_at" name="certification_expires_at" type="date"></div>
+      </div>
+      <div class="ops-modal-actions">
+        <button type="button" class="ops-btn" data-close-pilot>Cerrar</button>
+        <button type="submit" class="ops-btn ops-btn-primary">Guardar piloto</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{{ super() }}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  let activities = {{ activities_json | tojson }};
+  let currentDate = new Date();
+  let currentView = 'month';
+  let activeActivity = null;
+
+  const root = document.querySelector('.ops-calendar');
+  const calendarBody = document.querySelector('[data-calendar-body]');
+  const calendarTitle = document.querySelector('[data-calendar-title]');
+  const upcomingList = document.querySelector('[data-upcoming-list]');
+  const activityModal = document.getElementById('activity-modal');
+  const pilotModal = document.getElementById('pilot-modal');
+  const activityForm = document.getElementById('activity-form');
+  const pilotForm = document.getElementById('pilot-form');
+  const activityAlert = document.getElementById('activity-alert');
+  const pilotAlert = document.getElementById('pilot-alert');
+  const cancelBtn = document.querySelector('[data-cancel-activity]');
+  const completeBtn = document.querySelector('[data-complete-activity]');
+
+  function pad(value) { return String(value).padStart(2, '0'); }
+  function dateKey(date) { return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`; }
+  function parseDate(value) {
+    const parts = value.split('-').map(Number);
+    return new Date(parts[0], parts[1] - 1, parts[2]);
+  }
+  function prettyMonth(date) {
+    return date.toLocaleDateString('es-CO', { month: 'long', year: 'numeric' });
+  }
+  function showAlert(element, message) {
+    element.textContent = message;
+    element.classList.add('is-open');
+  }
+  function clearAlert(element) {
+    element.textContent = '';
+    element.classList.remove('is-open');
+  }
+  function csrfToken() {
+    if (typeof getCsrfToken === 'function') return getCsrfToken();
+    const meta = document.querySelector('meta[name="csrf-token"]');
+    return meta ? meta.content : '';
+  }
+  async function postForm(url, form) {
+    const response = await fetch(url, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'X-CSRF-TOKEN': csrfToken(), 'X-Requested-With': 'XMLHttpRequest' },
+      body: new FormData(form)
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data.success) throw new Error(data.message || 'No se pudo guardar.');
+    return data;
+  }
+  function eventsForDay(day) {
+    return activities.filter(item => item.date === day).sort((a, b) => a.start_time.localeCompare(b.start_time));
+  }
+  function eventHtml(event) {
+    return `<div class="ops-event" data-activity-id="${event.id}" data-status="${event.status}">
+      ${event.start_time} ${event.title}
+    </div>`;
+  }
+  function renderMonth() {
+    const first = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+    const start = new Date(first);
+    start.setDate(first.getDate() - ((first.getDay() + 6) % 7));
+    calendarTitle.textContent = prettyMonth(currentDate);
+    let html = '<div class="ops-month-grid">';
+    ['Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab', 'Dom'].forEach(day => html += `<div class="ops-weekday">${day}</div>`);
+    for (let index = 0; index < 42; index++) {
+      const cell = new Date(start);
+      cell.setDate(start.getDate() + index);
+      const key = dateKey(cell);
+      const muted = cell.getMonth() !== currentDate.getMonth() ? ' is-muted' : '';
+      html += `<div class="ops-day${muted}" data-day="${key}" data-time="08:00">
+        <div class="ops-day-number">${cell.getDate()}</div>
+        ${eventsForDay(key).slice(0, 3).map(eventHtml).join('')}
+      </div>`;
+    }
+    html += '</div>';
+    calendarBody.innerHTML = html;
+  }
+  function renderTimeList(days) {
+    calendarTitle.textContent = days.length === 1
+      ? days[0].toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })
+      : `${days[0].toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })} - ${days[days.length - 1].toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })}`;
+    let html = '<div class="ops-time-list">';
+    days.forEach(day => {
+      html += `<div class="ops-weekday">${day.toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'short' })}</div>`;
+      for (let hour = 6; hour <= 18; hour++) {
+        const key = dateKey(day);
+        const time = `${pad(hour)}:00`;
+        const matching = eventsForDay(key).filter(event => event.start_time.slice(0, 2) === pad(hour));
+        html += `<div class="ops-time-row">
+          <div class="ops-time-slot">${time}</div>
+          <div class="ops-time-drop" data-day="${key}" data-time="${time}">
+            ${matching.map(eventHtml).join('')}
+          </div>
+        </div>`;
+      }
+    });
+    html += '</div>';
+    calendarBody.innerHTML = html;
+  }
+  function renderUpcoming() {
+    const sorted = activities.slice().sort((a, b) => a.starts_at.localeCompare(b.starts_at)).slice(0, 8);
+    upcomingList.innerHTML = sorted.length ? sorted.map(item => `
+      <div class="ops-list-item" data-activity-id="${item.id}">
+        <strong>${item.title}</strong>
+        <span class="ops-muted">${item.date} ${item.start_time} - ${item.pilot_name}</span>
+        <span class="ops-badge" data-status="${item.status}">${statusLabel(item.status)}</span>
+      </div>`).join('') : '<div class="ops-muted">No hay actividades programadas.</div>';
+  }
+  function statusLabel(status) {
+    return { scheduled: 'Pendiente', in_progress: 'En proceso', completed: 'Finalizada', cancelled: 'Cancelada' }[status] || status;
+  }
+  function renderStats() {
+    const today = dateKey(new Date());
+    const now = new Date();
+    const weekStart = new Date(now);
+    weekStart.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 7);
+    document.querySelector('[data-stat="today"]').textContent = activities.filter(item => item.date === today).length;
+    document.querySelector('[data-stat="week"]').textContent = activities.filter(item => {
+      const date = parseDate(item.date);
+      return date >= weekStart && date < weekEnd;
+    }).length;
+    document.querySelector('[data-stat="pending"]').textContent = activities.filter(item => item.status === 'scheduled').length;
+    document.querySelector('[data-stat="completed"]').textContent = activities.filter(item => item.status === 'completed').length;
+    document.querySelector('[data-stat="cancelled"]').textContent = activities.filter(item => item.status === 'cancelled').length;
+  }
+  function render() {
+    document.querySelectorAll('[data-calendar-view]').forEach(button => button.classList.toggle('is-active', button.dataset.calendarView === currentView));
+    if (currentView === 'month') renderMonth();
+    if (currentView === 'day') renderTimeList([currentDate]);
+    if (currentView === 'week') {
+      const start = new Date(currentDate);
+      start.setDate(currentDate.getDate() - ((currentDate.getDay() + 6) % 7));
+      renderTimeList(Array.from({ length: 7 }, (_, index) => {
+        const day = new Date(start);
+        day.setDate(start.getDate() + index);
+        return day;
+      }));
+    }
+    renderUpcoming();
+    renderStats();
+  }
+  function openActivityModal(date, time, event) {
+    clearAlert(activityAlert);
+    activityForm.reset();
+    activeActivity = event || null;
+    document.getElementById('activity-modal-title').textContent = event ? 'Editar solicitud' : 'Nueva solicitud';
+    document.getElementById('activity_id').value = event ? event.id : '';
+    document.getElementById('start_date').value = event ? event.start_date : (date || dateKey(currentDate));
+    document.getElementById('end_date').value = event ? event.end_date : (date || dateKey(currentDate));
+    document.getElementById('start_time').value = event ? event.start_time : (time || '08:00');
+    document.getElementById('end_time').value = event ? event.end_time : '09:00';
+    if (event) {
+      document.getElementById('activity_title').value = event.title;
+      document.getElementById('operation_type').value = event.operation_type;
+      document.getElementById('place').value = event.place;
+      document.getElementById('client_project').value = event.client_project;
+      document.getElementById('farm_name').value = event.farm_name || '';
+      document.getElementById('lot_code').value = event.lot_code || '';
+      document.getElementById('area_hectares').value = event.area_hectares || '';
+      document.getElementById('rest_days').value = event.rest_days || '';
+      document.getElementById('paddocks').value = event.paddocks || '';
+      document.getElementById('pilot_id').value = event.pilot_id;
+      document.getElementById('drone_id').value = event.drone_id;
+      document.getElementById('activity_status').value = event.status;
+      document.getElementById('observations').value = event.observations;
+    }
+    cancelBtn.classList.toggle('hidden', !event || event.status === 'cancelled' || event.status === 'completed');
+    completeBtn.classList.toggle('hidden', !event || event.status === 'cancelled' || event.status === 'completed');
+    updateDuration();
+    activityModal.classList.add('is-open');
+    activityModal.setAttribute('aria-hidden', 'false');
+  }
+  function closeActivityModal() {
+    activityModal.classList.remove('is-open');
+    activityModal.setAttribute('aria-hidden', 'true');
+  }
+  function updateDuration() {
+    const startDate = document.getElementById('start_date').value;
+    const endDate = document.getElementById('end_date').value;
+    const start = document.getElementById('start_time').value;
+    const end = document.getElementById('end_time').value;
+    if (!startDate || !endDate || !start || !end) return;
+    const startAt = new Date(`${startDate}T${start}:00`);
+    const endAt = new Date(`${endDate}T${end}:00`);
+    const minutes = Math.max(0, Math.round((endAt - startAt) / 60000));
+    document.getElementById('duration_preview').value = `${minutes} min`;
+  }
+  function upsertActivity(activity) {
+    const index = activities.findIndex(item => item.id === activity.id);
+    if (index >= 0) activities[index] = activity;
+    else activities.push(activity);
+    render();
+  }
+
+  document.querySelector('[data-open-activity]').addEventListener('click', () => openActivityModal(dateKey(currentDate), '08:00'));
+  document.querySelector('[data-open-pilot]').addEventListener('click', () => { clearAlert(pilotAlert); pilotForm.reset(); pilotModal.classList.add('is-open'); });
+  document.querySelectorAll('[data-close-modal]').forEach(button => button.addEventListener('click', closeActivityModal));
+  document.querySelectorAll('[data-close-pilot]').forEach(button => button.addEventListener('click', () => pilotModal.classList.remove('is-open')));
+  document.querySelector('[data-calendar-prev]').addEventListener('click', () => {
+    currentDate.setDate(currentDate.getDate() + (currentView === 'month' ? -30 : currentView === 'week' ? -7 : -1));
+    render();
+  });
+  document.querySelector('[data-calendar-next]').addEventListener('click', () => {
+    currentDate.setDate(currentDate.getDate() + (currentView === 'month' ? 30 : currentView === 'week' ? 7 : 1));
+    render();
+  });
+  document.querySelector('[data-calendar-today]').addEventListener('click', () => { currentDate = new Date(); render(); });
+  document.querySelectorAll('[data-calendar-view]').forEach(button => button.addEventListener('click', () => { currentView = button.dataset.calendarView; render(); }));
+  calendarBody.addEventListener('click', function (event) {
+    const eventElement = event.target.closest('[data-activity-id]');
+    if (eventElement) {
+      event.stopPropagation();
+      openActivityModal(null, null, activities.find(item => item.id === Number(eventElement.dataset.activityId)));
+      return;
+    }
+    const target = event.target.closest('[data-day]');
+    if (target) openActivityModal(target.dataset.day, target.dataset.time || '08:00');
+  });
+  upcomingList.addEventListener('click', function (event) {
+    const item = event.target.closest('[data-activity-id]');
+    if (item) openActivityModal(null, null, activities.find(activity => activity.id === Number(item.dataset.activityId)));
+  });
+  document.getElementById('start_date').addEventListener('change', function () {
+    if (!document.getElementById('end_date').value) document.getElementById('end_date').value = this.value;
+    updateDuration();
+  });
+  document.getElementById('end_date').addEventListener('change', updateDuration);
+  document.getElementById('start_time').addEventListener('change', updateDuration);
+  document.getElementById('end_time').addEventListener('change', updateDuration);
+
+  activityForm.addEventListener('submit', async function (event) {
+    event.preventDefault();
+    clearAlert(activityAlert);
+    const id = document.getElementById('activity_id').value;
+    const url = id ? `${root.dataset.createActivityUrl}/${id}` : root.dataset.createActivityUrl;
+    try {
+      const data = await postForm(url, activityForm);
+      upsertActivity(data.activity);
+      closeActivityModal();
+    } catch (error) {
+      showAlert(activityAlert, error.message);
+    }
+  });
+  pilotForm.addEventListener('submit', async function (event) {
+    event.preventDefault();
+    clearAlert(pilotAlert);
+    try {
+      const data = await postForm(root.dataset.createPilotUrl, pilotForm);
+      const option = document.createElement('option');
+      option.value = data.pilot.id;
+      option.textContent = data.pilot.name;
+      document.getElementById('pilot_id').appendChild(option);
+      pilotModal.classList.remove('is-open');
+      window.location.reload();
+    } catch (error) {
+      showAlert(pilotAlert, error.message);
+    }
+  });
+  cancelBtn.addEventListener('click', async function () {
+    if (!activeActivity) return;
+    try {
+      const data = await postForm(`${root.dataset.createActivityUrl}/${activeActivity.id}/cancelar`, document.createElement('form'));
+      upsertActivity(data.activity);
+      closeActivityModal();
+    } catch (error) { showAlert(activityAlert, error.message); }
+  });
+  completeBtn.addEventListener('click', async function () {
+    if (!activeActivity) return;
+    try {
+      const data = await postForm(`${root.dataset.createActivityUrl}/${activeActivity.id}/finalizar`, document.createElement('form'));
+      upsertActivity(data.activity);
+      closeActivityModal();
+    } catch (error) { showAlert(activityAlert, error.message); }
+  });
+
+  render();
+});
+</script>
+{% endblock %}
+

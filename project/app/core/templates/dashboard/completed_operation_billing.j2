@@ -1,0 +1,163 @@
+﻿{% extends "base.j2" %}
+{% set flush_content_shell = true %}
+
+{% block content %}
+<div class="space-y-4">
+  <section class="grid gap-2 md:grid-cols-4">
+    <article class="relative min-h-[72px] rounded-xl border border-gray-200 bg-white p-3 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Registros</p>
+          <h2 class="mt-3 text-lg font-semibold leading-none text-gray-900 dark:text-white">{{ stats.total_records }}</h2>
+          <p class="mt-1 text-[10px] text-gray-500 dark:text-gray-400">Operaciones importadas</p>
+        </div>
+        <span class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+          <i class="fas fa-list-check text-sm"></i>
+        </span>
+      </div>
+    </article>
+    <article class="relative min-h-[72px] rounded-xl border border-gray-200 bg-white p-3 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Facturas</p>
+          <h2 class="mt-3 text-lg font-semibold leading-none text-gray-900 dark:text-white">{{ stats.invoice_count }}</h2>
+          <p class="mt-1 text-[10px] text-gray-500 dark:text-gray-400">Numeros FE unicos</p>
+        </div>
+        <span class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300">
+          <i class="fas fa-file-invoice text-sm"></i>
+        </span>
+      </div>
+    </article>
+    <article class="relative min-h-[72px] rounded-xl border border-gray-200 bg-white p-3 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Area</p>
+          <h2 class="mt-3 text-lg font-semibold leading-none text-gray-900 dark:text-white">{{ '%.2f'|format(stats.total_area or 0) }} ha</h2>
+          <p class="mt-1 text-[10px] text-gray-500 dark:text-gray-400">Hectareas facturables</p>
+        </div>
+        <span class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300">
+          <i class="fas fa-seedling text-sm"></i>
+        </span>
+      </div>
+    </article>
+    <article class="relative min-h-[72px] rounded-xl border border-gray-200 bg-white p-3 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Total</p>
+          <h2 class="mt-3 text-lg font-semibold leading-none text-emerald-600 dark:text-emerald-400">$ {{ '{:,.0f}'.format(stats.total_invoice or 0) }}</h2>
+          <p class="mt-1 text-[10px] text-gray-500 dark:text-gray-400">Valor acumulado</p>
+        </div>
+        <span class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+          <i class="fas fa-dollar-sign text-sm"></i>
+        </span>
+      </div>
+    </article>
+  </section>
+
+  <section class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
+    <div class="flex flex-col gap-3 border-b border-gray-100 px-3 py-2 dark:border-gray-800 md:flex-row md:items-center md:justify-between">
+      <div>
+        <h2 class="text-base font-semibold text-gray-900 dark:text-white">Registro de facturacion</h2>
+        <p class="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">Tabla amplia para revisar cliente, finca, ejecucion y factura.</p>
+      </div>
+      <span class="rounded-full border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-600 dark:border-gray-700 dark:text-gray-300">
+        Pendientes: {{ stats.pending_records }}
+      </span>
+    </div>
+
+    <form method='get' class='billing-filters border-b border-gray-100 bg-gray-50/70 px-3 py-2 dark:border-gray-800 dark:bg-gray-800/40' style='display:grid;grid-template-columns:minmax(150px,1fr) minmax(170px,1.15fr) minmax(120px,.8fr) minmax(95px,.6fr) minmax(150px,1fr) auto;gap:8px;align-items:end;'>
+      <label class='grid gap-0.5 text-[9px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400'>
+        Finca
+        <select name='finca' class='h-7 min-w-0 rounded-md border border-gray-200 bg-white px-2 text-[11px] font-medium normal-case tracking-normal text-gray-800 shadow-sm outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-100 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100'>
+          <option value=''>Todas</option>
+          {% for option in filter_options.farms %}
+          <option value='{{ option }}' {% if filters.finca == option %}selected{% endif %}>{{ option }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class='grid gap-0.5 text-[9px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400'>
+        Cliente
+        <select name='cliente' class='h-7 min-w-0 rounded-md border border-gray-200 bg-white px-2 text-[11px] font-medium normal-case tracking-normal text-gray-800 shadow-sm outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-100 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100'>
+          <option value=''>Todos</option>
+          {% for option in filter_options.clients %}
+          <option value='{{ option }}' {% if filters.cliente == option %}selected{% endif %}>{{ option }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class='grid gap-0.5 text-[9px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400'>
+        Piloto
+        <select name='piloto' class='h-7 min-w-0 rounded-md border border-gray-200 bg-white px-2 text-[11px] font-medium normal-case tracking-normal text-gray-800 shadow-sm outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-100 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100'>
+          <option value=''>Todos</option>
+          {% for option in filter_options.pilots %}
+          <option value='{{ option }}' {% if filters.piloto == option %}selected{% endif %}>{{ option }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class='grid gap-0.5 text-[9px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400'>
+        Mes
+        <select name='mes' class='h-7 min-w-0 rounded-md border border-gray-200 bg-white px-2 text-[11px] font-medium normal-case tracking-normal text-gray-800 shadow-sm outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-100 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100'>
+          <option value=''>Todos</option>
+          {% for option in filter_options.months %}
+          <option value='{{ option }}' {% if filters.mes == option %}selected{% endif %}>{{ option }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class='grid gap-0.5 text-[9px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400'>
+        Buscar
+        <input name='q' value='{{ filters.q }}' placeholder='Factura, potrero...' class='h-7 min-w-0 rounded-md border border-gray-200 bg-white px-2 text-[11px] font-medium normal-case tracking-normal text-gray-800 shadow-sm outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-100 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100'>
+      </label>
+      <div class='flex items-end gap-1.5'>
+        <button type='submit' class='inline-flex h-7 items-center justify-center rounded-md bg-emerald-600 px-3 text-[11px] font-semibold text-white shadow-sm hover:bg-emerald-700'>Filtrar</button>
+        <a href='/dashboard/operacion-realizada/facturacion' class='inline-flex h-7 items-center justify-center rounded-md border border-gray-200 bg-white px-3 text-[11px] font-semibold text-gray-600 shadow-sm hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800'>Limpiar</a>
+      </div>
+    </form>
+
+    <div class="overflow-auto" style="height: min(560px, calc(100vh - 300px)); min-height: 400px;">
+      <table class="min-w-[1500px] w-full border-collapse text-xs">
+        <thead class="sticky top-0 z-10 bg-gray-50 text-[11px] uppercase tracking-wide text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+          <tr>
+            <th class="px-3 py-2 text-left">Item</th>
+            <th class="px-3 py-2 text-left">Programacion</th>
+            <th class="px-3 py-2 text-left">Ejecucion</th>
+            <th class="px-3 py-2 text-left">Cliente</th>
+            <th class="px-3 py-2 text-left">Finca</th>
+            <th class="px-3 py-2 text-left">Potrero</th>
+            <th class="px-3 py-2 text-right">Area</th>
+            <th class="px-3 py-2 text-left">Piloto</th>
+            <th class="px-3 py-2 text-left">Corte</th>
+            <th class="px-3 py-2 text-left">Mes</th>
+            <th class="px-3 py-2 text-right">Precio</th>
+            <th class="px-3 py-2 text-right">Total</th>
+            <th class="px-3 py-2 text-left">Factura</th>
+            <th class="px-3 py-2 text-left">Observaciones</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
+          {% for record in records %}
+          <tr class="hover:bg-gray-50 dark:hover:bg-gray-800/60">
+            <td class="px-3 py-2 text-gray-500">{{ record.source_item or '' }}</td>
+            <td class="px-3 py-2 whitespace-nowrap">{{ record.scheduled_date.strftime('%d/%m/%Y') if record.scheduled_date else '' }}</td>
+            <td class="px-3 py-2 whitespace-nowrap">{{ record.executed_date.strftime('%d/%m/%Y') if record.executed_date else '' }}</td>
+            <td class="px-3 py-2 font-medium text-gray-900 dark:text-gray-100">{{ record.organization.name if record.organization else (record.activity.client_project if record.activity else '') }}</td>
+            <td class="px-3 py-2">{{ record.farm_name or '' }}</td>
+            <td class="px-3 py-2">{{ record.paddock_name or '' }}</td>
+            <td class="px-3 py-2 text-right">{{ '%.2f'|format(record.area_hectares or 0) }}</td>
+            <td class="px-3 py-2">{{ record.pilot_name or '' }}</td>
+            <td class="px-3 py-2">{{ record.billing_cut or '' }}</td>
+            <td class="px-3 py-2">{{ record.billing_month or '' }}</td>
+            <td class="px-3 py-2 text-right">$ {{ '{:,.0f}'.format(record.unit_price or 0) }}</td>
+            <td class="px-3 py-2 text-right font-semibold">$ {{ '{:,.0f}'.format(record.invoice_total or 0) }}</td>
+            <td class="px-3 py-2">{{ record.invoice_number or 'Pendiente' }}</td>
+            <td class="px-3 py-2 max-w-[260px] truncate" title="{{ record.observations or '' }}">{{ record.observations or '' }}</td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="14" class="px-5 py-8 text-center text-gray-500 dark:text-gray-400">Aun no hay registros de facturacion.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+{% endblock %}

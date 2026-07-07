@@ -9,9 +9,11 @@ Regla general: usar @login_required para rutas web que renderizan templates.
 """
 
 # Third party imports
-from datetime import date, datetime
+import hashlib
+from datetime import date, datetime, time, timedelta
+from decimal import Decimal
 
-from flask import Response, current_app, redirect, render_template, request, url_for
+from flask import Response, current_app, flash, jsonify, redirect, render_template, request, session, url_for
 from flask_jwt_extended import (
     get_jwt,
     get_jwt_identity,
@@ -20,8 +22,10 @@ from flask_jwt_extended import (
 )
 
 # from sqlalchemy.orm import joinedload
-from sqlalchemy import func
+from sqlalchemy import func, or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
+from werkzeug.security import check_password_hash, generate_password_hash
 
 from app.extensions import db
 
@@ -35,7 +39,21 @@ from .controller import (
     UserView,
     login_required,
 )
-from .models import RoleEnum, User, get_clients_for_user
+from .models import (
+    MaintenanceDrone,
+    OperationBillingRecord,
+    OperationalActivity,
+    OperationalActivityLog,
+    PilotDevice,
+    PilotCertification,
+    PilotFlightLog,
+    PilotOperationReport,
+    PilotProfile,
+    Organization,
+    RoleEnum,
+    User,
+    get_clients_for_user,
+)
 from .services.profile_service import ProfileService
 
 __doc__ = """
@@ -51,6 +69,244 @@ def get_index_menu():
             {"name": "Dashboard", "url": url_for("core.dashboard")},
         ]
     }
+
+
+def _parse_date(value):
+    if not value:
+        return None
+    return datetime.strptime(value, "%Y-%m-%d").date()
+
+
+def _parse_datetime_fields(day_value, time_value):
+    if not day_value or not time_value:
+        return None
+    return datetime.strptime(f"{day_value} {time_value}", "%Y-%m-%d %H:%M")
+
+def _parse_optional_decimal(value):
+    value = (value or "").strip().replace(",", ".")
+    if not value:
+        return None
+    try:
+        return Decimal(value)
+    except Exception:
+        return None
+
+
+def _activity_log(activity, action, message=None):
+    db.session.add(
+        OperationalActivityLog(
+            activity=activity,
+            user_id=get_jwt_identity(),
+            action=action,
+            message=message,
+        )
+    )
+
+
+def _activity_payload(activity):
+    return {
+        "id": activity.id,
+        "title": activity.title,
+        "operation_type": activity.operation_type,
+        "date": activity.starts_at.strftime("%Y-%m-%d"),
+        "start_date": activity.starts_at.strftime("%Y-%m-%d"),
+        "end_date": activity.ends_at.strftime("%Y-%m-%d"),
+        "start_time": activity.starts_at.strftime("%H:%M"),
+        "end_time": activity.ends_at.strftime("%H:%M"),
+        "starts_at": activity.starts_at.isoformat(),
+        "ends_at": activity.ends_at.isoformat(),
+        "duration_minutes": activity.duration_minutes,
+        "place": activity.place,
+        "client_project": activity.client_project or "",
+        "farm_name": activity.farm_name or "",
+        "paddocks": activity.paddocks or "",
+        "area_hectares": str(activity.area_hectares) if activity.area_hectares is not None else "",
+        "rest_days": activity.rest_days if activity.rest_days is not None else "",
+        "lot_code": activity.lot_code or "",
+        "pilot_id": activity.pilot_id,
+        "pilot_name": activity.pilot.full_name if activity.pilot else "",
+        "drone_id": activity.drone_id,
+        "drone_name": f"{activity.drone.brand} {activity.drone.model}" if activity.drone else "",
+        "observations": activity.observations or "",
+        "status": activity.status,
+    }
+
+
+def _has_activity_conflict(pilot_id, drone_id, starts_at, ends_at, activity_id=None):
+    base = OperationalActivity.query.filter(
+        OperationalActivity.status.notin_(["cancelled", "completed"]),
+        OperationalActivity.starts_at < ends_at,
+        OperationalActivity.ends_at > starts_at,
+    )
+    if activity_id:
+        base = base.filter(OperationalActivity.id != activity_id)
+
+    pilot_busy = base.filter(OperationalActivity.pilot_id == pilot_id).first()
+    drone_busy = base.filter(OperationalActivity.drone_id == drone_id).first()
+    return pilot_busy, drone_busy
+
+
+def _activity_form_payload():
+    start_day = (request.form.get("start_date") or request.form.get("date") or "").strip()
+    end_day = (request.form.get("end_date") or start_day).strip()
+    start_time = (request.form.get("start_time") or "").strip()
+    end_time = (request.form.get("end_time") or "").strip()
+    starts_at = _parse_datetime_fields(start_day, start_time)
+    ends_at = _parse_datetime_fields(end_day, end_time)
+    duration_minutes = int((ends_at - starts_at).total_seconds() // 60) if starts_at and ends_at else 0
+    return {
+        "title": (request.form.get("title") or "").strip(),
+        "operation_type": (request.form.get("operation_type") or "").strip(),
+        "starts_at": starts_at,
+        "ends_at": ends_at,
+        "duration_minutes": duration_minutes,
+        "place": (request.form.get("place") or "").strip(),
+        "client_project": (request.form.get("client_project") or "").strip() or None,
+        "farm_name": (request.form.get("farm_name") or "").strip() or None,
+        "paddocks": (request.form.get("paddocks") or "").strip() or None,
+        "area_hectares": _parse_optional_decimal(request.form.get("area_hectares")),
+        "rest_days": request.form.get("rest_days", type=int),
+        "lot_code": (request.form.get("lot_code") or "").strip() or None,
+        "pilot_id": request.form.get("pilot_id", type=int),
+        "drone_id": request.form.get("drone_id", type=int),
+        "observations": (request.form.get("observations") or "").strip() or None,
+        "status": (request.form.get("status") or "scheduled").strip(),
+    }
+
+
+def _validate_activity_payload(payload, activity_id=None):
+    required = ["title", "operation_type", "starts_at", "ends_at", "place", "pilot_id", "drone_id"]
+    if any(not payload.get(key) for key in required):
+        return "Completa los campos obligatorios."
+    if payload["duration_minutes"] <= 0:
+        return "La hora fin debe ser posterior a la hora inicio."
+    if payload.get("area_hectares") is not None and payload["area_hectares"] < 0:
+        return "El area no puede ser negativa."
+    if payload.get("rest_days") is not None and payload["rest_days"] < 0:
+        return "Los dias de descanso no pueden ser negativos."
+
+    pilot = PilotProfile.query.get(payload["pilot_id"])
+    if not pilot or pilot.status != "active":
+        return "Selecciona un piloto activo."
+
+    drone = MaintenanceDrone.query.get(payload["drone_id"])
+    if not drone or drone.status != "Aeronavegable":
+        return "Selecciona un dron aeronavegable."
+
+    pilot_busy, drone_busy = _has_activity_conflict(
+        payload["pilot_id"],
+        payload["drone_id"],
+        payload["starts_at"],
+        payload["ends_at"],
+        activity_id=activity_id,
+    )
+    if pilot_busy:
+        return "El piloto ya tiene una actividad en ese horario."
+    if drone_busy:
+        return "El dron ya esta asignado en ese horario."
+    return None
+
+
+def _is_mobile_request():
+    user_agent = (request.headers.get("User-Agent") or "").lower()
+    mobile_tokens = (
+        "android",
+        "iphone",
+        "ipad",
+        "ipod",
+        "mobile",
+        "windows phone",
+        "blackberry",
+    )
+    return any(token in user_agent for token in mobile_tokens)
+
+
+def _pilot_mobile_guard():
+    if _is_mobile_request():
+        return None
+    return (
+        render_template(
+            "pilot_portal/mobile_required.j2",
+            title="Portal piloto",
+            site_title="TecnoVant",
+        ),
+        403,
+    )
+
+
+def _pilot_device_fingerprint():
+    raw = "|".join(
+        [
+            request.headers.get("User-Agent", ""),
+            request.headers.get("Accept-Language", ""),
+            request.remote_addr or "",
+        ]
+    )
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _current_pilot():
+    pilot_id = session.get("pilot_id")
+    if not pilot_id:
+        return None
+    return PilotProfile.query.get(pilot_id)
+
+
+def _require_pilot():
+    guard = _pilot_mobile_guard()
+    if guard:
+        return None, guard
+    pilot = _current_pilot()
+    if not pilot or pilot.status != "active":
+        session.pop("pilot_id", None)
+        return None, redirect(url_for("core.pilot_login"))
+    return pilot, None
+
+
+def _pilot_activity_query(pilot):
+    return (
+        OperationalActivity.query.options(
+            joinedload(OperationalActivity.drone),
+            joinedload(OperationalActivity.pilot),
+        )
+        .filter(OperationalActivity.pilot_id == pilot.id)
+    )
+
+
+def _pilot_minutes(pilot):
+    total = (
+        db.session.query(func.coalesce(func.sum(PilotFlightLog.flight_minutes), 0))
+        .filter(PilotFlightLog.pilot_id == pilot.id)
+        .scalar()
+    )
+    return int(total or 0)
+
+
+def _format_hours(minutes):
+    return round((minutes or 0) / 60, 1)
+
+
+def _status_label(status):
+    return {
+        "scheduled": "Pendiente",
+        "in_progress": "En proceso",
+        "completed": "Finalizada",
+        "cancelled": "Cancelada",
+    }.get(status, status)
+
+
+def _pilot_context(pilot, **extra):
+    minutes = _pilot_minutes(pilot)
+    context = {
+        "pilot": pilot,
+        "total_minutes": minutes,
+        "total_hours": _format_hours(minutes),
+        "status_label": _status_label,
+        "title": "Portal piloto",
+        "site_title": "TecnoVant",
+    }
+    context.update(extra)
+    return context
 
 
 def get_dashboard_menu():
@@ -375,6 +631,1398 @@ def dashboard():
     )
 
 
+@web.route("/dashboard/operaciones/calendario")
+@login_required
+def operational_calendar():
+    today = date.today()
+    week_start = today - timedelta(days=today.weekday())
+    week_end = week_start + timedelta(days=7)
+    today_start = datetime.combine(today, time.min)
+    today_end = datetime.combine(today, time.max)
+    week_start_dt = datetime.combine(week_start, time.min)
+    week_end_dt = datetime.combine(week_end, time.min)
+
+    activities = (
+        OperationalActivity.query.options(
+            joinedload(OperationalActivity.pilot),
+            joinedload(OperationalActivity.drone),
+        )
+        .order_by(OperationalActivity.starts_at.asc())
+        .all()
+    )
+    pilots = PilotProfile.query.order_by(PilotProfile.first_name.asc()).all()
+    drones = MaintenanceDrone.query.order_by(MaintenanceDrone.brand.asc(), MaintenanceDrone.model.asc()).all()
+
+    context = {
+        "dashboard": True,
+        "title": "Calendario Operativo",
+        "description": "Planifica y consulta actividades operativas.",
+        "author": "TecnoAgro",
+        "site_title": "Operaciones",
+        "page_title": "Calendario Operativo",
+        "data_menu": get_dashboard_menu(),
+        "pilots": pilots,
+        "drones": drones,
+        "activities": activities,
+        "activities_json": [_activity_payload(activity) for activity in activities],
+        "stats": {
+            "today": OperationalActivity.query.filter(
+                OperationalActivity.starts_at >= today_start,
+                OperationalActivity.starts_at <= today_end,
+            ).count(),
+            "week": OperationalActivity.query.filter(
+                OperationalActivity.starts_at >= week_start_dt,
+                OperationalActivity.starts_at < week_end_dt,
+            ).count(),
+            "pending": OperationalActivity.query.filter_by(status="scheduled").count(),
+            "completed": OperationalActivity.query.filter_by(status="completed").count(),
+            "cancelled": OperationalActivity.query.filter_by(status="cancelled").count(),
+        },
+    }
+    return (
+        render_template(
+            "dashboard/operational_calendar.j2",
+            **context,
+            request=request,
+        ),
+        200,
+    )
+
+
+@web.route("/dashboard/operaciones/calendario/pilotos", methods=["POST"])
+@login_required
+def operational_calendar_create_pilot():
+    username = (request.form.get("username") or "").strip()
+    password = (request.form.get("password") or "").strip()
+    first_name = (request.form.get("first_name") or "").strip()
+    last_name = (request.form.get("last_name") or "").strip()
+    if not username or not password or not first_name or not last_name:
+        return jsonify({"success": False, "message": "Completa usuario, clave, nombres y apellidos."}), 400
+
+    pilot = PilotProfile(
+        username=username,
+        password_hash=generate_password_hash(password),
+        role=(request.form.get("role") or "pilot").strip(),
+        first_name=first_name,
+        last_name=last_name,
+        document_number=(request.form.get("document_number") or "").strip() or None,
+        phone=(request.form.get("phone") or "").strip() or None,
+        email=(request.form.get("email") or "").strip() or None,
+        certification_status=(request.form.get("certification_status") or "Vigente").strip(),
+        status=(request.form.get("status") or "active").strip(),
+    )
+    db.session.add(pilot)
+    try:
+        db.session.flush()
+        cert_name = (request.form.get("certification_name") or "").strip()
+        if cert_name:
+            db.session.add(
+                PilotCertification(
+                    pilot=pilot,
+                    name=cert_name,
+                    issuer=(request.form.get("certification_issuer") or "").strip() or None,
+                    certificate_number=(request.form.get("certificate_number") or "").strip() or None,
+                    expires_at=_parse_date((request.form.get("certification_expires_at") or "").strip()),
+                    status=pilot.certification_status,
+                )
+            )
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({"success": False, "message": "Ya existe un piloto con ese usuario."}), 400
+
+    return jsonify({
+        "success": True,
+        "message": "Piloto registrado correctamente.",
+        "pilot": {"id": pilot.id, "name": pilot.full_name},
+    })
+
+
+@web.route("/dashboard/operaciones/calendario/actividades", methods=["POST"])
+@login_required
+def operational_calendar_create_activity():
+    payload = _activity_form_payload()
+    error = _validate_activity_payload(payload)
+    if error:
+        return jsonify({"success": False, "message": error}), 400
+
+    activity = OperationalActivity(
+        **payload,
+        created_by_id=get_jwt_identity(),
+    )
+    db.session.add(activity)
+    db.session.flush()
+    _activity_log(activity, "created", "Actividad creada.")
+    db.session.commit()
+    return jsonify({
+        "success": True,
+        "message": "Actividad creada correctamente.",
+        "activity": _activity_payload(activity),
+    })
+
+
+@web.route("/dashboard/operaciones/calendario/actividades/<int:activity_id>", methods=["POST"])
+@login_required
+def operational_calendar_update_activity(activity_id):
+    activity = OperationalActivity.query.get_or_404(activity_id)
+    if activity.status in {"cancelled", "completed"}:
+        return jsonify({"success": False, "message": "No puedes editar una actividad cerrada."}), 400
+
+    payload = _activity_form_payload()
+    error = _validate_activity_payload(payload, activity_id=activity.id)
+    if error:
+        return jsonify({"success": False, "message": error}), 400
+
+    for key, value in payload.items():
+        setattr(activity, key, value)
+    _activity_log(activity, "updated", "Actividad actualizada.")
+    db.session.commit()
+    return jsonify({
+        "success": True,
+        "message": "Actividad actualizada correctamente.",
+        "activity": _activity_payload(activity),
+    })
+
+
+@web.route("/dashboard/operaciones/calendario/actividades/<int:activity_id>/cancelar", methods=["POST"])
+@login_required
+def operational_calendar_cancel_activity(activity_id):
+    activity = OperationalActivity.query.get_or_404(activity_id)
+    if activity.status == "completed":
+        return jsonify({"success": False, "message": "No puedes cancelar una actividad finalizada."}), 400
+    activity.status = "cancelled"
+    activity.cancelled_at = datetime.utcnow()
+    _activity_log(activity, "cancelled", "Actividad cancelada.")
+    db.session.commit()
+    return jsonify({"success": True, "message": "Actividad cancelada.", "activity": _activity_payload(activity)})
+
+
+@web.route("/dashboard/operaciones/calendario/actividades/<int:activity_id>/finalizar", methods=["POST"])
+@login_required
+def operational_calendar_complete_activity(activity_id):
+    activity = OperationalActivity.query.get_or_404(activity_id)
+    if activity.status == "cancelled":
+        return jsonify({"success": False, "message": "No puedes finalizar una actividad cancelada."}), 400
+    activity.status = "completed"
+    activity.completed_at = datetime.utcnow()
+    _activity_log(activity, "completed", "Actividad finalizada.")
+    db.session.commit()
+    return jsonify({"success": True, "message": "Actividad finalizada.", "activity": _activity_payload(activity)})
+
+
+@web.route("/piloto")
+def pilot_home():
+    return redirect(url_for("core.pilot_panel" if session.get("pilot_id") else "core.pilot_login"))
+
+
+@web.route("/piloto/login", methods=["GET", "POST"])
+def pilot_login():
+    guard = _pilot_mobile_guard()
+    if guard:
+        return guard
+
+    if request.method == "POST":
+        username = (request.form.get("username") or "").strip()
+        password = (request.form.get("password") or "").strip()
+        pilot = PilotProfile.query.filter(func.lower(PilotProfile.username) == username.lower()).first()
+        if not pilot or pilot.status != "active" or not check_password_hash(pilot.password_hash, password):
+            flash("Usuario o clave incorrectos.", "error")
+            return redirect(url_for("core.pilot_login"))
+
+        session["pilot_id"] = pilot.id
+        fingerprint = _pilot_device_fingerprint()
+        device = PilotDevice.query.filter_by(pilot_id=pilot.id, device_fingerprint=fingerprint).first()
+        if not device:
+            db.session.add(
+                PilotDevice(
+                    pilot=pilot,
+                    device_fingerprint=fingerprint,
+                    user_agent=(request.headers.get("User-Agent") or "")[:255],
+                )
+            )
+        else:
+            device.last_access_at = datetime.utcnow()
+        db.session.commit()
+        return redirect(url_for("core.pilot_panel"))
+
+    return render_template(
+        "pilot_portal/login.j2",
+        title="Ingreso piloto",
+        site_title="TecnoVant",
+    )
+
+
+@web.route("/piloto/logout", methods=["GET", "POST"])
+def pilot_logout():
+    session.pop("pilot_id", None)
+    return redirect(url_for("core.pilot_login"))
+
+
+@web.route("/piloto/panel")
+def pilot_panel():
+    pilot, response = _require_pilot()
+    if response:
+        return response
+
+    now = datetime.now()
+    today_start = datetime.combine(now.date(), time.min)
+    today_end = datetime.combine(now.date(), time.max)
+    week_end = today_start + timedelta(days=7)
+    activities = (
+        _pilot_activity_query(pilot)
+        .filter(OperationalActivity.ends_at >= today_start)
+        .order_by(OperationalActivity.starts_at.asc())
+        .limit(10)
+        .all()
+    )
+    today_count = (
+        _pilot_activity_query(pilot)
+        .filter(OperationalActivity.starts_at >= today_start, OperationalActivity.starts_at <= today_end)
+        .count()
+    )
+    pending_count = _pilot_activity_query(pilot).filter_by(status="scheduled").count()
+    week_count = (
+        _pilot_activity_query(pilot)
+        .filter(OperationalActivity.starts_at >= today_start, OperationalActivity.starts_at < week_end)
+        .count()
+    )
+    last_log = (
+        PilotFlightLog.query.filter_by(pilot_id=pilot.id)
+        .order_by(PilotFlightLog.created_at.desc())
+        .first()
+    )
+    return render_template(
+        "pilot_portal/panel.j2",
+        **_pilot_context(
+            pilot,
+            activities=activities,
+            today_count=today_count,
+            pending_count=pending_count,
+            week_count=week_count,
+            last_log=last_log,
+        ),
+    )
+
+
+@web.route("/piloto/calendario")
+def pilot_calendar():
+    pilot, response = _require_pilot()
+    if response:
+        return response
+
+    today = date.today()
+    requested_year = request.args.get("year", type=int) or today.year
+    requested_month = request.args.get("month", type=int) or today.month
+    if requested_month < 1 or requested_month > 12:
+        requested_year = today.year
+        requested_month = today.month
+
+    month_anchor = date(requested_year, requested_month, 1)
+    next_month = date(month_anchor.year + (month_anchor.month == 12), (month_anchor.month % 12) + 1, 1)
+    previous_month = (month_anchor - timedelta(days=1)).replace(day=1)
+
+    start = datetime.combine(month_anchor, time.min)
+    end = datetime.combine(next_month, time.min)
+    activities = (
+        _pilot_activity_query(pilot)
+        .filter(OperationalActivity.starts_at >= start, OperationalActivity.starts_at < end)
+        .order_by(OperationalActivity.starts_at.asc())
+        .all()
+    )
+    grouped = {}
+    for activity in activities:
+        key = activity.starts_at.date()
+        grouped.setdefault(key, []).append(activity)
+
+    month_start_offset = (month_anchor.weekday()) % 7
+    calendar_start = month_anchor - timedelta(days=month_start_offset)
+    calendar_days = []
+    for index in range(42):
+        day = calendar_start + timedelta(days=index)
+        calendar_days.append(
+            {
+                "date": day,
+                "in_month": month_anchor <= day < next_month,
+                "count": len(grouped.get(day, [])),
+                "is_today": day == today,
+            }
+        )
+
+    month_names = [
+        "enero", "febrero", "marzo", "abril", "mayo", "junio",
+        "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+    ]
+    return render_template(
+        "pilot_portal/calendar.j2",
+        **_pilot_context(
+            pilot,
+            grouped=grouped,
+            calendar_days=calendar_days,
+            month_anchor=month_anchor,
+            month_title=f"{month_names[month_anchor.month - 1].capitalize()} {month_anchor.year}",
+            previous_month=previous_month,
+            next_month=next_month,
+        ),
+    )
+
+@web.route("/piloto/bitacora", methods=["GET", "POST"])
+def pilot_flight_log():
+    pilot, response = _require_pilot()
+    if response:
+        return response
+
+    if request.method == "POST":
+        activity_id = request.form.get("activity_id", type=int)
+        activity = None
+        if activity_id:
+            activity = _pilot_activity_query(pilot).filter(OperationalActivity.id == activity_id).first()
+            if not activity:
+                flash("La operacion seleccionada no pertenece a tu agenda.", "error")
+                return redirect(url_for("core.pilot_flight_log"))
+
+        drone_id = request.form.get("drone_id", type=int)
+        drone = MaintenanceDrone.query.get(drone_id) if drone_id else (activity.drone if activity else None)
+        flight_date = _parse_date((request.form.get("flight_date") or "").strip())
+        start_day = (request.form.get("start_date") or request.form.get("flight_date") or "").strip()
+        end_day = (request.form.get("end_date") or start_day).strip()
+        started_at = _parse_datetime_fields(start_day, (request.form.get("start_time") or "").strip())
+        ended_at = _parse_datetime_fields(end_day, (request.form.get("end_time") or "").strip())
+
+        if not drone or not flight_date or not started_at or not ended_at or ended_at <= started_at:
+            flash("Completa dron, fecha y horas reales de vuelo.", "error")
+            return redirect(url_for("core.pilot_flight_log"))
+
+        minutes = int((ended_at - started_at).total_seconds() // 60)
+        flight_log = PilotFlightLog(
+            pilot=pilot,
+            activity=activity,
+            drone=drone,
+            flight_date=flight_date,
+            started_at=started_at,
+            ended_at=ended_at,
+            flight_minutes=minutes,
+            takeoff_location=(request.form.get("takeoff_location") or "").strip() or (activity.place if activity else None),
+            landing_location=(request.form.get("landing_location") or "").strip() or (activity.place if activity else None),
+            weather=(request.form.get("weather") or "").strip() or None,
+            battery_cycles=request.form.get("battery_cycles", type=int),
+            notes=(request.form.get("notes") or "").strip() or None,
+        )
+        db.session.add(flight_log)
+        drone.flight_hours = (drone.flight_hours or Decimal("0")) + (Decimal(minutes) / Decimal(60))
+        if activity and activity.status != "cancelled":
+            activity.status = "completed"
+            activity.completed_at = datetime.utcnow()
+            _activity_log(activity, "pilot_log_saved", "El piloto registro bitacora manual.")
+        db.session.commit()
+        flash("Bitacora registrada correctamente.", "success")
+        return redirect(url_for("core.pilot_flight_log"))
+
+    today_start = datetime.combine(date.today(), time.min)
+    activities = (
+        _pilot_activity_query(pilot)
+        .filter(OperationalActivity.starts_at >= today_start - timedelta(days=30))
+        .order_by(OperationalActivity.starts_at.desc())
+        .limit(30)
+        .all()
+    )
+    drones = MaintenanceDrone.query.order_by(MaintenanceDrone.brand.asc(), MaintenanceDrone.model.asc()).all()
+    logs = (
+        PilotFlightLog.query.options(joinedload(PilotFlightLog.drone), joinedload(PilotFlightLog.activity))
+        .filter(PilotFlightLog.pilot_id == pilot.id)
+        .order_by(PilotFlightLog.flight_date.desc(), PilotFlightLog.created_at.desc())
+        .limit(10)
+        .all()
+    )
+    return render_template(
+        "pilot_portal/flight_log.j2",
+        **_pilot_context(pilot, activities=activities, drones=drones, logs=logs),
+    )
+
+
+@web.route("/piloto/ortofotos", methods=["GET", "POST"])
+def pilot_orthophotos():
+    pilot, response = _require_pilot()
+    if response:
+        return response
+
+    from app.modules.media.controller import MediaController
+    from app.modules.orthophotos.models import OrthophotoMission, OrthophotoPhoto
+
+    pilot_marker = f"Piloto: {pilot.username}"
+
+    def pilot_missions_query():
+        return OrthophotoMission.query.filter(
+            OrthophotoMission.description.ilike(f"%{pilot_marker}%")
+        )
+
+    if request.method == "POST":
+        mission_id = request.form.get("mission_id", type=int)
+        mission_name = (request.form.get("mission_name") or "").strip()
+        notes = (request.form.get("notes") or "").strip()
+        files = [file for file in request.files.getlist("files") if file and getattr(file, "filename", None)]
+
+        if not files:
+            flash("Selecciona las imagenes de la mision.", "error")
+            return redirect(url_for("core.pilot_orthophotos"))
+
+        mission = None
+        if mission_id:
+            mission = pilot_missions_query().filter(OrthophotoMission.id == mission_id).first()
+
+        if mission is None:
+            if not mission_name:
+                mission_name = f"Ortofotos {pilot.full_name} {date.today().strftime('%d/%m/%Y')}"
+            description_parts = [
+                "Carga movil desde portal piloto.",
+                pilot_marker,
+                f"Nombre piloto: {pilot.full_name}",
+            ]
+            if notes:
+                description_parts.append(f"Observaciones: {notes}")
+            mission = OrthophotoMission(
+                name=mission_name,
+                description=" | ".join(description_parts),
+                status="receiving",
+            )
+            db.session.add(mission)
+            db.session.flush()
+        else:
+            mission.status = "receiving"
+            mission.processing_error = None
+            mission.progress = None
+            if notes and (mission.description or "").find(notes) == -1:
+                mission.description = f"{mission.description or pilot_marker} | Observaciones: {notes}"
+
+        ctrl = MediaController()
+        uploaded = 0
+        errors = []
+        for file in files:
+            try:
+                asset, _created = ctrl.save_local_upload(file)
+                db.session.add(
+                    OrthophotoPhoto(
+                        mission_id=mission.id,
+                        asset_id=asset.id,
+                        original_name=file.filename or asset.original_name,
+                    )
+                )
+                uploaded += 1
+            except ValueError as exc:
+                errors.append(f"{file.filename}: {exc}")
+            except Exception as exc:
+                current_app.logger.exception("pilot orthophotos: failed to upload %s", file.filename)
+                errors.append(f"{file.filename}: {exc or 'No se pudo cargar'}")
+
+        if uploaded:
+            db.session.commit()
+            message = f"Se cargaron {uploaded} imagenes para procesamiento."
+            if errors:
+                message += " Algunas imagenes requieren revision."
+            flash(message, "success")
+        else:
+            db.session.rollback()
+            flash("No se pudo cargar ninguna imagen. Revisa los archivos e intenta nuevamente.", "error")
+
+        if errors:
+            for error in errors[:3]:
+                flash(error, "error")
+        return redirect(url_for("core.pilot_orthophotos"))
+
+    missions = (
+        pilot_missions_query()
+        .order_by(OrthophotoMission.created_at.desc())
+        .limit(12)
+        .all()
+    )
+    return render_template(
+        "pilot_portal/orthophotos.j2",
+        **_pilot_context(pilot, missions=missions),
+    )
+
+
+@web.route("/piloto/operaciones/<int:activity_id>")
+def pilot_activity_detail(activity_id):
+    pilot, response = _require_pilot()
+    if response:
+        return response
+
+    activity = _pilot_activity_query(pilot).filter(OperationalActivity.id == activity_id).first_or_404()
+    flight_log = PilotFlightLog.query.filter_by(pilot_id=pilot.id, activity_id=activity.id).first()
+    reports = (
+        PilotOperationReport.query.filter_by(pilot_id=pilot.id, activity_id=activity.id)
+        .order_by(PilotOperationReport.created_at.desc())
+        .all()
+    )
+    return render_template(
+        "pilot_portal/activity_detail.j2",
+        **_pilot_context(pilot, activity=activity, flight_log=flight_log, reports=reports),
+    )
+
+
+@web.route("/piloto/operaciones/<int:activity_id>/iniciar", methods=["POST"])
+def pilot_start_activity(activity_id):
+    pilot, response = _require_pilot()
+    if response:
+        return response
+
+    activity = _pilot_activity_query(pilot).filter(OperationalActivity.id == activity_id).first_or_404()
+    if activity.status == "scheduled":
+        activity.status = "in_progress"
+        _activity_log(activity, "pilot_started", "El piloto inicio la operacion.")
+        db.session.commit()
+        flash("Operacion iniciada.", "success")
+    return redirect(url_for("core.pilot_activity_detail", activity_id=activity.id))
+
+
+@web.route("/piloto/operaciones/<int:activity_id>/finalizar", methods=["POST"])
+def pilot_finish_activity(activity_id):
+    pilot, response = _require_pilot()
+    if response:
+        return response
+
+    activity = _pilot_activity_query(pilot).filter(OperationalActivity.id == activity_id).first_or_404()
+    if activity.status != "cancelled":
+        activity.status = "completed"
+        activity.completed_at = datetime.utcnow()
+        _activity_log(activity, "pilot_completed", "El piloto marco la operacion como finalizada.")
+        db.session.commit()
+        flash("Operacion finalizada.", "success")
+    return redirect(url_for("core.pilot_activity_detail", activity_id=activity.id))
+
+
+@web.route("/piloto/operaciones/<int:activity_id>/bitacora", methods=["POST"])
+def pilot_save_flight_log(activity_id):
+    pilot, response = _require_pilot()
+    if response:
+        return response
+
+    activity = _pilot_activity_query(pilot).filter(OperationalActivity.id == activity_id).first_or_404()
+    flight_date = _parse_date((request.form.get("flight_date") or "").strip())
+    started_at = _parse_datetime_fields((request.form.get("start_date") or "").strip(), (request.form.get("start_time") or "").strip())
+    ended_at = _parse_datetime_fields((request.form.get("end_date") or "").strip(), (request.form.get("end_time") or "").strip())
+    if not flight_date or not started_at or not ended_at or ended_at <= started_at:
+        flash("Revisa la fecha y las horas reales de vuelo.", "error")
+        return redirect(url_for("core.pilot_activity_detail", activity_id=activity.id))
+
+    minutes = int((ended_at - started_at).total_seconds() // 60)
+    flight_log = PilotFlightLog.query.filter_by(pilot_id=pilot.id, activity_id=activity.id).first()
+    previous_minutes = flight_log.flight_minutes if flight_log else 0
+    payload = {
+        "pilot": pilot,
+        "activity": activity,
+        "drone": activity.drone,
+        "flight_date": flight_date,
+        "started_at": started_at,
+        "ended_at": ended_at,
+        "flight_minutes": minutes,
+        "takeoff_location": (request.form.get("takeoff_location") or "").strip() or activity.place,
+        "landing_location": (request.form.get("landing_location") or "").strip() or activity.place,
+        "weather": (request.form.get("weather") or "").strip() or None,
+        "battery_cycles": request.form.get("battery_cycles", type=int),
+        "notes": (request.form.get("notes") or "").strip() or None,
+    }
+    if flight_log:
+        for key, value in payload.items():
+            setattr(flight_log, key, value)
+    else:
+        flight_log = PilotFlightLog(**payload)
+        db.session.add(flight_log)
+
+    delta_hours = Decimal(minutes - previous_minutes) / Decimal(60)
+    activity.drone.flight_hours = (activity.drone.flight_hours or Decimal("0")) + delta_hours
+    activity.status = "completed"
+    activity.completed_at = datetime.utcnow()
+    _activity_log(activity, "pilot_log_saved", "El piloto registro bitacora de vuelo.")
+    db.session.commit()
+    flash("Bitacora guardada correctamente.", "success")
+    return redirect(url_for("core.pilot_activity_detail", activity_id=activity.id))
+
+
+@web.route("/piloto/operaciones/<int:activity_id>/novedad", methods=["POST"])
+def pilot_report_issue(activity_id):
+    pilot, response = _require_pilot()
+    if response:
+        return response
+
+    activity = _pilot_activity_query(pilot).filter(OperationalActivity.id == activity_id).first_or_404()
+    message = (request.form.get("message") or "").strip()
+    if not message:
+        flash("Escribe el detalle de la novedad.", "error")
+        return redirect(url_for("core.pilot_activity_detail", activity_id=activity.id))
+    db.session.add(
+        PilotOperationReport(
+            pilot=pilot,
+            activity=activity,
+            report_type=(request.form.get("report_type") or "general").strip(),
+            message=message,
+        )
+    )
+    _activity_log(activity, "pilot_reported", "El piloto reporto una novedad.")
+    db.session.commit()
+    flash("Novedad reportada.", "success")
+    return redirect(url_for("core.pilot_activity_detail", activity_id=activity.id))
+
+
+@web.route("/dashboard/operaciones/ejecuciones")
+@login_required
+def operation_executions():
+    today = date.today()
+    year = request.args.get("year", default=today.year, type=int)
+    month = request.args.get("month", default=today.month, type=int)
+    if month < 1:
+        month = 12
+        year -= 1
+    elif month > 12:
+        month = 1
+        year += 1
+
+    month_anchor = date(year, month, 1)
+    previous_month = (month_anchor.replace(day=1) - timedelta(days=1)).replace(day=1)
+    next_month = (month_anchor.replace(day=28) + timedelta(days=4)).replace(day=1)
+    calendar_start = month_anchor - timedelta(days=month_anchor.weekday())
+    calendar_end = calendar_start + timedelta(days=42)
+    range_start = datetime.combine(calendar_start, time.min)
+    range_end = datetime.combine(calendar_end, time.max)
+    now = datetime.utcnow()
+
+    activities = (
+        OperationalActivity.query.options(
+            joinedload(OperationalActivity.pilot),
+            joinedload(OperationalActivity.drone),
+            joinedload(OperationalActivity.logs),
+            joinedload(OperationalActivity.flight_logs),
+            joinedload(OperationalActivity.pilot_reports),
+        )
+        .filter(OperationalActivity.starts_at <= range_end, OperationalActivity.ends_at >= range_start)
+        .order_by(OperationalActivity.starts_at.asc())
+        .all()
+    )
+
+    def activity_progress(activity):
+        if activity.status == "cancelled":
+            return 0
+        if activity.status == "completed" or activity.completed_at:
+            return 100
+        total_seconds = max((activity.ends_at - activity.starts_at).total_seconds(), 1)
+        elapsed = (now - activity.starts_at).total_seconds()
+        return max(0, min(100, int(round((elapsed / total_seconds) * 100))))
+
+    def execution_status(activity, progress):
+        has_report = any(getattr(report, "status", "open") == "open" for report in getattr(activity, "pilot_reports", []))
+        if activity.status == "cancelled":
+            return "cancelled", "Cancelada"
+        if has_report and activity.status != "completed":
+            return "reported", "Con novedad"
+        if activity.status == "completed" or progress >= 100:
+            return "completed", "Finalizada"
+        if activity.status == "in_progress" or (activity.starts_at <= now <= activity.ends_at):
+            return "in_progress", "En ejecución"
+        if activity.starts_at > now and activity.starts_at <= now + timedelta(hours=24):
+            return "soon", "Por iniciar"
+        return "scheduled", "Programada"
+
+    def fmt_dt(value):
+        return value.strftime("%d/%m/%Y %I:%M %p")
+
+    executions = []
+    gantt_weeks = []
+    for week_index in range(6):
+        week_start = calendar_start + timedelta(days=week_index * 7)
+        week_end = week_start + timedelta(days=6)
+        gantt_weeks.append({
+            "index": week_index + 1,
+            "start": week_start,
+            "end": week_end,
+            "label": f"S{week_index + 1}",
+            "range": f"{week_start.day:02d}/{week_start.month:02d} - {week_end.day:02d}/{week_end.month:02d}",
+            "is_current": week_start <= today <= week_end,
+        })
+    gantt_week_count = len(gantt_weeks)
+    stats = {"total": 0, "running": 0, "scheduled": 0, "completed": 0, "reported": 0}
+    total_hectares = Decimal("0")
+    total_minutes = 0
+    for activity in activities:
+        progress = activity_progress(activity)
+        status_key, status_label = execution_status(activity, progress)
+        logs = sorted(getattr(activity, "logs", []) or [], key=lambda item: item.created_at)
+        flight_logs = getattr(activity, "flight_logs", []) or []
+        reports = sorted(getattr(activity, "pilot_reports", []) or [], key=lambda item: item.created_at, reverse=True)
+        billing_record = getattr(activity, "billing_record", None)
+        minutes = sum((log.flight_minutes or 0) for log in flight_logs)
+        if not minutes and billing_record and billing_record.operation_hours is not None:
+            minutes = int(Decimal(str(billing_record.operation_hours)) * Decimal(60))
+        hectares = Decimal("0")
+        for log in flight_logs:
+            value = getattr(log, "total_hectares", None)
+            if value is not None:
+                hectares += Decimal(str(value))
+        if hectares == 0 and billing_record and billing_record.area_hectares is not None:
+            hectares = Decimal(str(billing_record.area_hectares))
+        total_minutes += minutes
+        total_hectares += hectares
+        if status_key == "in_progress":
+            stats["running"] += 1
+        elif status_key == "completed":
+            stats["completed"] += 1
+        elif status_key == "reported":
+            stats["reported"] += 1
+        else:
+            stats["scheduled"] += 1
+        stats["total"] += 1
+        clip_start = max(activity.starts_at.date(), calendar_start)
+        clip_end = min(activity.ends_at.date(), calendar_end - timedelta(days=1))
+        operation_days = max((activity.ends_at.date() - activity.starts_at.date()).days + 1, 1)
+        gantt_start_week = max(1, min(gantt_week_count, ((clip_start - calendar_start).days // 7) + 1))
+        gantt_end_week = max(gantt_start_week, min(gantt_week_count, ((clip_end - calendar_start).days // 7) + 1))
+        gantt_week_span = max(gantt_end_week - gantt_start_week + 1, 1)
+        execution = {
+            "id": activity.id,
+            "title": activity.title,
+            "operation_type": activity.operation_type,
+            "place": activity.place,
+            "client_project": activity.client_project or "Sin proyecto",
+            "pilot": activity.pilot.full_name if activity.pilot else "Sin piloto",
+            "drone": f"{activity.drone.brand} {activity.drone.model}" if activity.drone else "Sin dron",
+            "starts_at": activity.starts_at,
+            "ends_at": activity.ends_at,
+            "starts_label": fmt_dt(activity.starts_at),
+            "ends_label": fmt_dt(activity.ends_at),
+            "progress": progress,
+            "status": status_key,
+            "status_label": status_label,
+            "duration_hours": round((activity.duration_minutes or 0) / 60, 1),
+            "real_hours": round(minutes / 60, 1),
+            "hectares": float(hectares),
+            "report_count": len(reports),
+            "log_count": len(logs),
+            "latest_note": reports[0].message if reports else (logs[-1].message if logs else ((billing_record.observations if billing_record else None) or "Sin novedades registradas")),
+            "operation_days": operation_days,
+            "gantt_start_week": gantt_start_week,
+            "gantt_end_week": gantt_end_week,
+            "gantt_week_span": gantt_week_span,
+            "gantt_left": round(((gantt_start_week - 1) / gantt_week_count) * 100, 4),
+            "gantt_width": round((gantt_week_span / gantt_week_count) * 100, 4),
+        }
+        execution["payload"] = {
+            key: value
+            for key, value in execution.items()
+            if key not in {"starts_at", "ends_at", "payload"}
+        }
+        executions.append(execution)
+
+    days = []
+    for offset in range(42):
+        current_day = calendar_start + timedelta(days=offset)
+        day_start = datetime.combine(current_day, time.min)
+        day_end = datetime.combine(current_day, time.max)
+        day_items = [item for item in executions if item["starts_at"] <= day_end and item["ends_at"] >= day_start]
+        days.append(
+            {
+                "date": current_day,
+                "number": current_day.day,
+                "in_month": current_day.month == month_anchor.month,
+                "is_today": current_day == today,
+                "executions": day_items,
+            }
+        )
+
+    month_names = [
+        "enero", "febrero", "marzo", "abril", "mayo", "junio",
+        "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+    ]
+    context = {
+        "dashboard": True,
+        "title": "Ejecuciones",
+        "description": "Consulta el avance operativo de las misiones programadas.",
+        "author": "TecnoAgro",
+        "site_title": "Operaciones",
+        "page_title": "Ejecuciones",
+        "data_menu": get_dashboard_menu(),
+        "month_title": f"{month_names[month_anchor.month - 1].capitalize()} {month_anchor.year}",
+        "today_date": today,
+        "previous_month": previous_month,
+        "next_month": next_month,
+        "calendar_days": days,
+        "gantt_weeks": gantt_weeks,
+        "executions": executions,
+        "stats": stats,
+        "total_real_hours": round(total_minutes / 60, 1),
+        "total_hectares": float(total_hectares),
+    }
+    return (
+        render_template(
+            "dashboard/operation_executions.j2",
+            **context,
+            request=request,
+        ),
+        200,
+    )
+
+
+@web.route("/dashboard/mantenimiento/bitacoras")
+@login_required
+def maintenance_logs():
+    context = {
+        "dashboard": True,
+        "title": "Bitacoras",
+        "description": "Consulta y registra bitacoras de mantenimiento.",
+        "author": "TecnoAgro",
+        "site_title": "Mantenimiento",
+        "page_title": "Bitacoras",
+        "data_menu": get_dashboard_menu(),
+    }
+    return (
+        render_template(
+            "dashboard/maintenance_logs.j2",
+            **context,
+            request=request,
+        ),
+        200,
+    )
+
+
+@web.route("/dashboard/mantenimiento/horas-vuelo")
+@login_required
+def flight_hours():
+    context = {
+        "dashboard": True,
+        "title": "Horas de vuelo",
+        "description": "Consulta y registra horas de vuelo de equipos.",
+        "author": "TecnoAgro",
+        "site_title": "Mantenimiento",
+        "page_title": "Horas de vuelo",
+        "data_menu": get_dashboard_menu(),
+    }
+    return (
+        render_template(
+            "dashboard/flight_hours.j2",
+            **context,
+            request=request,
+        ),
+        200,
+    )
+
+
+@web.route("/dashboard/mantenimiento/drones", methods=["GET", "POST"])
+@login_required
+def maintenance_drones():
+    if request.method == "POST":
+        serial_number = (request.form.get("serial_number") or "").strip()
+        brand = (request.form.get("brand") or "").strip()
+        model = (request.form.get("model") or "").strip()
+        flight_hours_raw = (request.form.get("flight_hours") or "0").strip()
+
+        if not serial_number or not brand or not model:
+            flash("Completa numero de serie, marca y modelo.", "error")
+            return redirect(url_for("core.maintenance_drones"))
+
+        try:
+            flight_hours = round(float(flight_hours_raw.replace(",", ".")), 1)
+        except ValueError:
+            flash("Las horas de vuelo deben ser un numero valido.", "error")
+            return redirect(url_for("core.maintenance_drones"))
+
+        if flight_hours < 0:
+            flash("Las horas de vuelo no pueden ser negativas.", "error")
+            return redirect(url_for("core.maintenance_drones"))
+
+        drone = MaintenanceDrone(
+            serial_number=serial_number,
+            brand=brand,
+            model=model,
+            flight_hours=flight_hours,
+            status=(request.form.get("status") or "Aeronavegable").strip() or "Aeronavegable",
+        )
+        db.session.add(drone)
+        try:
+            db.session.commit()
+            flash("Equipo registrado correctamente.", "success")
+            return redirect(url_for("core.maintenance_drones"))
+        except IntegrityError:
+            db.session.rollback()
+            flash("Ya existe un drone con ese numero de serie.", "error")
+
+        return redirect(url_for("core.maintenance_drones"))
+
+    drones = MaintenanceDrone.query.order_by(MaintenanceDrone.created_at.desc()).all()
+    total_hours = sum(float(drone.flight_hours or 0) for drone in drones)
+    active_count = sum(1 for drone in drones if drone.status == "Aeronavegable")
+    context = {
+        "dashboard": True,
+        "title": "Drones",
+        "description": "Consulta y registra drones para mantenimiento.",
+        "author": "TecnoAgro",
+        "site_title": "Mantenimiento",
+        "page_title": "Drones",
+        "data_menu": get_dashboard_menu(),
+        "suppress_base_flashes": True,
+        "drones": drones,
+        "total_hours": total_hours,
+        "active_count": active_count,
+    }
+    return (
+        render_template(
+            "dashboard/maintenance_drones.j2",
+            **context,
+            request=request,
+        ),
+        200,
+    )
+
+
+@web.route("/dashboard/mantenimiento/drones/<int:drone_id>/editar", methods=["POST"])
+@login_required
+def maintenance_drones_update(drone_id):
+    drone = MaintenanceDrone.query.get_or_404(drone_id)
+    serial_number = (request.form.get("serial_number") or "").strip()
+    brand = (request.form.get("brand") or "").strip()
+    model = (request.form.get("model") or "").strip()
+    status = (request.form.get("status") or "Aeronavegable").strip()
+    flight_hours_raw = (request.form.get("flight_hours") or "0").strip()
+
+    if not serial_number or not brand or not model:
+        flash("Completa numero de serie, marca y modelo.", "error")
+        return redirect(url_for("core.maintenance_drones"))
+
+    try:
+        flight_hours = round(float(flight_hours_raw.replace(",", ".")), 1)
+    except ValueError:
+        flash("Las horas de vuelo deben ser un numero valido.", "error")
+        return redirect(url_for("core.maintenance_drones"))
+
+    if flight_hours < 0:
+        flash("Las horas de vuelo no pueden ser negativas.", "error")
+        return redirect(url_for("core.maintenance_drones"))
+
+    drone.serial_number = serial_number
+    drone.brand = brand
+    drone.model = model
+    drone.flight_hours = flight_hours
+    drone.status = status or "Aeronavegable"
+    try:
+        db.session.commit()
+        flash("Drone actualizado correctamente.", "success")
+    except IntegrityError:
+        db.session.rollback()
+        flash("Ya existe un drone con ese numero de serie.", "error")
+    return redirect(url_for("core.maintenance_drones"))
+
+
+@web.route("/dashboard/mantenimiento/drones/<int:drone_id>/eliminar", methods=["POST"])
+@login_required
+def maintenance_drones_delete(drone_id):
+    drone = MaintenanceDrone.query.get_or_404(drone_id)
+    try:
+        db.session.delete(drone)
+        db.session.commit()
+        flash("Drone eliminado correctamente.", "success")
+    except Exception:
+        db.session.rollback()
+        flash("No se puede eliminar este drone porque tiene operaciones o registros asociados.", "error")
+    return redirect(url_for("core.maintenance_drones"))
+
+
+@web.route("/dashboard/logistica/shopfy")
+@login_required
+def logistics_shopfy():
+    context = {
+        "dashboard": True,
+        "title": "Shopfy",
+        "description": "Consulta y gestiona operaciones logisticas de Shopfy.",
+        "author": "TecnoAgro",
+        "site_title": "Logistica",
+        "page_title": "Shopfy",
+        "data_menu": get_dashboard_menu(),
+    }
+    return (
+        render_template(
+            "dashboard/logistics_shopfy.j2",
+            **context,
+            request=request,
+        ),
+        200,
+    )
+
+
+@web.route("/dashboard/logistica/garantias")
+@login_required
+def warranty_management():
+    context = {
+        "dashboard": True,
+        "title": "Manejo de garantias",
+        "description": "Consulta y gestiona procesos de garantia.",
+        "author": "TecnoAgro",
+        "site_title": "Logistica",
+        "page_title": "Manejo de garantias",
+        "data_menu": get_dashboard_menu(),
+    }
+    return (
+        render_template(
+            "dashboard/warranty_management.j2",
+            **context,
+            request=request,
+        ),
+        200,
+    )
+
+
+@web.route("/dashboard/logistica/reparaciones-pagas")
+@login_required
+def paid_repairs():
+    context = {
+        "dashboard": True,
+        "title": "Reparaciones pagas",
+        "description": "Consulta y gestiona reparaciones pagas.",
+        "author": "TecnoAgro",
+        "site_title": "Logistica",
+        "page_title": "Reparaciones pagas",
+        "data_menu": get_dashboard_menu(),
+    }
+    return (
+        render_template(
+            "dashboard/paid_repairs.j2",
+            **context,
+            request=request,
+        ),
+        200,
+    )
+
+
+@web.route("/dashboard/operacion-realizada/facturacion")
+@login_required
+def completed_operation_billing():
+    def distinct_values(column):
+        return [
+            value
+            for value, in db.session.query(column)
+            .filter(column.isnot(None), column != "")
+            .distinct()
+            .order_by(column.asc())
+            .all()
+        ]
+
+    filters = {
+        "finca": (request.args.get("finca") or "").strip(),
+        "cliente": (request.args.get("cliente") or "").strip(),
+        "piloto": (request.args.get("piloto") or "").strip(),
+        "mes": (request.args.get("mes") or "").strip(),
+        "q": (request.args.get("q") or "").strip(),
+    }
+
+    query = OperationBillingRecord.query.options(
+        joinedload(OperationBillingRecord.activity).joinedload(OperationalActivity.pilot),
+        joinedload(OperationBillingRecord.organization),
+    )
+
+    if filters["finca"]:
+        query = query.filter(OperationBillingRecord.farm_name == filters["finca"])
+    if filters["cliente"]:
+        query = query.filter(OperationBillingRecord.organization.has(Organization.name == filters["cliente"]))
+    if filters["piloto"]:
+        query = query.filter(OperationBillingRecord.pilot_name == filters["piloto"])
+    if filters["mes"]:
+        query = query.filter(OperationBillingRecord.billing_month == filters["mes"])
+    if filters["q"]:
+        search = f"%{filters['q']}%"
+        query = query.filter(
+            or_(
+                OperationBillingRecord.farm_name.ilike(search),
+                OperationBillingRecord.paddock_name.ilike(search),
+                OperationBillingRecord.invoice_number.ilike(search),
+                OperationBillingRecord.observations.ilike(search),
+                OperationBillingRecord.organization.has(Organization.name.ilike(search)),
+            )
+        )
+
+    records = (
+        query.order_by(OperationBillingRecord.executed_date.desc(), OperationBillingRecord.source_item.desc())
+        .all()
+    )
+    total_invoice = sum((record.invoice_total or Decimal("0")) for record in records)
+    total_area = sum((record.area_hectares or Decimal("0")) for record in records)
+    pending_records = [record for record in records if not record.invoice_number]
+    invoices = {record.invoice_number for record in records if record.invoice_number}
+    filter_options = {
+        "farms": distinct_values(OperationBillingRecord.farm_name),
+        "pilots": distinct_values(OperationBillingRecord.pilot_name),
+        "months": distinct_values(OperationBillingRecord.billing_month),
+        "clients": [
+            name
+            for name, in db.session.query(Organization.name)
+            .join(OperationBillingRecord, OperationBillingRecord.organization_id == Organization.id)
+            .filter(Organization.name.isnot(None), Organization.name != "")
+            .distinct()
+            .order_by(Organization.name.asc())
+            .all()
+        ],
+    }
+    context = {
+        "dashboard": True,
+        "title": "Facturacion",
+        "description": "Consulta y gestiona la facturacion de operaciones realizadas.",
+        "author": "TecnoAgro",
+        "site_title": "Operacion realizada",
+        "page_title": "Facturacion",
+        "data_menu": get_dashboard_menu(),
+        "records": records,
+        "filters": filters,
+        "filter_options": filter_options,
+        "stats": {
+            "total_records": len(records),
+            "pending_records": len(pending_records),
+            "invoice_count": len(invoices),
+            "total_invoice": total_invoice,
+            "total_area": total_area,
+        },
+    }
+    return (
+        render_template(
+            "dashboard/completed_operation_billing.j2",
+            **context,
+            request=request,
+        ),
+        200,
+    )
+
+@web.route("/dashboard/operacion-realizada/cronograma")
+@login_required
+def completed_operation_schedule():
+    context = {
+        "dashboard": True,
+        "title": "Cronograma",
+        "description": "Consulta el cronograma de operaciones realizadas.",
+        "author": "TecnoAgro",
+        "site_title": "Operación realizada",
+        "page_title": "Cronograma",
+        "data_menu": get_dashboard_menu(),
+    }
+    return (
+        render_template(
+            "dashboard/completed_operation_schedule.j2",
+            **context,
+            request=request,
+        ),
+        200,
+    )
+
+
+@web.route("/dashboard/operacion-realizada/facturas")
+@login_required
+def completed_operation_invoices():
+    context = {
+        "dashboard": True,
+        "title": "Facturas",
+        "description": "Consulta y gestiona facturas de operaciones realizadas.",
+        "author": "TecnoAgro",
+        "site_title": "Operación realizada",
+        "page_title": "Facturas",
+        "data_menu": get_dashboard_menu(),
+    }
+    return (
+        render_template(
+            "dashboard/completed_operation_invoices.j2",
+            **context,
+            request=request,
+        ),
+        200,
+    )
+
+@web.route("/dashboard/marketing/programacion-demostraciones")
+@login_required
+def marketing_demo_schedule():
+    context = {
+        "dashboard": True,
+        "title": "Programación de demostraciones",
+        "description": "Consulta y gestiona demostraciones programadas.",
+        "author": "TecnoAgro",
+        "site_title": "Marketing",
+        "page_title": "Programación de demostraciones",
+        "data_menu": get_dashboard_menu(),
+    }
+    return (
+        render_template(
+            "dashboard/marketing_demo_schedule.j2",
+            **context,
+            request=request,
+        ),
+        200,
+    )
+
+
+@web.route("/dashboard/marketing/venta-drones")
+@login_required
+def marketing_drone_sales():
+    context = {
+        "dashboard": True,
+        "title": "Venta de drones",
+        "description": "Consulta y gestiona oportunidades de venta de drones.",
+        "author": "TecnoAgro",
+        "site_title": "Marketing",
+        "page_title": "Venta de drones",
+        "data_menu": get_dashboard_menu(),
+    }
+    return (
+        render_template(
+            "dashboard/marketing_drone_sales.j2",
+            **context,
+            request=request,
+        ),
+        200,
+    )
+
+@web.route("/dashboard/capacitaciones/dji-academy")
+@login_required
+def training_dji_academy():
+    context = {
+        "dashboard": True,
+        "title": "Dji academy",
+        "description": "Consulta y gestiona contenidos de Dji academy.",
+        "author": "TecnoAgro",
+        "site_title": "Capacitaciones",
+        "page_title": "Dji academy",
+        "data_menu": get_dashboard_menu(),
+    }
+    return (
+        render_template(
+            "dashboard/training_dji_academy.j2",
+            **context,
+            request=request,
+        ),
+        200,
+    )
+
+
+@web.route("/dashboard/capacitaciones/videos")
+@login_required
+def training_videos():
+    context = {
+        "dashboard": True,
+        "title": "Videos de capacitación",
+        "description": "Consulta y gestiona videos de capacitación.",
+        "author": "TecnoAgro",
+        "site_title": "Capacitaciones",
+        "page_title": "Videos de capacitación",
+        "data_menu": get_dashboard_menu(),
+    }
+    return (
+        render_template(
+            "dashboard/training_videos.j2",
+            **context,
+            request=request,
+        ),
+        200,
+    )
+
+
+@web.route("/dashboard/capacitaciones/registros")
+@login_required
+def training_records():
+    context = {
+        "dashboard": True,
+        "title": "Registros",
+        "description": "Consulta y gestiona registros de capacitación.",
+        "author": "TecnoAgro",
+        "site_title": "Capacitaciones",
+        "page_title": "Registros",
+        "data_menu": get_dashboard_menu(),
+    }
+    return (
+        render_template(
+            "dashboard/training_records.j2",
+            **context,
+            request=request,
+        ),
+        200,
+    )
+
+
+@web.route("/dashboard/capacitaciones/certificacion")
+@login_required
+def training_certification():
+    context = {
+        "dashboard": True,
+        "title": "Certificación DJI y Tecnovant",
+        "description": "Consulta y gestiona certificaciones DJI y Tecnovant.",
+        "author": "TecnoAgro",
+        "site_title": "Capacitaciones",
+        "page_title": "Certificación DJI y Tecnovant",
+        "data_menu": get_dashboard_menu(),
+    }
+    return (
+        render_template(
+            "dashboard/training_certification.j2",
+            **context,
+            request=request,
+        ),
+        200,
+    )
+
+@web.route("/dashboard/certificaciones-uaeac/explotadores-uas")
+@login_required
+def uaeac_uas_operators():
+    context = {
+        "dashboard": True,
+        "title": "Explotadores UAS",
+        "description": "Consulta y gestiona certificaciones UAEAC para explotadores UAS.",
+        "author": "TecnoAgro",
+        "site_title": "Certificaciones UAEAC",
+        "page_title": "Explotadores UAS",
+        "data_menu": get_dashboard_menu(),
+    }
+    return (
+        render_template(
+            "dashboard/uaeac_uas_operators.j2",
+            **context,
+            request=request,
+        ),
+        200,
+    )
+
+
+@web.route("/dashboard/certificaciones-uaeac/pilotos-uas")
+@login_required
+def uaeac_uas_pilots():
+    context = {
+        "dashboard": True,
+        "title": "Pilotos UAS",
+        "description": "Consulta y gestiona certificaciones UAEAC para pilotos UAS.",
+        "author": "TecnoAgro",
+        "site_title": "Certificaciones UAEAC",
+        "page_title": "Pilotos UAS",
+        "data_menu": get_dashboard_menu(),
+    }
+    return (
+        render_template(
+            "dashboard/uaeac_uas_pilots.j2",
+            **context,
+            request=request,
+        ),
+        200,
+    )
+
+
+@web.route("/dashboard/certificaciones-uaeac/dji-academy")
+@login_required
+def uaeac_dji_academy():
+    context = {
+        "dashboard": True,
+        "title": "DJI Academy",
+        "description": "Consulta y gestiona certificaciones UAEAC asociadas a DJI Academy.",
+        "author": "TecnoAgro",
+        "site_title": "Certificaciones UAEAC",
+        "page_title": "DJI Academy",
+        "data_menu": get_dashboard_menu(),
+    }
+    return (
+        render_template(
+            "dashboard/uaeac_dji_academy.j2",
+            **context,
+            request=request,
+        ),
+        200,
+    )
+
+
 @web.route("/home/not-authorized")
 def not_authorized():
     """
@@ -441,6 +2089,53 @@ def amd_clients():
     if status_code != 200:
         return render_template("error.j2"), status_code
     items = response.get_json()
+    active_clients = sum(1 for item in items if item.get("active"))
+    total_area, total_invoice, invoice_count = db.session.query(
+        func.coalesce(func.sum(OperationBillingRecord.area_hectares), 0),
+        func.coalesce(func.sum(OperationBillingRecord.invoice_total), 0),
+        func.count(func.distinct(OperationBillingRecord.invoice_number)),
+    ).filter(
+        OperationBillingRecord.invoice_number.isnot(None),
+        OperationBillingRecord.invoice_number != "",
+    ).one()
+    clients_with_billing = db.session.query(
+        func.count(func.distinct(OperationBillingRecord.organization_id))
+    ).filter(OperationBillingRecord.organization_id.isnot(None)).scalar() or 0
+    crud_metric_cards = [
+        {
+            "label": "Clientes",
+            "value": len(items),
+            "description": f"{active_clients} activos",
+            "icon": "fas fa-users",
+            "icon_bg": "bg-emerald-100 dark:bg-emerald-900/40",
+            "icon_text": "text-emerald-700 dark:text-emerald-300",
+        },
+        {
+            "label": "Con facturación",
+            "value": clients_with_billing,
+            "description": f"{invoice_count} facturas",
+            "icon": "fas fa-file-invoice",
+            "icon_bg": "bg-sky-100 dark:bg-sky-900/40",
+            "icon_text": "text-sky-700 dark:text-sky-300",
+        },
+        {
+            "label": "Área",
+            "value": f"{float(total_area or 0):,.2f} ha",
+            "description": "Hectáreas facturadas",
+            "icon": "fas fa-seedling",
+            "icon_bg": "bg-cyan-100 dark:bg-cyan-900/40",
+            "icon_text": "text-cyan-700 dark:text-cyan-300",
+        },
+        {
+            "label": "Total",
+            "value": "$ {:,.0f}".format(float(total_invoice or 0)),
+            "description": "Valor facturado",
+            "icon": "fas fa-dollar-sign",
+            "icon_bg": "bg-amber-100 dark:bg-amber-900/40",
+            "icon_text": "text-amber-700 dark:text-amber-300",
+            "value_class": "text-emerald-600 dark:text-emerald-400",
+        },
+    ]
     if user_role == "administrator":
         # Obtener todos los usuarios con rol reseller
         resellers = User.query.filter_by(role=RoleEnum.RESELLER).all()
@@ -456,6 +2151,7 @@ def amd_clients():
             "dashboard/clients.j2",
             items=items,
             reseller_dict=reseller_dict,
+            crud_metric_cards=crud_metric_cards,
             **context,
             request=request,
         ),

@@ -1,0 +1,402 @@
+{% extends "base.j2" %}
+{% set flush_content_shell = true %}
+
+{% block extra_css %}
+{{ super() }}
+<style>
+  .exec-board {
+    display: grid;
+    gap: 14px;
+    color: #17231f;
+    font-family: "Segoe UI", Arial, sans-serif;
+  }
+
+  .exec-head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 18px;
+  }
+
+  .exec-eyebrow {
+    margin: 0;
+    color: #008f63;
+    font-size: 11px;
+    font-weight: 650;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+  }
+
+  .exec-head h1 {
+    margin: 4px 0 0;
+    color: #071713;
+    font-size: 26px;
+    font-weight: 600;
+    line-height: 1.1;
+  }
+
+  .exec-muted {
+    color: #53605b;
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 1.45;
+  }
+
+  .exec-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .exec-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    min-height: 34px;
+    padding: 0 13px;
+    border: 1px solid #d4ded6;
+    border-radius: 8px;
+    background: #fff;
+    color: #0c2f28;
+    font-size: 12px;
+    font-weight: 600;
+    text-decoration: none;
+    box-shadow: 0 2px 6px rgba(15, 23, 42, .03);
+  }
+
+  .exec-btn:hover {
+    border-color: #b8c9bd;
+    background: #f8fbf8;
+    color: #008f63;
+  }
+
+  .exec-btn-primary {
+    border-color: #253a52;
+    background: #253a52;
+    color: #fff;
+  }
+
+  .exec-btn-primary:hover {
+    border-color: #1c2f45;
+    background: #1c2f45;
+    color: #fff;
+  }
+
+  .exec-stats {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .exec-card {
+    border: 1px solid #dce6de;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, .98);
+    box-shadow: 0 10px 24px rgba(15, 23, 42, .045);
+    overflow: hidden;
+  }
+
+  .exec-stat {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 74px;
+    padding: 12px;
+  }
+
+  .exec-stat-icon {
+    display: inline-flex;
+    width: 34px;
+    height: 34px;
+    min-width: 34px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9px;
+    background: #edf5f1;
+    color: #0f6d58;
+    font-size: 14px;
+  }
+
+  .exec-stat-icon[data-tone="orange"] { background: #fff1dd; color: #b56209; }
+  .exec-stat-icon[data-tone="amber"] { background: #fff7d8; color: #9a6408; }
+  .exec-stat-icon[data-tone="blue"] { background: #eaf4ff; color: #1f6795; }
+  .exec-stat-icon[data-tone="green"] { background: #e9f8ef; color: #14784d; }
+  .exec-stat span { color: #5f6b66; font-size: 10px; font-weight: 650; letter-spacing: .035em; text-transform: uppercase; }
+  .exec-stat strong { display: block; margin-top: 6px; color: #071713; font-size: 20px; font-weight: 600; line-height: 1; }
+
+  .exec-toolbar {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border-bottom: 1px solid #e3ece5;
+    background: linear-gradient(180deg, #fbfdfb, #f6faf7);
+  }
+
+  .exec-period {
+    color: #0d1f1a;
+    font-size: 15px;
+    font-weight: 650;
+    text-align: center;
+  }
+
+  .exec-gantt-wrap {
+    max-height: min(470px, calc(100vh - 350px));
+    min-height: 238px;
+    overflow: auto;
+    padding: 0;
+    background: #fff;
+  }
+
+  .exec-gantt {
+    min-width: 1120px;
+    background: #fff;
+  }
+
+  .exec-gantt-head,
+  .exec-gantt-row {
+    display: grid;
+    grid-template-columns: 230px 230px minmax(660px, 1fr);
+  }
+
+  .exec-gantt-head {
+    height: 56px;
+    position: sticky;
+    top: 0;
+    z-index: 20;
+  }
+
+  .exec-gantt-row {
+    height: 40px;
+  }
+
+  .exec-gantt-title,
+  .exec-gantt-company {
+    position: sticky;
+    top: 0;
+    z-index: 21;
+    display: flex;
+    align-items: center;
+    height: 56px;
+    padding: 0 12px;
+    border-right: 1px solid #dce5df;
+    border-bottom: 1px solid #dce5df;
+    background: #f7faf8;
+    color: #13251f;
+    font-size: 13px;
+    font-weight: 650;
+    line-height: 1;
+  }
+
+  .exec-gantt-title {
+    border-top-left-radius: 10px;
+  }
+
+  .exec-gantt-weeks {
+    position: sticky;
+    top: 0;
+    z-index: 21;
+    display: grid;
+    grid-template-columns: repeat({{ gantt_weeks|length }}, minmax(110px, 1fr));
+    border-bottom: 1px solid #dce5df;
+    background: #f9fbfa;
+  }
+
+  .exec-gantt-week {
+    display: grid;
+    align-content: center;
+    height: 56px;
+    padding: 8px;
+    border-right: 1px solid #dce5df;
+    color: #5f6b66;
+    text-align: center;
+    font-size: 12px;
+    font-weight: 400;
+  }
+
+  .exec-gantt-week strong {
+    display: block;
+    margin-bottom: 4px;
+    color: #213b34;
+    font-size: 12px;
+    font-weight: 650;
+  }
+
+  .exec-gantt-week.is-current {
+    background: #eef9e8;
+    box-shadow: inset 0 3px 0 #b7f176;
+  }
+
+  .exec-gantt-row:nth-child(even) .exec-gantt-task,
+  .exec-gantt-row:nth-child(even) .exec-gantt-company-cell,
+  .exec-gantt-row:nth-child(even) .exec-gantt-lane {
+    background-color: #f7faf8;
+  }
+
+  .exec-gantt-task,
+  .exec-gantt-company-cell {
+    display: flex;
+    align-items: center;
+    height: 40px;
+    min-height: 40px;
+    padding: 0 11px;
+    border-right: 1px solid #e2e8e4;
+    border-bottom: 1px solid #e8eee9;
+    background: #fff;
+    color: #2f423b;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.1;
+  }
+
+  .exec-gantt-task span,
+  .exec-gantt-company-cell span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .exec-gantt-lane {
+    position: relative;
+    height: 40px;
+    min-height: 40px;
+    border-bottom: 1px solid #e8eee9;
+    background-color: #fff;
+    background-image: repeating-linear-gradient(
+      to right,
+      transparent,
+      transparent calc((100% / {{ gantt_weeks|length }}) - 1px),
+      #e0e7e2 calc((100% / {{ gantt_weeks|length }}) - 1px),
+      #e0e7e2 calc(100% / {{ gantt_weeks|length }})
+    );
+  }
+
+  .exec-gantt-bar {
+    position: absolute;
+    top: 9px;
+    height: 22px;
+    min-width: 82px;
+    border: 0;
+    border-radius: 999px;
+    background: #38c6b0;
+    box-shadow: 0 5px 12px rgba(15, 77, 64, .12), inset 0 -2px 0 rgba(0, 0, 0, .08);
+    cursor: default;
+  }
+
+  .exec-gantt-bar::after {
+    content: attr(data-label);
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    padding: 0 10px;
+    color: rgba(255,255,255,.96);
+    font-size: 10px;
+    font-weight: 650;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .exec-gantt-bar[data-status="scheduled"] { background: #55cfc0; }
+  .exec-gantt-bar[data-status="soon"] { background: #72c7e7; }
+  .exec-gantt-bar[data-status="in_progress"] { background: #10b99b; }
+  .exec-gantt-bar[data-status="reported"] { background: #f2a340; }
+  .exec-gantt-bar[data-status="completed"] { background: #284a43; }
+  .exec-gantt-bar[data-status="cancelled"] { background: #d75a62; }
+
+  .exec-today-line {
+    position: absolute;
+    top: 4px;
+    bottom: 4px;
+    width: 3px;
+    border-radius: 999px;
+    background: #ff6b78;
+    box-shadow: 0 0 0 3px rgba(255, 107, 120, .12);
+    pointer-events: none;
+    transform: translateX(-50%);
+    z-index: 2;
+  }
+
+  .exec-empty {
+    padding: 26px;
+    color: #6a756f;
+    font-size: 13px;
+    text-align: center;
+  }
+
+  @media (max-width: 1180px) {
+    .exec-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+
+  @media (max-width: 760px) {
+    .exec-head { align-items: flex-start; flex-direction: column; }
+    .exec-toolbar { grid-template-columns: 1fr; }
+    .exec-period { text-align: left; }
+    .exec-stats { grid-template-columns: 1fr; }
+    .exec-gantt-head,
+    .exec-gantt-row { grid-template-columns: 180px 180px minmax(640px, 1fr); }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="exec-board">
+  <section class="exec-head">
+    <div>
+      <p class="exec-eyebrow">Operaciones</p>
+      <h1>Ejecuciones</h1>
+      <p class="exec-muted mt-2">Cronograma semanal de misiones programadas desde el calendario operativo.</p>
+    </div>
+    <div class="exec-actions">
+      <a class="exec-btn" href="{{ url_for('core.operational_calendar') }}"><i class="fas fa-calendar-alt"></i> Calendario operativo</a>
+      <a class="exec-btn exec-btn-primary" href="{{ url_for('core.operation_executions') }}"><i class="fas fa-sync-alt"></i> Actualizar</a>
+    </div>
+  </section>
+
+  <section class="exec-stats">
+    <article class="exec-card exec-stat"><i class="exec-stat-icon fas fa-route"></i><div><span>Misiones del mes</span><strong>{{ stats.total }}</strong></div></article>
+    <article class="exec-card exec-stat"><i class="exec-stat-icon fas fa-play-circle" data-tone="orange"></i><div><span>En ejecución</span><strong>{{ stats.running }}</strong></div></article>
+    <article class="exec-card exec-stat"><i class="exec-stat-icon fas fa-exclamation-triangle" data-tone="amber"></i><div><span>Con novedad</span><strong>{{ stats.reported }}</strong></div></article>
+    <article class="exec-card exec-stat"><i class="exec-stat-icon fas fa-clock" data-tone="blue"></i><div><span>Horas reales</span><strong>{{ total_real_hours }}</strong></div></article>
+    <article class="exec-card exec-stat"><i class="exec-stat-icon fas fa-seedling" data-tone="green"></i><div><span>Hectáreas</span><strong>{{ total_hectares }}</strong></div></article>
+  </section>
+
+  <article class="exec-card">
+    <div class="exec-toolbar">
+      <a class="exec-btn" href="{{ url_for('core.operation_executions', year=previous_month.year, month=previous_month.month) }}"><i class="fas fa-chevron-left"></i> Mes anterior</a>
+      <div class="exec-period">{{ month_title }}</div>
+      <a class="exec-btn" href="{{ url_for('core.operation_executions', year=next_month.year, month=next_month.month) }}">Mes siguiente <i class="fas fa-chevron-right"></i></a>
+    </div>
+    <div class="exec-gantt-wrap">
+      <div class="exec-gantt">
+        <div class="exec-gantt-head">
+          <div class="exec-gantt-title">Misión</div>
+          <div class="exec-gantt-company">Cliente / Piloto</div>
+          <div class="exec-gantt-weeks">
+            {% for week in gantt_weeks %}
+              <div class="exec-gantt-week {{ 'is-current' if week.is_current else '' }}"><strong>{{ week.label }}</strong>{{ week.range }}</div>
+            {% endfor %}
+          </div>
+        </div>
+        {% for item in executions %}
+          <div class="exec-gantt-row">
+            <div class="exec-gantt-task"><span>{{ item.title }}</span></div>
+            <div class="exec-gantt-company-cell"><span>{{ item.client_project }} · {{ item.pilot }}</span></div>
+            <div class="exec-gantt-lane">
+              {% if item.status in ['in_progress', 'soon', 'reported'] %}
+                <span class="exec-today-line" style="left: {{ item.gantt_left }}%;"></span>
+              {% endif %}
+              <span class="exec-gantt-bar" data-status="{{ item.status }}" data-label="{{ item.operation_days }} días · {{ item.status_label }}" title="{{ item.starts_label }} - {{ item.ends_label }}" style="left: {{ item.gantt_left }}%; width: max({{ item.gantt_width }}%, 82px);"></span>
+            </div>
+          </div>
+        {% else %}
+          <div class="exec-empty">No hay misiones programadas en este mes.</div>
+        {% endfor %}
+      </div>
+    </div>
+  </article>
+</div>
+{% endblock %}

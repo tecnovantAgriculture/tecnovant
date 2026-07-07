@@ -49,6 +49,26 @@ from rasterio.windows import Window
 from werkzeug.datastructures import FileStorage
 
 
+def _json_safe(value):
+    """Convert image metadata values into JSON-serializable data."""
+
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, bytes):
+        try:
+            return value.decode("utf-8", errors="replace")
+        except Exception:
+            return value.hex()
+    if isinstance(value, dict):
+        return {str(k): _json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    try:
+        return float(value)
+    except Exception:
+        return str(value)
+
+
 def _media_root() -> str:
     """Return absolute path for local media storage root.
 
@@ -191,7 +211,7 @@ def extract_image_info(filepath: str) -> ImageInfo:
                 exif = {}
                 for tag_id, value in raw_exif.items():
                     tag = ExifTags.TAGS.get(tag_id, tag_id)
-                    exif[str(tag)] = value
+                    exif[str(tag)] = _json_safe(value)
                 info.exif = exif
             except Exception:
                 info.exif = None

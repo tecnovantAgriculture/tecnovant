@@ -1,0 +1,95 @@
+{% extends "pilot_portal/base.j2" %}
+
+{% block body %}
+<main class="pilot-shell">
+  <header class="app-header">
+    <div>
+      <p class="pilot-eyebrow">Mi agenda</p>
+      <h1 class="app-title">Calendario</h1>
+      <p class="app-subtitle">Operaciones asignadas</p>
+    </div>
+    <a class="icon-button" href="{{ url_for('core.pilot_panel') }}" aria-label="Inicio"><i class="fas fa-search"></i></a>
+  </header>
+
+  <section class="section-title" style="margin-top: 0; align-items: center;">
+    <a class="icon-button" href="{{ url_for('core.pilot_calendar', year=previous_month.year, month=previous_month.month) }}" aria-label="Mes anterior">
+      <i class="fas fa-chevron-left"></i>
+    </a>
+    <div style="text-align: center;">
+      <h2>{{ month_title }}</h2>
+      <span>Vista mensual</span>
+    </div>
+    <a class="icon-button" href="{{ url_for('core.pilot_calendar', year=next_month.year, month=next_month.month) }}" aria-label="Mes siguiente">
+      <i class="fas fa-chevron-right"></i>
+    </a>
+  </section>
+
+  <section class="month-card" aria-label="Calendario mensual">
+    <div class="month-grid">
+      {% for weekday in ["L", "M", "M", "J", "V", "S", "D"] %}
+        <div class="month-weekday">{{ weekday }}</div>
+      {% endfor %}
+      {% for item in calendar_days %}
+        <div class="month-day {{ '' if item.in_month else 'is-muted' }} {{ 'is-today' if item.is_today else '' }} {{ 'has-events' if item.count else '' }}">
+          {{ item.date.day }}
+          {% if item.count %}<span class="month-dot"></span>{% endif %}
+        </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="section-title">
+    <h2>Proximos vuelos</h2>
+    <span>{{ grouped|length }} dias</span>
+  </section>
+
+  <div class="date-strip" aria-label="Dias con actividades">
+    {% for day, activities in grouped|dictsort %}
+      <a class="date-pill {{ 'is-active' if loop.first else '' }}" href="#day-{{ day.strftime('%Y%m%d') }}">
+        <span>{{ day.strftime("%a")[:3] }}</span>
+        <strong>{{ day.strftime("%d") }}</strong>
+      </a>
+    {% else %}
+      <span class="date-pill is-active"><span>Hoy</span><strong>--</strong></span>
+    {% endfor %}
+  </div>
+
+  {% for day, activities in grouped|dictsort %}
+    <section id="day-{{ day.strftime('%Y%m%d') }}">
+      <div class="section-title">
+        <h2>{{ day.strftime("%d/%m/%Y") }}</h2>
+        <span>{{ activities|length }} vuelos</span>
+      </div>
+
+      {% for activity in activities %}
+        <a class="task-card" data-status="{{ activity.status }}" href="{{ url_for('core.pilot_activity_detail', activity_id=activity.id) }}">
+          <div class="task-time">
+            <span>{{ activity.starts_at.strftime("%I:%M %p") }}</span>
+            <span>{{ activity.ends_at.strftime("%I:%M %p") }}</span>
+          </div>
+          <div class="task-main">
+            <div class="pilot-item-head" style="margin-bottom: 4px;">
+              <strong>{{ activity.title }}</strong>
+              <span class="pilot-badge" data-status="{{ activity.status }}">{{ status_label(activity.status) }}</span>
+            </div>
+            <small>{{ activity.place }}</small>
+            <small>{{ activity.drone.brand }} {{ activity.drone.model }} · {{ activity.client_project or "Sin proyecto" }}</small>
+          </div>
+        </a>
+      {% endfor %}
+    </section>
+  {% else %}
+    <section class="pilot-card">
+      <div class="empty-state">No tienes actividades asignadas en el rango operativo actual.</div>
+    </section>
+  {% endfor %}
+</main>
+
+<nav class="pilot-nav" aria-label="Portal piloto">
+  <a href="{{ url_for('core.pilot_panel') }}"><i class="fas fa-th-large"></i><span>Inicio</span></a>
+  <a class="is-active" href="{{ url_for('core.pilot_calendar') }}"><i class="fas fa-calendar-alt"></i><span>Agenda</span></a>
+  <a href="{{ url_for('core.pilot_orthophotos') }}"><i class="fas fa-images"></i><span>Ortofotos</span></a>
+  <a href="{{ url_for('core.pilot_flight_log') }}"><i class="fas fa-clipboard-list"></i><span>Bitacora</span></a>
+</nav>
+{% endblock %}
+

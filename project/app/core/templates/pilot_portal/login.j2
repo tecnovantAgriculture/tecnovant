@@ -1,0 +1,45 @@
+{% extends "pilot_portal/base.j2" %}
+
+{% block body %}
+<main class="pilot-login">
+  <section class="pilot-login-panel">
+    <div class="hero-profile" style="margin-bottom: 18px;">
+      <div class="hero-profile-head">
+        <div class="login-logo">
+          <img src="/img/logo.png" alt="TecnoVant">
+        </div>
+        <div>
+          <p class="pilot-eyebrow">TecnoVant</p>
+          <h2>Portal piloto</h2>
+          <p>Agenda, vuelos y bitacora</p>
+        </div>
+      </div>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="pilot-alerts">
+          {% for category, message in messages %}
+            <div class="pilot-alert pilot-alert-{{ 'success' if category == 'success' else 'error' }}">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <form class="pilot-form" method="post" autocomplete="on">
+      <div class="pilot-field">
+        <label for="username">Usuario</label>
+        <input id="username" name="username" autocomplete="username" required placeholder="Usuario asignado">
+      </div>
+      <div class="pilot-field">
+        <label for="password">Clave</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required placeholder="Clave de acceso">
+      </div>
+      <button class="pilot-btn pilot-btn-primary" type="submit">
+        <i class="fas fa-arrow-right"></i>
+        Entrar al panel
+      </button>
+    </form>
+  </section>
+</main>
+{% endblock %}

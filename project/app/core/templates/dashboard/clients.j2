@@ -4,6 +4,10 @@
 {% set entity_name = "Clientes" %}
 {% set entity_name_lower = "cliente" %}
 {% set show_select_box = True %}
+{% set flush_content_shell = true %}
+{% set main_clases = "flex-grow overflow-y-auto mx-auto px-6 py-0" %}
+{% set crud_clean_shell = true %}
+{% set crud_internal_scroll = true %}
 
 {# Mostrar la grid de ítems #}
 {% set table_headers = [
@@ -14,6 +18,12 @@
     "Contacto",
     "Dirección",
     "Teléfono",
+    "Valor ha",
+    "Ha contratadas",
+    "Ha facturadas",
+    "Total facturado",
+    "Promedio ha",
+    "Facturas",
     "Reseller"
 ] %}
 {% set item_fields = [
@@ -24,6 +34,12 @@
     "contact",
     "address",
     "phone",
+    "billing_unit_price_display",
+    "planned_hectares_display",
+    "billed_area_display",
+    "billed_total_display",
+    "average_price_display",
+    "invoice_count",
     "reseller"
 ] %}
 
@@ -36,6 +52,8 @@
     'contact': {'type': 'text', 'label': 'Contacto', 'required': False},
     'address': {'type': 'text', 'label': 'Dirección', 'required': False},
     'phone': {'type': 'text', 'label': 'Teléfono', 'required': False},
+    'billing_unit_price': {'type': 'number', 'label': 'Valor por hectárea', 'required': False, 'min': 0, 'step': '0.01', 'placeholder': 'Ej: 230000'},
+    'planned_hectares': {'type': 'number', 'label': 'Hectáreas contratadas', 'required': False, 'min': 0, 'step': '0.01', 'placeholder': 'Ej: 9.50'},
     'reseller_id': {'type': 'select', 'label': 'Reseller', 'options': reseller_dict, 'required': True, 'new_value': False},
 } %}
 
@@ -44,5 +62,7 @@
 {# api de consumo #}
 {% set api_url = url_for('core_api.org_view') %}
 {% set csv_download_url = url_for('core_api.download_clients_csv') %}
+
+
 
 

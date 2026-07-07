@@ -13,6 +13,8 @@ License:
 """
 """Application core blueprints and route imports."""
 
+from pathlib import Path
+
 from flask import Blueprint, current_app, send_from_directory
 
 from .controller import login_required
@@ -22,6 +24,33 @@ core = Blueprint("core", __name__, url_prefix="/", template_folder="templates")
 
 core_api = Blueprint("core_api", __name__, url_prefix="/api/core")
 core_api_v1 = Blueprint("core_api_v1", __name__, url_prefix="/api/v1/core")
+
+
+def _serve_static_asset(folder: str, key: str):
+    base = Path(current_app.root_path) / "static" / "assets" / folder
+    response = send_from_directory(str(base), key)
+    response.headers["Cache-Control"] = "public, max-age=3600"
+    return response
+
+
+@core.route("/css/<path:key>")
+def serve_css(key: str):
+    return _serve_static_asset("css", key)
+
+
+@core.route("/js/<path:key>")
+def serve_js(key: str):
+    return _serve_static_asset("js", key)
+
+
+@core.route("/img/<path:key>")
+def serve_img(key: str):
+    return _serve_static_asset("img", key)
+
+
+@core.route("/webfonts/<path:key>")
+def serve_webfont(key: str):
+    return _serve_static_asset("webfonts", key)
 
 
 # Avatar serving route

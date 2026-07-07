@@ -1,0 +1,99 @@
+{% extends "pilot_portal/base.j2" %}
+
+{% block body %}
+<main class="pilot-shell">
+  <header class="app-header">
+    <div>
+      <p class="pilot-eyebrow">Ortofotos</p>
+      <h1 class="app-title">Cargar imagenes</h1>
+      <p class="app-subtitle">Envia las fotos de campo para revision y procesamiento</p>
+    </div>
+    <a class="icon-button" href="{{ url_for('core.pilot_panel') }}" aria-label="Inicio"><i class="fas fa-th-large"></i></a>
+  </header>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="pilot-alerts">
+        {% for category, message in messages %}
+          <div class="pilot-alert pilot-alert-{{ 'success' if category == 'success' else 'error' }}">{{ message }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <section class="pilot-card">
+    <h2>Nueva carga</h2>
+    <form class="pilot-form" method="post" enctype="multipart/form-data">
+      <div class="pilot-field">
+        <label for="mission_name">Nombre de la mision</label>
+        <input id="mission_name" name="mission_name" placeholder="Ej: Vuelo finca La Esperanza">
+      </div>
+
+      {% if missions %}
+        <div class="pilot-field">
+          <label for="mission_id">Agregar a una carga existente</label>
+          <select id="mission_id" name="mission_id">
+            <option value="">Crear nueva carga</option>
+            {% for mission in missions if mission.status in ['receiving', 'failed', 'canceled'] %}
+              <option value="{{ mission.id }}">{{ mission.name }} - {{ mission.photos|length }} fotos</option>
+            {% endfor %}
+          </select>
+        </div>
+      {% endif %}
+
+      <label class="upload-drop" for="files">
+        <i class="fas fa-cloud-upload-alt"></i>
+        <strong>Seleccionar imagenes</strong>
+        <span>JPG, JPEG, TIF o TIFF. Puedes seleccionar varias fotos al mismo tiempo.</span>
+        <input id="files" name="files" type="file" accept="image/jpeg,image/tiff,.jpg,.jpeg,.tif,.tiff" multiple required>
+      </label>
+
+      <div class="pilot-field">
+        <label for="notes">Observaciones</label>
+        <textarea id="notes" name="notes" placeholder="Finca, lote, condiciones del vuelo o comentarios"></textarea>
+      </div>
+
+      <button class="pilot-btn pilot-btn-primary" type="submit">
+        <i class="fas fa-upload"></i> Guardar imagenes
+      </button>
+    </form>
+  </section>
+
+  <section class="section-title">
+    <h2>Cargas enviadas</h2>
+    <span>{{ missions|length }} recientes</span>
+  </section>
+
+  <section class="pilot-card">
+    {% for mission in missions %}
+      <article class="mission-summary">
+        <div>
+          <strong>{{ mission.name }}</strong>
+          <small>{{ mission.photos|length }} fotos</small>
+          {% if mission.status == 'completed' %}
+            <small>Lista para descarga</small>
+          {% elif mission.status in ['starting_webodm', 'submitting', 'uploading_to_webodm', 'queued', 'running', 'downloading_asset'] %}
+            <small>En procesamiento</small>
+          {% elif mission.status == 'failed' %}
+            <small>Requiere revision</small>
+          {% else %}
+            <small>Pendiente de procesamiento</small>
+          {% endif %}
+        </div>
+        <span class="pilot-badge" data-status="{{ 'completed' if mission.status == 'completed' else 'in_progress' if mission.status in ['starting_webodm', 'submitting', 'uploading_to_webodm', 'queued', 'running', 'downloading_asset'] else 'scheduled' }}">
+          {{ mission.status }}
+        </span>
+      </article>
+    {% else %}
+      <div class="empty-state">Aun no has enviado imagenes para ortofotos.</div>
+    {% endfor %}
+  </section>
+</main>
+
+<nav class="pilot-nav" aria-label="Portal piloto">
+  <a href="{{ url_for('core.pilot_panel') }}"><i class="fas fa-th-large"></i><span>Inicio</span></a>
+  <a href="{{ url_for('core.pilot_calendar') }}"><i class="fas fa-calendar-alt"></i><span>Agenda</span></a>
+  <a class="is-active" href="{{ url_for('core.pilot_orthophotos') }}"><i class="fas fa-images"></i><span>Ortofotos</span></a>
+  <a href="{{ url_for('core.pilot_flight_log') }}"><i class="fas fa-clipboard-list"></i><span>Bitacora</span></a>
+</nav>
+{% endblock %}

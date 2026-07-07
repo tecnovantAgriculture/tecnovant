@@ -102,7 +102,7 @@ class Config:
     """
 
     CORE = True
-    MODULES = ["foliage", "foliage_report", "agrovista", "media"]
+    MODULES = ["foliage", "foliage_report", "agrovista", "media", "orthophotos"]
     THEME = "default"
     TITLE = os.getenv("TITLE")
     SECRET_KEY = os.getenv("SECRET_KEY")
@@ -187,10 +187,6 @@ class Config:
     AVATAR_SERVE_STATIC = env_config[
         "DEBUG"
     ]  # Enable Flask static serving only in development
-
-    # overwrite for testing development purposes
-    JWT_COOKIE_SECURE = True  # development purposes
-    JWT_COOKIE_CSRF_PROTECT = True  # development purposes
 
     @classmethod
     def validate_config(cls):

@@ -1,6 +1,7 @@
-# Python standard library imports
+﻿# Python standard library imports
 import hashlib
 import time
+from decimal import Decimal, InvalidOperation
 from functools import wraps
 
 # Third party imports
@@ -30,7 +31,7 @@ from flask_jwt_extended import (
 )
 from flask_limiter.util import get_remote_address
 from itsdangerous import BadTimeSignature, SignatureExpired, URLSafeTimedSerializer
-from sqlalchemy import inspect
+from sqlalchemy import func, inspect
 from sqlalchemy.exc import IntegrityError
 from werkzeug.exceptions import (
     BadRequest,
@@ -49,6 +50,7 @@ from app.helpers.mail import send_email
 from .config import CoreConfig
 from .models import (
     Organization,
+    OperationBillingRecord,
     ResellerPackage,
     RoleEnum,
     User,
@@ -413,14 +415,15 @@ class LoginView(MethodView):
     def _build_response(self, tokens, claims):
         """Build final response with cookies"""
         access_token, refresh_token = tokens
-        response = jsonify(
-            {
-                "access_csrf": get_csrf_token(access_token),
-                "refresh_csrf": get_csrf_token(refresh_token),
-                "additional_claims": claims,
-                "msg": "Authentication successful",
-            }
-        )
+        payload = {
+            "additional_claims": claims,
+            "msg": "Authentication successful",
+        }
+        if current_app.config.get("JWT_COOKIE_CSRF_PROTECT", True):
+            payload["access_csrf"] = get_csrf_token(access_token)
+            payload["refresh_csrf"] = get_csrf_token(refresh_token)
+
+        response = jsonify(payload)
         set_access_cookies(response, access_token)
         set_refresh_cookies(response, refresh_token)
         return response
@@ -840,6 +843,39 @@ class OrgView(MethodView):
             raise Forbidden("You do not have access to this organization.")
         return jsonify(self._serialize_organization(org)), 200
 
+    CLIENT_BILLING_FIELDS = ("billing_unit_price", "planned_hectares")
+
+    def _decimal_or_none(self, value, field_name):
+        if value in (None, ""):
+            return None
+        try:
+            normalized = str(value).replace("$", "").replace(",", "").strip()
+            return Decimal(normalized)
+        except (InvalidOperation, ValueError):
+            raise BadRequest(f"Valor numérico inválido para {field_name}.")
+
+    def _apply_client_billing_data(self, org, data):
+        profile_data = dict(org.profile_data or {})
+        labels = {
+            "billing_unit_price": "valor por hectárea",
+            "planned_hectares": "hectáreas contratadas",
+        }
+        for field_name in self.CLIENT_BILLING_FIELDS:
+            if field_name not in data:
+                continue
+            value = self._decimal_or_none(data.get(field_name), labels[field_name])
+            if value is None:
+                profile_data.pop(field_name, None)
+            else:
+                profile_data[field_name] = str(value)
+        org.profile_data = profile_data
+
+    def _format_money(self, value):
+        return "$ {:,.0f}".format(float(value or 0))
+
+    def _format_hectares(self, value):
+        return "{:.2f} ha".format(float(value or 0))
+
     def _create_organization(self, data):
         """Crea una nueva organización con los datos proporcionados."""
         org = Organization(
@@ -850,6 +886,7 @@ class OrgView(MethodView):
             address=data.get("address"),
             phone=data.get("phone"),
         )
+        self._apply_client_billing_data(org, data)
         if "reseller_id" in data:
             claims = get_jwt()
             if claims.get("rol") == RoleEnum.ADMINISTRATOR.value:
@@ -898,6 +935,7 @@ class OrgView(MethodView):
             org.address = data["address"]
         if "phone" in data:
             org.phone = data["phone"]
+        self._apply_client_billing_data(org, data)
         if "reseller_id" in data:
             claims = get_jwt()
             if claims.get("rol") == RoleEnum.ADMINISTRATOR.value:
@@ -1014,6 +1052,26 @@ class OrgView(MethodView):
 
     def _serialize_organization(self, org):
         """Serializa un objeto Organization a un diccionario."""
+        profile_data = org.profile_data or {}
+        billing_unit_price = profile_data.get("billing_unit_price") or ""
+        planned_hectares = profile_data.get("planned_hectares") or ""
+        planned_value = self._decimal_or_none(planned_hectares, "hectáreas contratadas") or Decimal("0")
+        price_value = self._decimal_or_none(billing_unit_price, "valor por hectárea") or Decimal("0")
+        projected_total = planned_value * price_value
+        billed_area, billed_total, billing_records = db.session.query(
+            func.coalesce(func.sum(OperationBillingRecord.area_hectares), 0),
+            func.coalesce(func.sum(OperationBillingRecord.invoice_total), 0),
+            func.count(OperationBillingRecord.id),
+        ).filter(OperationBillingRecord.organization_id == org.id).one()
+        invoice_count = db.session.query(
+            func.count(func.distinct(OperationBillingRecord.invoice_number))
+        ).filter(
+            OperationBillingRecord.organization_id == org.id,
+            OperationBillingRecord.invoice_number.isnot(None),
+            OperationBillingRecord.invoice_number != "",
+        ).scalar() or 0
+        average_price = Decimal(str(billed_total or 0)) / Decimal(str(billed_area or 1)) if billed_area else Decimal("0")
+
         return {
             "id": org.id,
             "name": org.name,
@@ -1022,13 +1080,22 @@ class OrgView(MethodView):
             "contact": org.contact,
             "address": org.address,
             "phone": org.phone,
+            "billing_unit_price": billing_unit_price,
+            "planned_hectares": planned_hectares,
+            "billing_unit_price_display": self._format_money(price_value) if price_value else "",
+            "planned_hectares_display": self._format_hectares(planned_value) if planned_value else "",
+            "projected_total_display": self._format_money(projected_total) if projected_total else "",
+            "billed_area_display": self._format_hectares(billed_area),
+            "billed_total_display": self._format_money(billed_total),
+            "average_price_display": self._format_money(average_price),
+            "billing_records": billing_records,
+            "invoice_count": invoice_count,
             "reseller_id": org.get_reseller.id if org.get_reseller else "",
             "reseller": org.get_reseller.full_name if org.get_reseller else "",
             "active": org.active,
             "created_at": org.created_at.isoformat(),
             "updated_at": org.updated_at.isoformat(),
         }
-
 
 class ForgotPasswordRequestView(MethodView):
     """Handles the request for password reset."""

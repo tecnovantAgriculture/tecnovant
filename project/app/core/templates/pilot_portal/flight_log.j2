@@ -1,0 +1,117 @@
+{% extends "pilot_portal/base.j2" %}
+
+{% block body %}
+<main class="pilot-shell">
+  <header class="app-header">
+    <div>
+      <p class="pilot-eyebrow">Bitacora manual</p>
+      <h1 class="app-title">Registrar vuelo</h1>
+      <p class="app-subtitle">Carga tus datos reales de operacion</p>
+    </div>
+    <a class="icon-button" href="{{ url_for('core.pilot_panel') }}" aria-label="Inicio"><i class="fas fa-th-large"></i></a>
+  </header>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="pilot-alerts">
+        {% for category, message in messages %}
+          <div class="pilot-alert pilot-alert-{{ 'success' if category == 'success' else 'error' }}">{{ message }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <section class="pilot-card">
+    <form class="pilot-form" method="post">
+      <div class="pilot-field">
+        <label for="activity_id">Operacion asociada</label>
+        <select id="activity_id" name="activity_id">
+          <option value="">Registro manual sin operacion</option>
+          {% for activity in activities %}
+            <option value="{{ activity.id }}" {% if request.args.get('activity_id', type=int) == activity.id %}selected{% endif %}>
+              {{ activity.starts_at.strftime("%d/%m/%Y") }} - {{ activity.title }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="pilot-field">
+        <label for="drone_id">Dron</label>
+        <select id="drone_id" name="drone_id" required>
+          <option value="">Seleccionar dron</option>
+          {% for drone in drones %}
+            <option value="{{ drone.id }}">{{ drone.brand }} {{ drone.model }} - {{ drone.serial_number }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="pilot-field">
+        <label for="flight_date">Fecha de vuelo</label>
+        <input id="flight_date" name="flight_date" type="date" required>
+      </div>
+
+      <div class="pilot-field">
+        <label for="start_time">Hora inicio</label>
+        <input id="start_time" name="start_time" type="time" required>
+      </div>
+
+      <div class="pilot-field">
+        <label for="end_time">Hora fin</label>
+        <input id="end_time" name="end_time" type="time" required>
+      </div>
+
+      <div class="pilot-field">
+        <label for="total_hectares">Total hectareas voladas</label>
+        <input id="total_hectares" name="total_hectares" type="number" min="0" step="0.01" placeholder="Ej: 12.50">
+      </div>
+
+
+
+      <div class="pilot-field">
+        <label for="weather">Clima</label>
+        <input id="weather" name="weather" placeholder="Bueno / viento / lluvia">
+      </div>
+
+
+      <div class="pilot-field">
+        <label for="notes">Notas</label>
+        <textarea id="notes" name="notes" placeholder="Observaciones del vuelo"></textarea>
+      </div>
+
+      <button class="pilot-btn pilot-btn-primary" type="submit">
+        <i class="fas fa-save"></i> Guardar bitacora
+      </button>
+    </form>
+  </section>
+
+  <section class="section-title">
+    <h2>Registros recientes</h2>
+    <span>{{ total_hours }} horas</span>
+  </section>
+
+  <section>
+    {% for log in logs %}
+      <article class="task-card">
+        <div class="task-time">
+          <span>{{ log.started_at.strftime("%I:%M %p") }}</span>
+          <span>{{ log.ended_at.strftime("%I:%M %p") }}</span>
+        </div>
+        <div class="task-main">
+          <strong>{{ log.drone.brand }} {{ log.drone.model }}</strong>
+          <small>{{ log.flight_date.strftime("%d/%m/%Y") }} - {{ (log.flight_minutes / 60)|round(1) }} horas</small>
+          <small>{{ log.total_hectares or 0 }} ha - {{ log.activity.title if log.activity else "Registro manual" }}</small>
+        </div>
+      </article>
+    {% else %}
+      <div class="empty-state">Aun no tienes registros de bitacora.</div>
+    {% endfor %}
+  </section>
+</main>
+
+<nav class="pilot-nav" aria-label="Portal piloto">
+  <a href="{{ url_for('core.pilot_panel') }}"><i class="fas fa-th-large"></i><span>Inicio</span></a>
+  <a href="{{ url_for('core.pilot_calendar') }}"><i class="fas fa-calendar-alt"></i><span>Agenda</span></a>
+  <a href="{{ url_for('core.pilot_orthophotos') }}"><i class="fas fa-images"></i><span>Ortofotos</span></a>
+  <a class="is-active" href="{{ url_for('core.pilot_flight_log') }}"><i class="fas fa-clipboard-list"></i><span>Bitacora</span></a>
+</nav>
+{% endblock %}

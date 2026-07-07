@@ -1,7 +1,8 @@
 {# partials/sidebar.j2 #}
 {# Dynamic sidebar, show menus based on user role #}
 {% from "settings/_ui_class.j2" import class_sidebar_menu %}
-{% from "settings/_flowbite_solid_icons.j2" import icon_caret_down, icon_caret_left, icon_home, icon_window, icon_users, icon_microscope, icon_file_chart_bar, icon_tractor, icon_satellite_dish %}
+{% from "settings/_flowbite_solid_icons.j2" import icon_caret_down, icon_caret_left, icon_home, icon_window, icon_users, icon_microscope, icon_file_chart_bar, icon_satellite_dish, icon_calendar_month %}
+{% from "settings/_flowbite_ouline_icons.j2" import icon_tools, icon_truck, icon_bullhorn, icon_graduation_cap, icon_school_check %}
 
 {# "name": "Administración", "url": "#", "icon": icon_window, "pro": true #}
 {% set sidebar_menu = {
@@ -11,18 +12,41 @@
 } %}
 
 {% set analysis_image_submenu = [
-    {"name": "NDVI / VARI Tool", "url": url_for('agrovista.hello') },
+    {"name": "Indicadores", "url": url_for('agrovista.hello') },
     {"name": "Objetivos secundarios", "url": url_for('agrovista.secondary_objectives') },
 ] %}
 {% if user_id %}
     {% set analysis_image_submenu = analysis_image_submenu + [
-        {"name": "Ortofotos y medios", "url": url_for('media.library') },
-        {"name": "Importar local", "url": url_for('media.upload_local') },
-        {"name": "Importar desde S3", "url": url_for('media.upload_s3') },
+        {"name": "Fotogrametría", "url": url_for('orthophotos.dashboard') },
     ] %}
 {% endif %}
+
+{% if rol == "administrator" or rol == "reseller" %}
+    {% set analysis_image_submenu = analysis_image_submenu + [
+        {"name": "Clientes", "url": url_for('core.amd_clients')},
+        {"name": "Fincas", "url": url_for('foliage.amd_farms') },
+        {"name": "Lotes", "url": url_for('foliage.amd_lots') },
+        {"name": "Lote / Cultivo", "url": url_for('foliage.amd_lot_crops') },
+    ] %}
+{% endif %}
+
+{% if rol == "administrator" or rol == "reseller" %}
+    {% set analysis_image_submenu = analysis_image_submenu + [
+        {"name": "Análisis foliar (físico)", "url": url_for('foliage.amd_common_analyses') },
+        {"name": "Foliares digitales", "url": url_for('foliage.amd_leaf_analyses') },
+        {"name": "Análisis de suelo", "url": url_for('foliage.amd_soil_analyses') },
+        {"name": "Aplicaciones de nutrientes", "url": url_for('foliage.amd_nutrient_applications') },
+        {"name": "Producción", "url": url_for('foliage.amd_productions') },
+    ] %}
+{% endif %}
+
+{# "name": "Ver reporte", "url": url_for('foliage_report.vista_reporte') #}
+{% set analysis_image_submenu = analysis_image_submenu + [
+    {"name": "Recomendaciones", "url": url_for('foliage_report.listar_reportes') },
+    {"name": "Generar reporte", "url": url_for('foliage_report.generar_informe') },
+] %}
 {% set analysis_image_menu = {
-    "name": "Análisis de imagen",
+    "name": "Agricultura",
     "url": "#",
     "icon": icon_satellite_dish,
     "submenu": analysis_image_submenu
@@ -31,62 +55,113 @@
     "menu": sidebar_menu.menu + [analysis_image_menu]
 } %}
 
-{% if rol == "administrator" or rol == "reseller" %}
-    {% set fincas_lotes_menu = {
-        "name": "Fincas y lotes",
-        "url": "#",
-    "icon": icon_tractor,
-        "submenu": [
-            {"name": "Clientes", "url": url_for('core.amd_clients')},
-            {"name": "Fincas", "url": url_for('foliage.amd_farms') },
-            {"name": "Lotes", "url": url_for('foliage.amd_lots') },
-            {"name": "Lote / Cultivo", "url": url_for('foliage.amd_lot_crops') },
-        ]
-    } %}
-    {% set sidebar_menu = {
-        "menu": sidebar_menu.menu + [fincas_lotes_menu]
-    } %}
-{% endif %}
-
-{% if rol == "administrator" or rol == "reseller" %}
-    {% set forms_menu = {
-        "name": "Formularios de análisis",
-        "url": "#",
-        "icon": icon_microscope,
-        "submenu": [
-            {"name": "Análisis foliar (físico)", "url": url_for('foliage.amd_common_analyses') },
-            {"name": "Foliares digitales", "url": url_for('foliage.amd_leaf_analyses') },
-            {"name": "Análisis de suelo", "url": url_for('foliage.amd_soil_analyses') },
-            {"name": "Aplicaciones de nutrientes", "url": url_for('foliage.amd_nutrient_applications') },
-            {"name": "Producción", "url": url_for('foliage.amd_productions') },
-        ]
-    } %}
-    {% set sidebar_menu = {
-        "menu": sidebar_menu.menu + [forms_menu]
-    } %}
-{% endif %}
-
-{# "name": "Ver reporte", "url": url_for('foliage_report.vista_reporte') #}
-{% set reportes = {
-    "name": "Reportes",
+{% set operaciones_menu = {
+    "name": "Operaciones",
     "url": "#",
-    "icon": icon_file_chart_bar,
+    "icon": icon_calendar_month,
     "submenu": [
-        {"name": "Recomendaciones", "url": url_for('foliage_report.listar_reportes') },
-        {"name": "Generar reporte", "url": url_for('foliage_report.generar_informe') },
+        {"name": "Calendario Operativo", "url": url_for('core.operational_calendar') },
+        {"name": "Ejecuciones", "url": url_for('core.operation_executions') },
     ]
 } %}
 {% set sidebar_menu = {
-    "menu": sidebar_menu.menu + [reportes]
+    "menu": sidebar_menu.menu + [operaciones_menu]
+} %}
+
+{% set mantenimiento_menu = {
+    "name": "Mantenimiento",
+    "url": "#",
+    "icon": icon_tools,
+    "submenu": [
+        {"name": "Drones", "url": url_for('core.maintenance_drones') },
+        {"name": "Bitacoras", "url": url_for('core.maintenance_logs') },
+        {"name": "Horas de vuelo", "url": url_for('core.flight_hours') },
+    ]
+} %}
+{% set sidebar_menu = {
+    "menu": sidebar_menu.menu + [mantenimiento_menu]
+} %}
+
+{% set logistica_menu = {
+    "name": "Logistica",
+    "url": "#",
+    "icon": icon_truck,
+    "submenu": [
+        {"name": "Shopfy", "url": url_for('core.logistics_shopfy') },
+        {"name": "Manejo de garantias", "url": url_for('core.warranty_management') },
+        {"name": "Reparaciones pagas", "url": url_for('core.paid_repairs') },
+    ]
+} %}
+{% set sidebar_menu = {
+    "menu": sidebar_menu.menu + [logistica_menu]
+} %}
+
+{% set operacion_realizada_menu = {
+    "name": "Operación realizada",
+    "url": "#",
+    "icon": icon_file_chart_bar,
+    "submenu": [
+        {"name": "Facturación", "url": url_for('core.completed_operation_billing') },
+        {"name": "Cronograma", "url": url_for('core.completed_operation_schedule') },
+        {"name": "Facturas", "url": url_for('core.completed_operation_invoices') },
+    ]
+} %}
+{% set sidebar_menu = {
+    "menu": sidebar_menu.menu + [operacion_realizada_menu]
+} %}
+
+{% set marketing_menu = {
+    "name": "Marketing",
+    "url": "#",
+    "icon": icon_bullhorn,
+    "submenu": [
+        {"name": "Programación de demostraciones", "url": url_for('core.marketing_demo_schedule') },
+        {"name": "Venta de drones", "url": url_for('core.marketing_drone_sales') },
+    ]
+} %}
+{% set sidebar_menu = {
+    "menu": sidebar_menu.menu + [marketing_menu]
+} %}
+
+{% set capacitaciones_menu = {
+    "name": "Capacitaciones",
+    "url": "#",
+    "icon": icon_graduation_cap,
+    "submenu": [
+        {"name": "Dji academy", "url": url_for('core.training_dji_academy') },
+        {"name": "Videos de capacitación", "url": url_for('core.training_videos') },
+        {"name": "Registros", "url": url_for('core.training_records') },
+        {"name": "Certificación DJI y Tecnovant", "url": url_for('core.training_certification') },
+    ]
+} %}
+{% set sidebar_menu = {
+    "menu": sidebar_menu.menu + [capacitaciones_menu]
+} %}
+
+{% set certificaciones_uaeac_menu = {
+    "name": "Certificaciones UAEAC",
+    "url": "#",
+    "icon": icon_school_check,
+    "submenu": [
+        {"name": "Explotadores UAS", "url": url_for('core.uaeac_uas_operators') },
+        {"name": "Pilotos UAS", "url": url_for('core.uaeac_uas_pilots') },
+        {"name": "DJI Academy", "url": url_for('core.uaeac_dji_academy') },
+    ]
+} %}
+{% set sidebar_menu = {
+    "menu": sidebar_menu.menu + [certificaciones_uaeac_menu]
 } %}
 
 
 
- <aside id="sidebar" class="z-10 w-100 md:w-64 flex-shrink-0 h-full overflow-y-auto sidebar-hidden md:block mobile-drawer sidebar-transition bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white transition-colors duration-150"
+ <aside id="sidebar" class="tv-sidebar z-10 w-100 md:w-64 flex-shrink-0 h-full overflow-y-auto sidebar-hidden md:block mobile-drawer sidebar-transition text-gray-900 dark:text-white transition-colors duration-150"
     aria-label="Sidebar">
-    <div class="h-full px-3 py-4 overflow-y-auto bg-gray-50 dark:bg-gray-800">
+    <div class="h-full px-4 py-5 overflow-y-auto tv-sidebar-inner">
     {% if sidebar_menu %}
-        <ul class="space-y-2 font-medium">
+        <div class="sidebar-brand">
+            <img src="/img/logo.png" alt="TecnoVant" class="sidebar-brand__logo">
+        </div>
+        <ul class="space-y-2 font-medium sidebar-menu-list">
             {% for item in sidebar_menu.menu %}
                 {% set is_active = false %}
                   {% if item.submenu %}

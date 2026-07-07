@@ -651,6 +651,233 @@ class ResellerPackage(db.Model):
         return users
 
 
+class MaintenanceDrone(db.Model):
+    """Drone registered for maintenance and flight-hour tracking."""
+
+    __tablename__ = "maintenance_drones"
+
+    id = db.Column(db.Integer, primary_key=True)
+    serial_number = db.Column(db.String(80), nullable=False, unique=True, index=True)
+    brand = db.Column(db.String(80), nullable=False)
+    model = db.Column(db.String(120), nullable=False)
+    flight_hours = db.Column(db.Numeric(10, 1), nullable=False, default=0)
+    status = db.Column(db.String(40), nullable=False, default="Aeronavegable")
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(
+        db.DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+        nullable=False,
+    )
+
+    def __repr__(self):
+        return f"<MaintenanceDrone {self.brand} {self.model} {self.serial_number}>"
+
+
+class PilotProfile(db.Model):
+    """Operational pilot profile used by the calendar module."""
+
+    __tablename__ = "pilot_profiles"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.String(8), db.ForeignKey("users.id"), nullable=True, index=True)
+    username = db.Column(db.String(80), nullable=False, unique=True, index=True)
+    password_hash = db.Column(db.String(255), nullable=False)
+    role = db.Column(db.String(40), nullable=False, default="pilot")
+    first_name = db.Column(db.String(90), nullable=False)
+    last_name = db.Column(db.String(90), nullable=False)
+    document_number = db.Column(db.String(50), nullable=True, index=True)
+    phone = db.Column(db.String(50), nullable=True)
+    email = db.Column(db.String(120), nullable=True)
+    certification_status = db.Column(db.String(40), nullable=False, default="Vigente")
+    status = db.Column(db.String(30), nullable=False, default="active")
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(
+        db.DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+        nullable=False,
+    )
+
+    user = db.relationship("User", backref="pilot_profiles")
+    certifications = db.relationship(
+        "PilotCertification",
+        back_populates="pilot",
+        cascade="all, delete-orphan",
+    )
+    activities = db.relationship("OperationalActivity", back_populates="pilot")
+
+    @property
+    def full_name(self):
+        return f"{self.first_name} {self.last_name}".strip()
+
+
+class PilotCertification(db.Model):
+    __tablename__ = "pilot_certifications"
+
+    id = db.Column(db.Integer, primary_key=True)
+    pilot_id = db.Column(db.Integer, db.ForeignKey("pilot_profiles.id"), nullable=False, index=True)
+    name = db.Column(db.String(140), nullable=False)
+    issuer = db.Column(db.String(120), nullable=True)
+    certificate_number = db.Column(db.String(90), nullable=True)
+    issued_at = db.Column(db.Date, nullable=True)
+    expires_at = db.Column(db.Date, nullable=True)
+    status = db.Column(db.String(40), nullable=False, default="Vigente")
+    notes = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    pilot = db.relationship("PilotProfile", back_populates="certifications")
+
+
+class OperationalActivity(db.Model):
+    __tablename__ = "operational_activities"
+
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(140), nullable=False)
+    operation_type = db.Column(db.String(80), nullable=False)
+    starts_at = db.Column(db.DateTime, nullable=False, index=True)
+    ends_at = db.Column(db.DateTime, nullable=False, index=True)
+    duration_minutes = db.Column(db.Integer, nullable=False)
+    place = db.Column(db.String(180), nullable=False)
+    client_project = db.Column(db.String(160), nullable=True)
+    farm_name = db.Column(db.String(160), nullable=True)
+    paddocks = db.Column(db.Text, nullable=True)
+    area_hectares = db.Column(db.Numeric(10, 2), nullable=True)
+    rest_days = db.Column(db.Integer, nullable=True)
+    lot_code = db.Column(db.String(80), nullable=True)
+    pilot_id = db.Column(db.Integer, db.ForeignKey("pilot_profiles.id"), nullable=False, index=True)
+    drone_id = db.Column(db.Integer, db.ForeignKey("maintenance_drones.id"), nullable=False, index=True)
+    observations = db.Column(db.Text, nullable=True)
+    status = db.Column(db.String(30), nullable=False, default="scheduled", index=True)
+    created_by_id = db.Column(db.String(8), db.ForeignKey("users.id"), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(
+        db.DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+        nullable=False,
+    )
+    cancelled_at = db.Column(db.DateTime, nullable=True)
+    completed_at = db.Column(db.DateTime, nullable=True)
+
+    pilot = db.relationship("PilotProfile", back_populates="activities")
+    drone = db.relationship("MaintenanceDrone", backref="operational_activities")
+    created_by = db.relationship("User", backref="created_operational_activities")
+    logs = db.relationship(
+        "OperationalActivityLog",
+        back_populates="activity",
+        cascade="all, delete-orphan",
+    )
+
+
+class OperationalActivityLog(db.Model):
+    __tablename__ = "operational_activity_logs"
+
+    id = db.Column(db.Integer, primary_key=True)
+    activity_id = db.Column(db.Integer, db.ForeignKey("operational_activities.id"), nullable=False, index=True)
+    user_id = db.Column(db.String(8), db.ForeignKey("users.id"), nullable=True)
+    action = db.Column(db.String(40), nullable=False)
+    message = db.Column(db.String(255), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    activity = db.relationship("OperationalActivity", back_populates="logs")
+    user = db.relationship("User", backref="operational_activity_logs")
+
+
+class OperationBillingRecord(db.Model):
+    """Billing data linked to a completed operational activity."""
+
+    __tablename__ = "operation_billing_records"
+
+    id = db.Column(db.Integer, primary_key=True)
+    activity_id = db.Column(db.Integer, db.ForeignKey("operational_activities.id"), nullable=False, unique=True, index=True)
+    organization_id = db.Column(db.Integer, db.ForeignKey("organizations.id"), nullable=True, index=True)
+    source_item = db.Column(db.Integer, nullable=True, unique=True, index=True)
+    farm_name = db.Column(db.String(160), nullable=True, index=True)
+    paddock_name = db.Column(db.String(160), nullable=True)
+    area_hectares = db.Column(db.Numeric(10, 2), nullable=True)
+    scheduled_date = db.Column(db.Date, nullable=True, index=True)
+    executed_date = db.Column(db.Date, nullable=True, index=True)
+    billing_cut = db.Column(db.String(40), nullable=True, index=True)
+    billing_month = db.Column(db.String(40), nullable=True, index=True)
+    unit_price = db.Column(db.Numeric(14, 2), nullable=True)
+    invoice_total = db.Column(db.Numeric(14, 2), nullable=True)
+    invoice_number = db.Column(db.String(80), nullable=True, index=True)
+    pilot_name = db.Column(db.String(160), nullable=True)
+    operation_hours = db.Column(db.Numeric(8, 2), nullable=True)
+    hectares_per_hour = db.Column(db.Numeric(8, 2), nullable=True)
+    observations = db.Column(db.Text, nullable=True)
+    raw_payload = db.Column(db.JSON, default=dict)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    activity = db.relationship("OperationalActivity", backref=db.backref("billing_record", uselist=False))
+    organization = db.relationship("Organization", backref="operation_billing_records")
+
+
+class PilotDevice(db.Model):
+    __tablename__ = "pilot_devices"
+
+    id = db.Column(db.Integer, primary_key=True)
+    pilot_id = db.Column(db.Integer, db.ForeignKey("pilot_profiles.id"), nullable=False, index=True)
+    device_fingerprint = db.Column(db.String(128), nullable=False, index=True)
+    user_agent = db.Column(db.String(255), nullable=True)
+    is_authorized = db.Column(db.Boolean, nullable=False, default=True)
+    first_access_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    last_access_at = db.Column(
+        db.DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+        nullable=False,
+    )
+
+    pilot = db.relationship("PilotProfile", backref="devices")
+
+
+class PilotFlightLog(db.Model):
+    __tablename__ = "pilot_flight_logs"
+
+    id = db.Column(db.Integer, primary_key=True)
+    pilot_id = db.Column(db.Integer, db.ForeignKey("pilot_profiles.id"), nullable=False, index=True)
+    activity_id = db.Column(db.Integer, db.ForeignKey("operational_activities.id"), nullable=True, index=True)
+    drone_id = db.Column(db.Integer, db.ForeignKey("maintenance_drones.id"), nullable=False, index=True)
+    flight_date = db.Column(db.Date, nullable=False, index=True)
+    started_at = db.Column(db.DateTime, nullable=False)
+    ended_at = db.Column(db.DateTime, nullable=False)
+    flight_minutes = db.Column(db.Integer, nullable=False)
+    takeoff_location = db.Column(db.String(180), nullable=True)
+    landing_location = db.Column(db.String(180), nullable=True)
+    weather = db.Column(db.String(120), nullable=True)
+    battery_cycles = db.Column(db.Integer, nullable=True)
+    notes = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(
+        db.DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+        nullable=False,
+    )
+
+    pilot = db.relationship("PilotProfile", backref="flight_logs")
+    activity = db.relationship("OperationalActivity", backref="flight_logs")
+    drone = db.relationship("MaintenanceDrone", backref="pilot_flight_logs")
+
+
+class PilotOperationReport(db.Model):
+    __tablename__ = "pilot_operation_reports"
+
+    id = db.Column(db.Integer, primary_key=True)
+    pilot_id = db.Column(db.Integer, db.ForeignKey("pilot_profiles.id"), nullable=False, index=True)
+    activity_id = db.Column(db.Integer, db.ForeignKey("operational_activities.id"), nullable=True, index=True)
+    report_type = db.Column(db.String(60), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    status = db.Column(db.String(30), nullable=False, default="open", index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    pilot = db.relationship("PilotProfile", backref="operation_reports")
+    activity = db.relationship("OperationalActivity", backref="pilot_reports")
+
+
 # Funciones de utilidad.
 # Funciones de utilidad adicionales
 

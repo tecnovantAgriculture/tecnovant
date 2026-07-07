@@ -1,0 +1,3692 @@
+{# index.j2 #}
+{% extends "base.j2" %}
+{% set dashboard = true %}
+{% set bg_color = "bg-transparent" %}
+{% set rounded = "" %}
+{% set shadow = "" %}
+{% set padding = "" %}
+{% set main_clases = "flex-grow overflow-y-auto p-0" %}
+{% from "settings/_ui_class.j2" import base_button_classes, input_bg_color, border_color, hover_bg_color, focus_ring_color, button_bg_color, delete_button_bg_color, input_focus_bg_color, text_color %}
+{% from "macros/_forms.j2" import render_alert %}
+
+{% block extra_css %}
+  {{ css_code|safe }}
+  {{ super() }}
+  <link rel="stylesheet" href="/css/leaflet.css" />
+  <link rel="stylesheet" href="/css/leaflet.draw.css" />
+  <style>
+    #map{
+      height: clamp(380px, 72vh, 780px);
+      position: relative;
+      z-index: 0;
+    }
+
+    /* Keep space for right ruler (+ shift default right controls) */
+    :root { --ruler-right-w: 64px; }
+    #map .leaflet-top.leaflet-right{ right:var(--ruler-right-w,64px); }
+
+    /* Drop left controls by 40px to avoid top ruler overlap */
+    .leaflet-top.leaflet-left{ top:40px; }
+
+    .leaflet-top,.leaflet-bottom{ pointer-events:none; }
+    .leaflet-control{ pointer-events:auto; }
+
+    .leaflet-draw,
+    .leaflet-draw-toolbar {
+      display:none !important;
+    }
+
+    /* (Optional) Hide Leaflet attribution – keep it visible in production to respect license */
+    .leaflet-control-attribution.leaflet-control {
+      display:none !important; visibility:hidden !important; opacity:0 !important; pointer-events:none !important;
+    }
+    #foliar-analysis-modal {z-index:999999 !important}
+    #farm-picker-modal {z-index:999999 !important}
+
+    /* Fullscreen: right sidebar must not overflow viewport and must scroll independently */
+    #workzone:fullscreen aside,
+    #workzone:-webkit-full-screen aside,
+    #workzone:-moz-full-screen aside {
+      max-height: 100vh;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+    }
+  </style>
+{% endblock %}
+
+{% block extra_head %}
+  {{ js_code|safe }}
+  {{ super() }}
+{% endblock %}
+
+{% block content %}
+<div id="workzone" class="w-full bg-gray-100 dark:bg-gray-900 min-h-screen">
+  <div class="w-full px-2 py-2 space-y-4">
+    <nav class="text-sm text-gray-500 dark:text-gray-400">
+      <ol class="flex items-center gap-2">
+        <li><a href="{{ url_for('core.dashboard') }}" class="hover:text-gray-700 dark:hover:text-gray-300">Inicio</a></li>
+        <li class="text-gray-400 dark:text-gray-600">/</li>
+        <li><a href="{{ url_for('agrovista.hello') }}" class="hover:text-gray-700 dark:hover:text-gray-300">Análisis</a></li>
+        <li class="text-gray-400 dark:text-gray-600">/</li>
+        <li class="text-gray-700 dark:text-gray-300 font-medium">Imagen</li>
+      </ol>
+    </nav>
+
+    <header class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <h1 class="text-xl font-semibold text-gray-900 dark:text-gray-100">
+          Análisis de imagen –
+          <span id="headerAssetName" class="text-gray-500 dark:text-gray-400">{{ context_asset or "Sin ortofoto" }}</span>
+        </h1>
+        <p class="text-sm text-gray-500 dark:text-gray-400">
+          Dibuja polígonos sobre la ortofoto para calcular índices y preparar la comparación de lotes.
+        </p>
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        <button id="upload-trigger"
+                class="inline-flex items-center rounded-lg bg-white dark:bg-gray-800 px-3 py-2 text-xs font-medium text-gray-700 dark:text-gray-300 shadow-sm ring-1 ring-gray-200 dark:ring-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700">
+          Subir ortofoto
+        </button>
+        <button id="open-media-picker"
+                class="inline-flex items-center rounded-lg bg-gray-900 dark:bg-gray-100 px-3 py-2 text-xs font-semibold text-white dark:text-gray-900 shadow-sm hover:bg-gray-800 dark:hover:bg-gray-200">
+          Seleccionar desde Media
+        </button>
+        <div class="flex items-center gap-2 text-xs">
+          <span class="text-gray-500 dark:text-gray-400">Vista:</span>
+          <select id="preview-selector"
+                  class="block rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 py-1.5 pl-3 pr-8 text-xs shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500">
+            <option value="nd_index_rgba" selected>Índice espectral</option>
+            <option value="rgb">RGB</option>
+            <option value="vi_heat">VI Heat</option>
+            <option value="vi_ratio">VI Ratio</option>
+            <option value="vi_heatmap">Heatmap</option>
+          </select>
+        </div>
+        <button id="toggleLegendBtn"
+                class="inline-flex items-center rounded-full bg-gray-100 dark:bg-gray-700 px-3 py-1 text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600">
+          <span class="mr-2 h-2 w-2 rounded-full bg-gradient-to-r from-red-500 via-yellow-400 to-green-500"></span>
+          Mapa de colores
+        </button>
+      </div>
+    </header>
+
+    <input type="file" id="uploader" accept=".tif,.tiff,.jp2,.png,.jpg,.jpeg" class="hidden" />
+
+    <section class="grid gap-4 lg:grid-cols-12 lg:items-start">
+      <div class="lg:col-span-8 xl:col-span-9 space-y-3">
+        <div id="map-container" class="relative isolate overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm">
+          <!-- Herramientas de dibujo: izquierda, separadas del borde -->
+          <div id="drawing-tools-layer" class="absolute left-14 top-14 z-30 flex flex-col gap-2">
+            <button id="drawPolygonBtn"
+                    class="inline-flex items-center rounded-md bg-white dark:bg-gray-700 px-3 py-1.5 text-xs font-medium text-gray-800 dark:text-gray-100 shadow-md ring-1 ring-gray-200 dark:ring-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">
+              <span class="mr-2 inline-flex h-6 w-6 items-center justify-center rounded-md bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 text-xs">
+                △
+              </span>
+              Polígono
+            </button>
+            <button id="drawRectangleBtn"
+                    class="inline-flex items-center rounded-md bg-white dark:bg-gray-700 px-3 py-1.5 text-xs font-medium text-gray-800 dark:text-gray-100 shadow-md ring-1 ring-gray-200 dark:ring-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">
+              <span class="mr-2 inline-flex h-6 w-6 items-center justify-center rounded-md bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-400 text-xs">
+                ▭
+              </span>
+              Rectángulo
+            </button>
+            <button id="selectPolygonBtn"
+                    class="inline-flex items-center rounded-md bg-white dark:bg-gray-700 px-3 py-1.5 text-xs font-medium text-gray-800 dark:text-gray-100 shadow-md ring-1 ring-gray-200 dark:ring-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">
+              <span class="mr-2 inline-flex h-6 w-6 items-center justify-center rounded-md bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-400 text-xs">
+                ⌖
+              </span>
+              Seleccionar
+            </button>
+            <button id="resetMapBtn"
+                    class="inline-flex items-center rounded-md bg-white dark:bg-gray-700 px-3 py-1.5 text-xs font-medium text-gray-800 dark:text-gray-100 shadow-md ring-1 ring-gray-200 dark:ring-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">
+              <span class="mr-2 inline-flex h-6 w-6 items-center justify-center rounded-md bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-400 text-xs">
+                ↺
+              </span>
+              Reiniciar
+            </button>
+          </div>
+
+          <!-- Herramientas de utilidad: derecha, separadas del borde -->
+          <div class="absolute right-14 top-14 z-30 flex flex-col gap-2">
+            <button id="fit-bounds"
+                    class="inline-flex items-center rounded-md bg-white dark:bg-gray-700 px-3 py-1.5 text-xs font-medium text-gray-800 dark:text-gray-100 shadow-md ring-1 ring-gray-200 dark:ring-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">
+              Ajustar imagen
+            </button>
+            <button id="enter-fullscreen"
+                    class="inline-flex items-center rounded-md bg-white dark:bg-gray-700 px-3 py-1.5 text-xs font-medium text-gray-800 dark:text-gray-100 shadow-md ring-1 ring-gray-200 dark:ring-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">
+              Pantalla completa
+            </button>
+            <button id="exit-fullscreen"
+                    class="inline-flex items-center rounded-md bg-white dark:bg-gray-700 px-3 py-1.5 text-xs font-medium text-gray-800 dark:text-gray-100 shadow-md ring-1 ring-gray-200 dark:ring-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors hidden">
+              Salir pantalla completa
+            </button>
+            <button id="download-kmz"
+                    class="inline-flex items-center rounded-md bg-white dark:bg-gray-700 px-3 py-1.5 text-xs font-medium text-gray-400 dark:text-gray-400 shadow-md ring-1 ring-gray-200 dark:ring-gray-600 opacity-60 cursor-not-allowed"
+                    disabled>
+              Descargar KMZ
+            </button>
+          </div>
+
+          <div id="map" class="w-full bg-gray-100 dark:bg-gray-800"></div>
+        </div>
+
+        <div id="legendPanel"
+             class="flex items-center justify-between rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-3 text-xs text-gray-700 dark:text-gray-300 shadow-sm">
+          <div class="flex items-center gap-3 w-[100%]">
+            <span class="font-medium text-gray-800 dark:text-gray-200">Leyenda de colores</span>
+            <div id="rgb-bar-container" class="relative w-[90%] sm:w-[60%] lg:max-w-[40rem]">
+              <div id="rgb-bar" class="h-3 rounded-full bg-gradient-to-r from-red-500 via-yellow-400 to-green-500"></div>
+              <div id="ndviIndicator" class="absolute top-0 flex h-3 items-start transition-all duration-500 ease-out" style="left: 0%; opacity: 0;">
+                <div class="relative mx-auto flex h-4 w-4 items-center justify-center">
+                  <div class="absolute h-2.5 w-2.5 rotate-45 border-2 border-gray-900 dark:border-white bg-white dark:bg-gray-900 shadow-md"></div>
+                  <div class="absolute -bottom-5 left-1/2 -translate-x-1/2 whitespace-nowrap text-[9px] font-bold text-gray-900 dark:text-white drop-shadow-sm">
+                    <span id="ndviIndicatorLabel">--</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="flex items-center gap-4 text-[11px] text-gray-500 dark:text-gray-400">
+              <span>Bajo</span>
+              <span>Medio</span>
+              <span>Alto</span>
+            </div>
+          </div>
+          <div class="hidden sm:flex items-center gap-2 text-[11px] text-gray-500 dark:text-gray-400">
+            <span>Escala 0.0 – 1.0</span>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500 dark:text-gray-400">
+          <div id="method-box" class="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2 text-xs text-gray-600 dark:text-gray-400 shadow-sm">
+            Método: <span id="method-value">--</span>
+          </div>
+          <div id="status" class="text-xs text-gray-500 dark:text-gray-400" aria-live="polite">Sube una imagen para analizar</div>
+        </div>
+      </div>
+
+      <aside class="space-y-4 lg:col-span-4 xl:col-span-3">
+        <section class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 shadow-sm">
+          <h2 class="mb-3 text-sm font-semibold text-gray-800 dark:text-gray-200">Contexto</h2>
+          <dl class="space-y-1 text-sm text-gray-600 dark:text-gray-400">
+            <div class="flex justify-between">
+              <dt class="text-gray-500 dark:text-gray-400"><i class="fas fa-users mr-2"></i>Cliente</dt>
+              <dd id="contextClient" class="font-medium text-gray-800 dark:text-gray-200">{{ context_client or "Sin cliente" }}</dd>
+            </div>
+            <div class="flex justify-between">
+              <dt class="text-gray-500 dark:text-gray-400"><i class="fas fa-tractor mr-2"></i>Finca</dt>
+              <button id="contextFarm" type="button"
+                      class="font-medium text-emerald-600 dark:text-emerald-400 hover:underline text-sm text-right leading-snug">
+                {{ context_farm or "Seleccionar finca…" }}
+              </button>
+            </div>
+            <div class="flex justify-between">
+              <dt class="text-gray-500 dark:text-gray-400"><i class="fas fa-satellite-dish mr-2"></i>Ortofoto</dt>
+              <dd id="contextAsset" class="font-medium text-gray-800 dark:text-gray-200">{{ context_asset or "Sin ortofoto" }}</dd>
+            </div>
+          </dl>
+        </section>
+
+        <section class="rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50/70 dark:bg-blue-900/20 p-4 shadow-sm">
+          <h2 class="mb-3 text-sm font-semibold text-blue-900 dark:text-blue-300">
+            <i class="fas fa-map-marker mr-2"></i>Lote de referencia (trazabilidad)
+          </h2>
+          <div class="space-y-3 text-xs text-gray-700 dark:text-gray-300">
+            <div>
+              <label class="mb-1 block font-medium text-gray-700 dark:text-gray-400">Selecciona un lote guardado</label>
+              <select id="referenceLotsSelect"
+                      class="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 py-1.5 px-3 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                <option value="">-- Sin lote seleccionado --</option>
+              </select>
+            </div>
+            <div id="lotPolygonStatus" class="text-xs text-gray-500 dark:text-gray-400 italic">
+              Selecciona un lote para visualizar su polígono (si existe)
+            </div>
+            <button id="savePolygonToLotBtn"
+                    class="w-full inline-flex items-center justify-center rounded-lg bg-blue-600 hover:bg-blue-700 px-3 py-2 text-xs font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-gray-400"
+                    disabled
+                    title="Guarda el polígono dibujado en el lote seleccionado">
+              <i class="fas fa-save mr-2"></i>Guardar polígono en lote
+            </button>
+          </div>
+        </section>
+
+        <section class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 shadow-sm">
+          <div class="mb-3 flex items-center justify-between">
+             <h2 class="text-sm font-semibold text-gray-800 dark:text-gray-200"><i class="fas fa-seedling mr-2"></i>Lotes dibujados</h2>
+            <span class="rounded-full bg-emerald-50 dark:bg-emerald-900/30 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
+              <span id="lotsCount">0</span> lotes
+            </span>
+          </div>
+          <ul id="lotsList" class="space-y-2 text-sm">
+            <li class="text-xs italic text-gray-400 dark:text-gray-500">
+              Dibuja un polígono en el mapa para registrar el primer lote.
+            </li>
+          </ul>
+        </section>
+
+        <section class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 shadow-sm">
+          <div class="mb-3 flex items-center justify-between">
+             <h2 class="text-sm font-semibold text-gray-800 dark:text-gray-200"><i class="fas fa-chart-line mr-2"></i>Análisis del lote seleccionado</h2>
+            <span id="activeLotName" class="text-xs text-gray-500 dark:text-gray-400">Sin lote seleccionado</span>
+          </div>
+
+          <div class="space-y-3">
+            <div>
+              <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">
+                Fecha de análisis suelo/foliar
+              </label>
+              <select id="analysisDateSelect"
+                      class="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 py-1.5 px-3 text-sm shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      disabled>
+                <option>Selecciona un análisis disponible</option>
+              </select>
+            </div>
+
+            <div class="grid grid-cols-3 gap-3 text-center text-sm">
+              <div class="rounded-lg bg-gray-50 dark:bg-gray-700 px-2 py-2">
+                 <dt class="text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-400"><i class="fas fa-leaf mr-1"></i>NDVI</dt>
+                <dd id="ndviValue" class="mt-1 text-base font-semibold text-gray-900 dark:text-gray-100">--</dd>
+              </div>
+              <div class="rounded-lg bg-gray-50 dark:bg-gray-700 px-2 py-2">
+                 <dt class="text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-400"><i class="fas fa-sun mr-1"></i>VARI</dt>
+                <dd id="variValue" class="mt-1 text-base font-semibold text-gray-900 dark:text-gray-100">--</dd>
+              </div>
+              <div class="rounded-lg bg-gray-50 dark:bg-gray-700 px-2 py-2">
+                 <dt class="text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-400"><i class="fas fa-water mr-1"></i>NBI</dt>
+                <dd id="nbiValue" class="mt-1 text-base font-semibold text-gray-900 dark:text-gray-100">--</dd>
+              </div>
+            </div>
+
+            <div id="area" class="rounded-lg bg-gray-50 dark:bg-gray-700 px-3 py-2 text-xs text-gray-600 dark:text-gray-400">
+               <div id="area-box" aria-live="polite"><i class="fas fa-ruler mr-2"></i>Selecciona un polígono</div>
+            </div>
+
+            <div id="protein-box" class="rounded-lg bg-gray-50 dark:bg-gray-700 px-3 py-2 text-xs text-gray-600 dark:text-gray-400">
+              <div><i class="fas fa-flask mr-2"></i>Proteína: <span id="protein-value">--</span>%</div>
+              <div>Nitrógeno estimado: <span id="nitrogen-value">--</span>%</div>
+              <p id="protein-message" class="mt-1 text-[11px] text-gray-500 dark:text-gray-400"></p>
+            </div>
+
+            <div id="bromatologia-box" class="hidden rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2 text-xs">
+              <p class="mb-2 font-semibold text-gray-700 dark:text-gray-300"><i class="fas fa-seedling mr-1"></i>Perfil bromatológico</p>
+              <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-gray-600 dark:text-gray-400">
+                <div>FDA: <span id="broma-fda" class="font-medium text-gray-800 dark:text-gray-200">--</span>%</div>
+                <div>FDN: <span id="broma-fdn" class="font-medium text-gray-800 dark:text-gray-200">--</span>%</div>
+                <div>Energía: <span id="broma-mcal" class="font-medium text-gray-800 dark:text-gray-200">--</span> Mcal/kg</div>
+                <div>Energía: <span id="broma-mj" class="font-medium text-gray-800 dark:text-gray-200">--</span> MJ/kg</div>
+                <div>Energía2: <span id="broma-enl" class="font-medium text-gray-800 dark:text-gray-200">--</span> Mcal/kg</div>
+                <div>AFORO: <span id="broma-aforo" class="font-medium text-gray-800 dark:text-gray-200">--</span> UA/ha</div>
+              </div>
+              <p id="broma-warning" class="hidden mt-1 text-[11px] text-amber-600 dark:text-amber-400"></p>
+            </div>
+
+            <details class="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2">
+              <summary class="cursor-pointer text-xs font-medium text-gray-600 dark:text-gray-400">
+                Variables avanzadas
+              </summary>
+              <ul id="variables" class="mt-2 space-y-1 text-xs text-gray-600 dark:text-gray-400">
+                <li>VI (NDVI): <span data-var="vi">--</span></li>
+                <li>VARI: <span data-var="vari">--</span></li>
+                <li>GLI: <span data-var="gli">--</span></li>
+                <li>NGRDI: <span data-var="ngrdi">--</span></li>
+                <li>ExG: <span data-var="exg">--</span></li>
+              </ul>
+            </details>
+
+            <details class="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2">
+              <summary class="cursor-pointer text-xs font-medium text-gray-600 dark:text-gray-400">
+                Nutrientes estimados
+              </summary>
+              <div id="nutrients-box" class="mt-2 text-xs text-gray-700 dark:text-gray-300">
+                <ul id="nutrients-list" class="space-y-2">
+                  <li class="text-xs text-gray-500 dark:text-gray-400">
+                    Dibuja un polígono para estimar objetivos secundarios.
+                  </li>
+                </ul>
+              </div>
+            </details>
+
+            <div class="flex items-center justify-between gap-3">
+              <button id="saveLotAnalysisBtn"
+                      class="inline-flex flex-1 items-center justify-center rounded-lg bg-gray-900 dark:bg-gray-100 dark:text-gray-900 px-3 py-2 text-xs font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-gray-300 dark:disabled:bg-gray-700 dark:disabled:text-gray-500"
+                      disabled>
+                Guardar análisis del lote
+              </button>
+              <label class="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+                <input id="markAsObjectiveChk"
+                       type="checkbox"
+                       class="h-3.5 w-3.5 rounded border-gray-300 dark:border-gray-600 text-emerald-600 focus:ring-emerald-500"
+                       disabled>
+                <span>Usar como objetivo de referencia</span>
+              </label>
+            </div>
+
+            <div id="objectiveControls" class="space-y-2 hidden">
+              <div>
+                <label for="analysis-crop-name" class="block text-xs font-semibold text-gray-700 dark:text-gray-300">
+                  Cultivo de referencia
+                </label>
+                <input
+                  type="text"
+                  id="analysis-crop-name"
+                  list="analysis-crop-options"
+                  placeholder="Ej: Kikuyo"
+                  class="w-full mt-1 px-2 py-1.5 border rounded-md text-sm border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  autocomplete="off"
+                >
+                <datalist id="analysis-crop-options"></datalist>
+                <p id="analysis-crop-hint" class="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+                  Elige un cultivo registrado o escribe uno nuevo.
+                </p>
+              </div>
+
+              <button
+                id="btn-create-objective"
+                type="button"
+                class="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700"
+              >
+                <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14m7-7H5" />
+                </svg>
+                <span>Crear objetivo secundario</span>
+              </button>
+            </div>
+
+            <p id="indicesRange" class="text-[11px] text-gray-500 dark:text-gray-400">
+              Selecciona un polígono para ver sus índices y vincular un análisis de laboratorio.
+            </p>
+          </div>
+        </section>
+
+        <section class="rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/70 dark:bg-emerald-900/20 p-4 shadow-sm space-y-3">
+          <h2 class="text-sm font-semibold text-emerald-900 dark:text-emerald-300">
+            <i class="fas fa-balance-scale mr-2"></i>Preparar comparación nutricional
+          </h2>
+
+          <div class="space-y-2 text-xs text-gray-700 dark:text-gray-300">
+            <p class="font-medium">¿Qué quieres comparar?</p>
+
+            <div class="space-y-1">
+              <label class="flex items-center gap-2">
+                <input type="radio" name="compareMode" value="lot_vs_objective"
+                       class="h-3.5 w-3.5 text-emerald-600 focus:ring-emerald-500" checked>
+                <span>Lote vs objetivo ideal (tabla de objetivos guardados)</span>
+              </label>
+              <label class="flex items-center gap-2">
+                <input type="radio" name="compareMode" value="lot_vs_lot"
+                       class="h-3.5 w-3.5 text-emerald-600 focus:ring-emerald-500">
+                <span>Lote vs otro lote (ambos dibujados en la ortofoto)</span>
+              </label>
+            </div>
+          </div>
+
+          <div id="compareLotObjective" class="grid gap-3 text-xs md:grid-cols-2">
+            <div>
+              <label class="mb-1 block font-medium text-gray-700 dark:text-gray-300">Lote</label>
+              <select id="compareLotSelect"
+                      class="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 py-1.5 px-3 text-sm shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500">
+                <option value="">Selecciona un lote guardado</option>
+              </select>
+            </div>
+            <div>
+              <label class="mb-1 block font-medium text-gray-700 dark:text-gray-300">Objetivo ideal</label>
+              <select id="compareObjectiveSelect"
+                      class="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 py-1.5 px-3 text-sm shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500">
+                <option value="">Selecciona un objetivo</option>
+              </select>
+            </div>
+            <div class="md:col-span-2">
+              <label class="mb-1 block font-medium text-gray-700 dark:text-gray-300">Análisis del lote</label>
+              <select id="compareAnalysisSelect"
+                      class="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 py-1.5 px-3 text-sm shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled>
+                <option value="">Selecciona primero un lote</option>
+              </select>
+              <p class="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+                La comparación usa el análisis foliar del lote en esa fecha.
+              </p>
+            </div>
+          </div>
+
+          <div id="compareLotLot" class="grid gap-3 text-xs md:grid-cols-2 hidden">
+            <div>
+              <label class="mb-1 block font-medium text-gray-700 dark:text-gray-300">Lote A</label>
+              <select id="compareLotASelect"
+                      class="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 py-1.5 px-3 text-sm shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500">
+                <option value="">Selecciona Lote A</option>
+              </select>
+            </div>
+            <div>
+              <label class="mb-1 block font-medium text-gray-700 dark:text-gray-300">Lote B</label>
+              <select id="compareLotBSelect"
+                      class="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 py-1.5 px-3 text-sm shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500">
+                <option value="">Selecciona Lote B</option>
+              </select>
+            </div>
+          </div>
+
+          <p id="compareHint" class="text-[11px] text-emerald-900 dark:text-emerald-300">
+            Cuando tengas al menos un lote con análisis guardado podrás lanzar la comparación y ver la tabla de Ley de Mínimos.
+          </p>
+
+          <button id="goToComparisonBtn"
+                  class="mt-1 inline-flex w-full items-center justify-center rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-emerald-300 dark:disabled:bg-emerald-900 dark:disabled:text-emerald-500"
+                  data-compare-url="{{ url_for('agrovista.comparison_config') }}"
+                  disabled>
+            Ver comparación nutricional
+          </button>
+        </section>
+      </aside>
+    </section>
+  </div>
+</div>
+<div id="foliar-analysis-modal" class="hidden fixed inset-0 z-40 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center px-4 py-6">
+  <div class="w-full max-w-3xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl">
+    <div class="flex items-start justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-700">
+      <div>
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Nuevo analisis foliar</h2>
+        <p class="text-sm text-gray-500 dark:text-gray-400">Completa los datos para registrar el analisis y guardar los nutrientes del poligono.</p>
+      </div>
+      <button type="button" id="foliar-modal-close" class="{{ base_button_classes }} text-sm">Cerrar</button>
+    </div>
+    <form id="foliar-analysis-form" class="px-5 py-4 space-y-4">
+      <p id="foliar-analysis-message" class="text-sm text-red-500 hidden"></p>
+      <div class="grid gap-4 md:grid-cols-2">
+        <label class="flex flex-col text-sm gap-1">
+          <span class="font-semibold text-gray-800 dark:text-gray-100">Finca</span>
+          <select id="analysis-farm" class="px-2 py-2 border rounded-md border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800" required>
+            <option value="">Selecciona una finca</option>
+          </select>
+        </label>
+        <label class="flex flex-col text-sm gap-1">
+          <span class="font-semibold text-gray-800 dark:text-gray-100">Lote</span>
+          <select id="analysis-lot" class="px-2 py-2 border rounded-md border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800" required>
+            <option value="">Selecciona un lote</option>
+          </select>
+        </label>
+      </div>
+      <div class="flex items-center gap-2 text-sm">
+        <input type="checkbox" id="analysis-create-lot" class="h-4 w-4" />
+        <label for="analysis-create-lot" class="text-gray-700 dark:text-gray-200">Crear nuevo lote</label>
+      </div>
+      <div id="polygon-coordinates-box"
+           class="hidden rounded-md border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 px-3 py-2 space-y-1">
+        <div class="flex items-center justify-between text-xs">
+          <span class="font-semibold text-emerald-700 dark:text-emerald-400">
+            Coordenadas del polígono activo
+          </span>
+          <span id="polygon-area-preview"
+                class="font-mono text-emerald-700 dark:text-emerald-400"></span>
+        </div>
+        <details>
+          <summary class="cursor-pointer text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
+            Ver GeoJSON
+          </summary>
+          <pre id="polygon-geojson-preview"
+               class="mt-1 max-h-28 overflow-y-auto whitespace-pre-wrap break-all text-[10px] text-gray-600 dark:text-gray-300"></pre>
+        </details>
+      </div>
+      <div id="analysis-new-lot-fields" class="grid gap-4 md:grid-cols-2 hidden">
+        <label class="flex flex-col text-sm gap-1">
+          <span class="font-semibold text-gray-800 dark:text-gray-100">Nombre del lote</span>
+          <input id="analysis-lot-name" type="text" class="px-2 py-2 border rounded-md border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800" placeholder="Ej: Lote 1" />
+        </label>
+        <label class="flex flex-col text-sm gap-1">
+          <span class="font-semibold text-gray-800 dark:text-gray-100">Area (ha)</span>
+          <input id="analysis-lot-area" type="number" step="0.01" min="0" class="px-2 py-2 border rounded-md border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800" placeholder="Ej: 2.5" />
+        </label>
+      </div>
+      <div class="grid gap-4 md:grid-cols-2">
+        <label class="flex flex-col text-sm gap-1">
+          <span class="font-semibold text-gray-800 dark:text-gray-100">Fecha de analisis</span>
+          <input id="analysis-date" type="date" class="px-2 py-2 border rounded-md border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800" />
+        </label>
+        <label class="flex flex-col text-sm gap-1">
+          <span class="font-semibold text-gray-800 dark:text-gray-100">Proteina (%)</span>
+          <input id="analysis-protein" type="number" step="0.01" min="0" class="px-2 py-2 border rounded-md border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800" required />
+        </label>
+      </div>
+      <div class="grid gap-4 md:grid-cols-3">
+        <label class="flex flex-col text-sm gap-1">
+          <span class="font-semibold text-gray-800 dark:text-gray-100">Energia</span>
+          <input id="analysis-energy" type="number" step="0.01" class="px-2 py-2 border rounded-md border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800" required />
+        </label>
+        <label class="flex flex-col text-sm gap-1">
+          <span class="font-semibold text-gray-800 dark:text-gray-100">Descanso</span>
+          <input id="analysis-rest" type="number" step="0.01" class="px-2 py-2 border rounded-md border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800" required />
+        </label>
+        <label class="flex flex-col text-sm gap-1">
+          <span class="font-semibold text-gray-800 dark:text-gray-100">Dias de descanso</span>
+          <input id="analysis-rest-days" type="number" step="1" min="0" class="px-2 py-2 border rounded-md border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800" required />
+        </label>
+      </div>
+      <div class="grid gap-4 md:grid-cols-2">
+        <label class="flex flex-col text-sm gap-1">
+          <span class="font-semibold text-gray-800 dark:text-gray-100">Aforo</span>
+          <input id="analysis-yield" type="number" step="0.01" class="px-2 py-2 border rounded-md border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800" required />
+        </label>
+        <label class="flex flex-col text-sm gap-1">
+          <span class="font-semibold text-gray-800 dark:text-gray-100">Ciclo de pastoreo (mes)</span>
+          <input id="analysis-month" type="number" min="1" max="12" step="1" class="px-2 py-2 border rounded-md border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800" required />
+        </label>
+      </div>
+      <div class="flex justify-end gap-3 pt-2 border-t border-gray-200 dark:border-gray-700">
+        <button type="button" id="foliar-modal-cancel" class="{{ base_button_classes }}">Cancelar</button>
+        <button type="submit" id="foliar-modal-submit" class="{{ base_button_classes }} {{ button_bg_color }} text-white {{ focus_ring_color }}">Guardar analisis</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Farm Picker Modal -->
+<div id="farm-picker-modal"
+     class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center px-4 py-6"
+     aria-hidden="true">
+  <div class="w-full max-w-sm bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl">
+    <div class="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-700">
+      <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100">Seleccionar finca</h2>
+      <button id="farm-picker-close" type="button"
+              class="rounded p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 focus:outline-none">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+          <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/>
+        </svg>
+      </button>
+    </div>
+    <ul id="farm-picker-list"
+        class="max-h-64 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800 py-1">
+    </ul>
+    <div class="px-5 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-end">
+      <button id="farm-picker-cancel" type="button"
+              class="px-3 py-1.5 text-sm rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">
+        Cancelar
+      </button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+  {{ js_code|safe }}
+  {{ super() }}
+  <script src="/js/leaflet.js"></script>
+  <script src="/js/leaflet.draw.js"></script>
+  <script>
+  // --- Media Picker Modal Styles ---
+  (function(){
+    const style = document.createElement('style');
+    style.textContent = `
+      .media-picker-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,0.55); z-index: 1000; display: none; }
+      .media-picker-modal { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; z-index: 1001; padding: 24px; }
+      .media-picker-panel { position: relative; width: 90vw; max-width: 1280px; height: 80vh; max-height: 900px; border-radius: 16px; overflow: hidden; background: var(--mp-bg, #fff); border: 1px solid rgba(0,0,0,0.12); box-shadow: 0 15px 35px rgba(0,0,0,0.25); display: flex; flex-direction: column; }
+      .dark .media-picker-panel { --mp-bg: #0b1120; }
+      .media-picker-frame { flex: 1; width: 100%; height: 100%; border: 0; background: transparent; }
+      .media-picker-close { position: absolute; top: 12px; right: 12px; z-index: 5; background: rgba(255,255,255,0.85); color: #1f2937; }
+      .media-picker-close:hover { background: rgba(229,231,235,0.9); }
+      .dark .media-picker-close { background: rgba(31,41,55,0.85); color: #e5e7eb; }
+      .media-picker-loader { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(15,23,42,0.35); z-index: 4; }
+      .media-picker-loader[hidden] { display: none; }
+    `;
+    document.head.appendChild(style);
+  })();
+
+  /* -------------------------------
+   * Map UI Module (IIFE)
+   * Responsibilities: state, utils, map init, rulers, upload, draw events, fullscreen
+   * ------------------------------- */
+  (function(){
+    "use strict";
+
+    /* ---------- Config ---------- */
+    const ENDPOINTS = {
+      upload: "/api/agrovista/upload",
+      image:  (id) => `/api/agrovista/image/${id}.png`,
+      protein:"/api/agrovista/protein",
+      kmz:"/api/agrovista/polygon-kmz",
+      mediaMeta:(id) => `/api/media/assets/${id}/agrovista-meta`,
+      displayInfo:(id) => `/api/media/assets/${id}/display-info`,
+      analysisCrops:"/api/agrovista/analysis-crops",
+      secondaryObjectives:"/api/agrovista/secondary-objectives",
+      cropObjectives:"/api/foliage/objectives/",
+      foliageFarms:"/api/foliage/farms/",
+      foliageLots:"/api/foliage/lots/",
+      foliageLotCrops:"/api/foliage/lots_crops/",
+      commonAnalyses:"/api/foliage/common_analyses/",
+      leafAnalyses:"/api/foliage/leaf_analyses/",
+      lotSnapshot:"/api/agrovista/lot-snapshot"
+    };
+    const RIGHT_RULER_W = 64;  // px
+    const TOP_RULER_H   = 28;  // px
+
+    /* ---------- State ---------- */
+    let imageId = null;
+    let imageWidth = 0, imageHeight = 0;
+    let mppX = null, mppY = null; // meters-per-pixel
+    let overlay = null, imgBounds = null;
+    let imageMeta = null;
+    let statsRequestToken = 0;
+
+    /* ---------- DOM ---------- */
+    const el = {
+      workzone: document.getElementById("workzone"),
+      map:      document.getElementById("map"),
+      status:   document.getElementById("status"),
+      headerAssetName: document.getElementById("headerAssetName"),
+      contextClient: document.getElementById("contextClient"),
+      contextFarm: document.getElementById("contextFarm"),
+      contextAsset: document.getElementById("contextAsset"),
+      lotsList: document.getElementById("lotsList"),
+      lotsCount: document.getElementById("lotsCount"),
+      activeLotName: document.getElementById("activeLotName"),
+      analysisDateSelect: document.getElementById("analysisDateSelect"),
+      ndviValue: document.getElementById("ndviValue"),
+      variValue: document.getElementById("variValue"),
+      nbiValue: document.getElementById("nbiValue"),
+      areaBox:  document.getElementById("area-box"),
+      methodBox: document.getElementById("method-box"),
+      methodValue: document.getElementById("method-value"),
+      proteinBox: document.getElementById("protein-box"),
+      proteinValue: document.getElementById("protein-value"),
+      nitrogenValue: document.getElementById("nitrogen-value"),
+      proteinMessage: document.getElementById("protein-message"),
+      bromatologiaBox: document.getElementById("bromatologia-box"),
+      bromaFda: document.getElementById("broma-fda"),
+      bromaFdn: document.getElementById("broma-fdn"),
+      bromaMcal: document.getElementById("broma-mcal"),
+      bromaMj: document.getElementById("broma-mj"),
+      bromaEnl: document.getElementById("broma-enl"),
+      bromaAforo: document.getElementById("broma-aforo"),
+      bromaWarning: document.getElementById("broma-warning"),
+      uploader: document.getElementById("uploader"),
+      uploadTrigger: document.getElementById("upload-trigger"),
+      btnFit:   document.getElementById("fit-bounds"),
+      btnFsIn:  document.getElementById("enter-fullscreen"),
+      btnFsOut: document.getElementById("exit-fullscreen"),
+      btnOpenPicker: document.getElementById("open-media-picker"),
+      btnDownloadKmz: document.getElementById("download-kmz"),
+      previewSelector: document.getElementById("preview-selector"),
+      legendPanel: document.getElementById("legendPanel"),
+      ndviIndicator: document.getElementById("ndviIndicator"),
+      ndviIndicatorLabel: document.getElementById("ndviIndicatorLabel"),
+      toggleLegendBtn: document.getElementById("toggleLegendBtn"),
+      drawPolygonBtn: document.getElementById("drawPolygonBtn"),
+      drawRectangleBtn: document.getElementById("drawRectangleBtn"),
+      selectPolygonBtn: document.getElementById("selectPolygonBtn"),
+      resetMapBtn: document.getElementById("resetMapBtn"),
+      nutrientsBox: document.getElementById("nutrients-box"),
+      nutrientsList: document.getElementById("nutrients-list"),
+      analysisCropInput: document.getElementById("analysis-crop-name"),
+      analysisCropOptions: document.getElementById("analysis-crop-options"),
+      analysisCropHint: document.getElementById("analysis-crop-hint"),
+      btnCreateObjective: document.getElementById("btn-create-objective"),
+      saveLotAnalysisBtn: document.getElementById("saveLotAnalysisBtn"),
+      markAsObjectiveChk: document.getElementById("markAsObjectiveChk"),
+      objectiveControls: document.getElementById("objectiveControls"),
+      compareLotSelect: document.getElementById("compareLotSelect"),
+      compareObjectiveSelect: document.getElementById("compareObjectiveSelect"),
+      compareAnalysisSelect: document.getElementById("compareAnalysisSelect"),
+      compareLotASelect: document.getElementById("compareLotASelect"),
+      compareLotBSelect: document.getElementById("compareLotBSelect"),
+      compareLotObjective: document.getElementById("compareLotObjective"),
+      compareLotLot: document.getElementById("compareLotLot"),
+      compareModeInputs: document.querySelectorAll('input[name="compareMode"]'),
+      compareHint: document.getElementById("compareHint"),
+      goToComparisonBtn: document.getElementById("goToComparisonBtn"),
+      foliarModal: document.getElementById("foliar-analysis-modal"),
+      foliarForm: document.getElementById("foliar-analysis-form"),
+      foliarMessage: document.getElementById("foliar-analysis-message"),
+      foliarClose: document.getElementById("foliar-modal-close"),
+      foliarCancel: document.getElementById("foliar-modal-cancel"),
+      foliarSubmit: document.getElementById("foliar-modal-submit"),
+      analysisFarmSelect: document.getElementById("analysis-farm"),
+      analysisLotSelect: document.getElementById("analysis-lot"),
+      analysisCreateLotToggle: document.getElementById("analysis-create-lot"),
+      polygonCoordinatesBox: document.getElementById("polygon-coordinates-box"),
+      polygonAreaPreview: document.getElementById("polygon-area-preview"),
+      polygonGeojsonPreview: document.getElementById("polygon-geojson-preview"),
+      analysisNewLotFields: document.getElementById("analysis-new-lot-fields"),
+      analysisLotNameInput: document.getElementById("analysis-lot-name"),
+      analysisLotAreaInput: document.getElementById("analysis-lot-area"),
+      analysisDateInput: document.getElementById("analysis-date"),
+      analysisProteinInput: document.getElementById("analysis-protein"),
+      analysisEnergyInput: document.getElementById("analysis-energy"),
+      analysisRestInput: document.getElementById("analysis-rest"),
+      analysisRestDaysInput: document.getElementById("analysis-rest-days"),
+      analysisYieldInput: document.getElementById("analysis-yield"),
+      analysisMonthInput: document.getElementById("analysis-month"),
+      farmPickerModal: document.getElementById("farm-picker-modal"),
+      farmPickerList: document.getElementById("farm-picker-list"),
+      farmPickerClose: document.getElementById("farm-picker-close"),
+      farmPickerCancel: document.getElementById("farm-picker-cancel"),
+    };
+
+    /* Ensure area box exists in DOM */
+    if(!el.areaBox){
+      const container = document.querySelector("#area") || document.body;
+      const d = document.createElement("div");
+      d.id = "area-box"; d.className = "p-2 border rounded text-sm";
+      d.textContent = "Selecciona un polígono";
+      d.setAttribute("aria-live","polite");
+      container.appendChild(d);
+      el.areaBox = d;
+    }
+
+    const VARIABLE_KEYS = ["vi", "vari", "gli", "ngrdi", "exg"];
+    const varElems = VARIABLE_KEYS.reduce((acc, key) => {
+      acc[key] = document.querySelector(`[data-var="${key}"]`);
+      return acc;
+    }, {});
+
+    const analysisCropMap = new Map();
+    let analysisCropsList = [];
+    let lastAreaStats = null;
+    let isSavingObjective = false;
+    const areaStatsCache = new Map(); // cache local por polígono
+    let currentPreviewKey = "nd_index_rgba";
+    let currentVertices = null;
+    let currentVerticesRaster = null;
+    let activeLayerId = null;
+    let lotCounter = 0;
+    const lotState = new Map();
+    let commonAnalyses = [];
+    let secondaryObjectives = [];
+    let cropObjectives = [];
+    let lotCrops = [];
+    let lotCropsLoaded = false;
+
+    /* ---------- Utils ---------- */
+    // Nice step length selector for scales
+    function niceStep(length){
+      const seeds = [1,2,5];
+      const p = Math.pow(10, Math.floor(Math.log10(length || 1)));
+      let best = p;
+      for(const s of seeds){
+        const cand = s * p;
+        if(cand <= length) best = cand;
+        if(cand >= length * 0.6) return cand;
+      }
+      return best;
+    }
+
+    function formatMetric(value, decimals = 3){
+      if(typeof value === "number" && isFinite(value)){
+        return value.toFixed(decimals);
+      }
+      return "--";
+    }
+
+    function formatNutrientValue(value){
+      if(typeof value !== "number" || !isFinite(value)){
+        return "--";
+      }
+      if(Math.abs(value) >= 100){
+        return value.toFixed(1);
+      }
+      if(Math.abs(value) >= 10){
+        return value.toFixed(2);
+      }
+      return value.toFixed(3);
+    }
+
+    function isFiniteNumber(value){
+      return typeof value === "number" && isFinite(value);
+    }
+
+    function setText(node, value, fallback = "--"){
+      if(!node){
+        return;
+      }
+      const text = value === null || value === undefined || value === "" ? fallback : value;
+      node.textContent = text;
+    }
+
+    function updateAssetLabels(name){
+      const label = name || "Sin ortofoto";
+      setText(el.headerAssetName, label, "Sin ortofoto");
+      setText(el.contextAsset, label, "Sin ortofoto");
+    }
+
+    /* Escape helpers for HTML/attributes */
+    function escapeHtml(str){
+      return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+    function escapeAttr(str){
+      return String(str).replace(/"/g,'&quot;').replace(/'/g,'&#x27;');
+    }
+
+    /* Farm Picker */
+    function renderFarmPickerList() {
+      if (!el.farmPickerList) return;
+      if (!foliarState.farms.length) {
+        el.farmPickerList.innerHTML = '<li class="px-5 py-3 text-sm text-gray-400 dark:text-gray-500">Sin fincas disponibles</li>';
+        return;
+      }
+      el.farmPickerList.innerHTML = foliarState.farms.map(farm => {
+        const isActive = window.currentFarmId && Number(window.currentFarmId) === Number(farm.id);
+        const activeClass = isActive
+          ? 'bg-emerald-50 dark:bg-emerald-900/20 font-semibold text-emerald-700 dark:text-emerald-400'
+          : 'text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700';
+        return `<li><button type="button"
+          class="w-full text-left px-5 py-2.5 text-sm transition-colors ${activeClass}"
+          data-farm-id="${farm.id}" data-farm-name="${escapeAttr(farm.name)}">${escapeHtml(farm.name)}</button></li>`;
+      }).join('');
+    }
+    function openFarmPicker() {
+      renderFarmPickerList();
+      if (el.farmPickerModal) {
+        el.farmPickerModal.classList.remove("hidden");
+        el.farmPickerModal.setAttribute("aria-hidden", "false");
+      }
+    }
+    function closeFarmPicker() {
+      if (el.farmPickerModal) {
+        el.farmPickerModal.classList.add("hidden");
+        el.farmPickerModal.setAttribute("aria-hidden", "true");
+      }
+    }
+    function selectFarmFromPicker(farmId, farmName) {
+      window.currentFarmId = farmId;
+      setText(el.contextFarm, farmName, "Seleccionar finca…");
+      if (el.analysisFarmSelect) {
+        el.analysisFarmSelect.value = String(farmId);
+        renderLotOptions(farmId);
+      }
+      window.loadLotsForCurrentFarm(); // Cargar lotes en el bloque "Lote de referencia"
+      closeFarmPicker();
+    }
+
+    let legendVisible = true;
+    function setLegendVisible(visible){
+      if(!el.legendPanel){
+        return;
+      }
+      legendVisible = visible;
+      el.legendPanel.classList.toggle("hidden", !visible);
+    }
+
+    function toggleLegend(){
+      setLegendVisible(!legendVisible);
+    }
+
+    const analysisCropHintDefault = el.analysisCropHint ? el.analysisCropHint.textContent : "";
+    const analysisCropHintDefaultClass = el.analysisCropHint ? el.analysisCropHint.className : "";
+    const compareHintDefault = el.compareHint ? el.compareHint.textContent : "";
+    const compareHintDefaultClass = el.compareHint ? el.compareHint.className : "";
+    let isGeneratingComparison = false;
+    const compareButtonLabel = el.goToComparisonBtn ? el.goToComparisonBtn.textContent : "";
+
+    function setAnalysisCropHint(message, isError = false){
+      if(!el.analysisCropHint){
+        return;
+      }
+      const text = message || analysisCropHintDefault;
+      el.analysisCropHint.textContent = text;
+      if(analysisCropHintDefaultClass){
+        el.analysisCropHint.className = analysisCropHintDefaultClass;
+      }
+      if(isError){
+        el.analysisCropHint.classList.add("text-red-500", "dark:text-red-400");
+      }
+    }
+
+    function setCompareHint(message, isError = false){
+      if(!el.compareHint){
+        return;
+      }
+      const text = message || compareHintDefault;
+      el.compareHint.textContent = text;
+      if(compareHintDefaultClass){
+        el.compareHint.className = compareHintDefaultClass;
+      }
+      if(isError){
+        el.compareHint.classList.remove("text-emerald-900");
+        el.compareHint.classList.add("text-red-600");
+      }
+    }
+
+    function renderNutrients(items){
+      if(!el.nutrientsList){
+        return;
+      }
+      el.nutrientsList.innerHTML = "";
+      const data = Array.isArray(items) ? items : [];
+      if(data.length === 0){
+        const li = document.createElement("li");
+        li.className = "text-xs text-gray-500 dark:text-gray-400";
+        li.textContent = "Selecciona un polígono para estimar objetivos secundarios.";
+        el.nutrientsList.appendChild(li);
+        return;
+      }
+      // Filtrar Cl/cloro cuando no hay datos calibrados (target_value === 0)
+      const nutrientesAMostrar = data.filter(function(n) {
+        const sym = (n.nutrient_symbol || n.symbol || "").toLowerCase();
+        return !(sym === "cl" || sym === "cloro") || n.target_value !== 0;
+      });
+      // Símbolos con valor bibliográfico (constante, no calibrado localmente)
+      const BIBLIOGRAPHIC_SYMBOLS = new Set(["mo", "molibdeno", "si", "silicio"]);
+      for(const item of nutrientesAMostrar){
+        const name = item?.nutrient_name || item?.nutrient_symbol || "Nutriente";
+        const symbol = item?.nutrient_symbol ? ` (${item.nutrient_symbol})` : "";
+        const unit = item?.nutrient_unit ? ` ${item.nutrient_unit}` : "";
+        const value = formatNutrientValue(item?.target_value);
+        const sym = (item?.nutrient_symbol || "").toLowerCase();
+        const isBibliographic = BIBLIOGRAPHIC_SYMBOLS.has(sym);
+        const li = document.createElement("li");
+        li.className = "flex justify-between gap-2 text-sm";
+        const label = document.createElement("span");
+        label.className = isBibliographic
+          ? "font-medium text-emerald-600 dark:text-emerald-400"
+          : "font-medium";
+        label.textContent = `${name}${symbol}`;
+        const val = document.createElement("span");
+        val.className = isBibliographic
+          ? "tabular-nums text-emerald-600 dark:text-emerald-400"
+          : "tabular-nums";
+        val.textContent = `${value}${unit}`;
+        li.appendChild(label);
+        li.appendChild(val);
+        el.nutrientsList.appendChild(li);
+      }
+    }
+
+    function ensureLotEntry(layer){
+      const key = getLayerKey(layer);
+      if(key === null){
+        return null;
+      }
+      if(!lotState.has(key)){
+        lotCounter += 1;
+        lotState.set(key, {
+          id: key,
+          name: `Lote ${lotCounter}`,
+          stats: null,
+          areaStats: null,
+          linkedLotId: null,
+          linkedCommonAnalysisId: null,
+          linkedLotName: null,
+        });
+      }
+      return lotState.get(key);
+    }
+
+    function getPrimaryStatsFromData(data){
+      const vars = getVariablesSource(data);
+      const ndvi = vars?.vi;
+      const vari = vars?.vari;
+      const nbi = typeof vars?.nbi === "number" ? vars.nbi : vars?.exg;
+      return { ndvi, vari, nbi };
+    }
+
+    function setPrimaryMetrics(data){
+      const stats = getPrimaryStatsFromData(data || {});
+      if(el.ndviValue){
+        el.ndviValue.textContent = formatMetric(stats.ndvi, 2);
+      }
+      if(el.variValue){
+        el.variValue.textContent = formatMetric(stats.vari, 2);
+      }
+      if(el.nbiValue){
+        el.nbiValue.textContent = formatMetric(stats.nbi, 2);
+        if(typeof stats.nbi === "number" && !("nbi" in (data || {}))){
+          el.nbiValue.setAttribute("title", "ExG (aprox.)");
+        }else{
+          el.nbiValue.removeAttribute("title");
+        }
+      }
+      // Update NDVI indicator position on rgb-bar
+      if(el.ndviIndicator){
+        if(typeof stats.ndvi === "number" && isFinite(stats.ndvi)){
+          const pct = Math.max(0, Math.min(100, stats.ndvi * 100));
+          el.ndviIndicator.style.left = pct + "%";
+          el.ndviIndicator.style.opacity = "1";
+          if(el.ndviIndicatorLabel){
+            el.ndviIndicatorLabel.textContent = stats.ndvi.toFixed(2);
+          }
+        } else {
+          el.ndviIndicator.style.opacity = "0";
+          if(el.ndviIndicatorLabel){
+            el.ndviIndicatorLabel.textContent = "--";
+          }
+        }
+      }
+    }
+
+    const polygonStyleNormal = { color: '#0066cc', weight: 2, opacity: 0.7, fillOpacity: 0.2 };
+    const polygonStyleActive = { color: '#22c55e', weight: 3, opacity: 1, fillOpacity: 0.35 };
+
+    function setActiveLayer(layer){
+      const entry = ensureLotEntry(layer);
+      // Restaurar estilo normal al layer anterior
+      if(activeLayerId !== null){
+        const prevLayer = drawnItems.getLayer(activeLayerId);
+        if(prevLayer && typeof prevLayer.setStyle === "function"){
+          prevLayer.setStyle(polygonStyleNormal);
+        }
+      }
+      // Aplicar estilo activo al nuevo layer
+      if(layer && typeof layer.setStyle === "function"){
+        layer.setStyle(polygonStyleActive);
+      }
+      // Actualizar activeLayerId
+      if(entry){
+        activeLayerId = entry.id;
+        setText(el.activeLotName, entry.name, "Sin lote seleccionado");
+      }else{
+        activeLayerId = null;
+        setText(el.activeLotName, "Sin lote seleccionado");
+      }
+      renderLotsList();
+    }
+
+    function renderLotsList(){
+      if(!el.lotsList){
+        return;
+      }
+      const entries = Array.from(lotState.values());
+      if(el.lotsCount){
+        el.lotsCount.textContent = String(entries.length);
+      }
+      if(entries.length === 0){
+        el.lotsList.innerHTML = '<li class="text-xs italic text-gray-400">Dibuja un polígono en el mapa para registrar el primer lote.</li>';
+        return;
+      }
+      el.lotsList.innerHTML = "";
+      entries.forEach(entry => {
+        const li = document.createElement("li");
+        const isActive = activeLayerId === entry.id;
+        li.className = `flex items-start justify-between gap-3 rounded-lg border px-3 py-2 ${isActive ? "border-emerald-200 bg-emerald-50/60" : "border-gray-100 bg-white"}`;
+        const left = document.createElement("div");
+        const title = document.createElement("p");
+        title.className = "text-sm font-medium text-gray-900";
+        title.textContent = entry.name;
+        left.appendChild(title);
+        const meta = document.createElement("p");
+        meta.className = "text-[11px] text-gray-500";
+        if(entry.stats){
+          meta.textContent = `NDVI: ${formatMetric(entry.stats.ndvi, 2)} · VARI: ${formatMetric(entry.stats.vari, 2)} · NBI: ${formatMetric(entry.stats.nbi, 2)}`;
+        } else if(entry.computing){
+          meta.className = "text-[11px] text-emerald-600 dark:text-emerald-400 font-medium";
+          meta.innerHTML = '<span class="inline-flex items-center gap-1.5"><svg class="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/></svg>Calculando…</span>';
+        } else {
+          meta.textContent = "Sin análisis calculado";
+        }
+        left.appendChild(meta);
+        const action = document.createElement("button");
+        action.type = "button";
+        action.className = "text-[11px] font-medium text-emerald-700 hover:underline";
+        action.textContent = "Ver";
+        action.addEventListener("click", () => {
+          const layer = drawnItems.getLayer(entry.id);
+          if(layer){
+            setActiveLayer(layer);
+            updateStatsForLayer(layer);
+          }
+        });
+        li.appendChild(left);
+        li.appendChild(action);
+        el.lotsList.appendChild(li);
+      });
+      renderCompareDrawnLots();
+    }
+
+    function updateAnalysisCropOptions(items){
+      analysisCropsList = Array.isArray(items) ? items.slice() : [];
+      analysisCropsList.sort((a, b) => {
+        const nameA = (a?.name || "").toLowerCase();
+        const nameB = (b?.name || "").toLowerCase();
+        return nameA.localeCompare(nameB);
+      });
+      analysisCropMap.clear();
+      if(el.analysisCropOptions){
+        el.analysisCropOptions.innerHTML = "";
+      }
+      for(const crop of analysisCropsList){
+        if(!crop || !crop.name){
+          continue;
+        }
+        const key = crop.name.toLowerCase();
+        analysisCropMap.set(key, crop.id);
+        if(el.analysisCropOptions){
+          const option = document.createElement("option");
+          option.value = crop.name;
+          el.analysisCropOptions.appendChild(option);
+        }
+      }
+    }
+
+    async function fetchAnalysisCrops(){
+      try{
+        const res = await fetch(ENDPOINTS.analysisCrops, { credentials: "include" });
+        if(!res.ok){
+          return;
+        }
+        const data = await res.json();
+        updateAnalysisCropOptions(Array.isArray(data) ? data : []);
+      }catch(err){
+        console.error("analysis-crops", err);
+      }
+    }
+
+    function resolveAnalysisCropSelection(){
+      const input = el.analysisCropInput;
+      if(!input){
+        return { id: null, name: "" };
+      }
+      const name = (input.value || "").trim();
+      if(!name){
+        return { id: null, name: "" };
+      }
+      const key = name.toLowerCase();
+      const id = analysisCropMap.has(key) ? analysisCropMap.get(key) : null;
+      return { id, name };
+    }
+
+    const foliarState = {
+      farms: [],
+      lots: [],
+    };
+    let isSavingFoliar = false;
+
+    function setFoliarMessage(message, isError = false){
+      if(!el.foliarMessage){
+        return;
+      }
+      if(!message){
+        el.foliarMessage.classList.add("hidden");
+        el.foliarMessage.textContent = "";
+        el.foliarMessage.classList.remove("text-red-500", "text-green-600");
+        return;
+      }
+      el.foliarMessage.textContent = message;
+      el.foliarMessage.classList.remove("hidden");
+      el.foliarMessage.classList.remove("text-red-500", "text-green-600");
+      el.foliarMessage.classList.toggle("text-red-500", isError);
+      el.foliarMessage.classList.toggle("text-green-600", !isError);
+    }
+
+    function renderFarmOptions(selectedId){
+      if(!el.analysisFarmSelect){
+        return;
+      }
+      const options = ["<option value=\"\">Selecciona una finca</option>"];
+      for(const farm of foliarState.farms){
+        if(!farm){ continue; }
+        const value = farm.id;
+        const name = farm.name || `Finca ${farm.id}`;
+        const selected = selectedId && Number(selectedId) === Number(value) ? " selected" : "";
+        options.push(`<option value="${value}"${selected}>${name}</option>`);
+      }
+      el.analysisFarmSelect.innerHTML = options.join("");
+    }
+
+    function renderLotOptions(farmId, selectedId){
+      if(!el.analysisLotSelect){
+        return;
+      }
+      const rows = foliarState.lots.filter(lot => {
+        if(!farmId){
+          return true;
+        }
+        return Number(lot.farm_id) === Number(farmId);
+      });
+      const options = ["<option value=\"\">Selecciona un lote</option>"];
+      for(const lot of rows){
+        if(!lot){ continue; }
+        const value = lot.id;
+        const label = lot.name || `Lote ${lot.id}`;
+        const selected = selectedId && Number(selectedId) === Number(value) ? " selected" : "";
+        options.push(`<option value="${value}"${selected}>${label}</option>`);
+      }
+      el.analysisLotSelect.innerHTML = options.join("");
+    }
+
+    function buildFarmMap(){
+      const map = new Map();
+      for(const farm of foliarState.farms){
+        if(farm && farm.id != null){
+          map.set(Number(farm.id), farm.name || `Finca ${farm.id}`);
+        }
+      }
+      return map;
+    }
+
+    function getFarmNameById(farmId){
+      if(!farmId){
+        return null;
+      }
+      const farm = foliarState.farms.find(item => Number(item?.id) === Number(farmId));
+      return farm ? (farm.name || `Finca ${farm.id}`) : null;
+    }
+
+    function renderCompareLotOptions(){
+      if(!el.compareLotSelect){
+        return;
+      }
+      const farmMap = buildFarmMap();
+      const options = ["<option value=\"\">Selecciona un lote guardado</option>"];
+      for(const lot of foliarState.lots){
+        if(!lot){ continue; }
+        const farmName = farmMap.get(Number(lot.farm_id)) || "Finca";
+        const label = `${farmName} · ${lot.name || `Lote ${lot.id}`}`;
+        options.push(`<option value=\"${lot.id}\">${label}</option>`);
+      }
+      el.compareLotSelect.innerHTML = options.join("");
+      renderCompareAnalysisOptions();
+    }
+
+    function getCommonAnalysesForLot(lotId){
+      if(!lotId || !Array.isArray(commonAnalyses)){
+        return [];
+      }
+      return commonAnalyses
+        .filter(item => item && Number(item.lot_id) === Number(lotId))
+        .slice()
+        .sort((a, b) => {
+          const stampA = Date.parse(a?.date || a?.created_at || "");
+          const stampB = Date.parse(b?.date || b?.created_at || "");
+          return (Number.isFinite(stampB) ? stampB : 0) - (Number.isFinite(stampA) ? stampA : 0);
+        });
+    }
+
+    function renderCompareAnalysisOptions(){
+      if(!el.compareAnalysisSelect){
+        updateComparisonButtonState();
+        return;
+      }
+      const lotIdRaw = el.compareLotSelect ? el.compareLotSelect.value : "";
+      if(!lotIdRaw){
+        el.compareAnalysisSelect.innerHTML = '<option value="">Selecciona primero un lote</option>';
+        el.compareAnalysisSelect.disabled = true;
+        updateComparisonButtonState();
+        return;
+      }
+      const items = getCommonAnalysesForLot(lotIdRaw);
+      if(!items.length){
+        el.compareAnalysisSelect.innerHTML = '<option value="">Sin análisis foliares registrados</option>';
+        el.compareAnalysisSelect.disabled = true;
+        updateComparisonButtonState();
+        return;
+      }
+      const options = items.map((item, idx) => {
+        const date = item?.date || item?.created_at || "";
+        const suffix = idx === 0 ? " (más reciente)" : "";
+        return `<option value="${item.id}"${idx === 0 ? " selected" : ""}>Análisis del ${date}${suffix}</option>`;
+      });
+      el.compareAnalysisSelect.innerHTML = options.join("");
+      el.compareAnalysisSelect.disabled = false;
+      updateComparisonButtonState();
+    }
+
+    function renderCompareDrawnLots(){
+      const entries = Array.from(lotState.values());
+      if(el.compareLotASelect){
+        const opts = ["<option value=\"\">Selecciona Lote A</option>"];
+        entries.forEach(entry => {
+          const linkedName = entry.linkedLotName ? ` · ${entry.linkedLotName}` : "";
+          const suffix = entry.linkedLotId ? "" : " (sin guardar)";
+          const label = `${entry.name}${linkedName}${suffix}`;
+          opts.push(`<option value=\"${entry.id}\">${label}</option>`);
+        });
+        el.compareLotASelect.innerHTML = opts.join("");
+      }
+      if(el.compareLotBSelect){
+        const opts = ["<option value=\"\">Selecciona Lote B</option>"];
+        entries.forEach(entry => {
+          const linkedName = entry.linkedLotName ? ` · ${entry.linkedLotName}` : "";
+          const suffix = entry.linkedLotId ? "" : " (sin guardar)";
+          const label = `${entry.name}${linkedName}${suffix}`;
+          opts.push(`<option value=\"${entry.id}\">${label}</option>`);
+        });
+        el.compareLotBSelect.innerHTML = opts.join("");
+      }
+      updateComparisonButtonState();
+    }
+
+    function renderObjectiveOptions(){
+      if(!el.compareObjectiveSelect){
+        return;
+      }
+      const options = ["<option value=\"\">Selecciona un objetivo</option>"];
+      if(secondaryObjectives.length){
+        options.push('<optgroup label="Objetivos secundarios">');
+        secondaryObjectives.forEach(obj => {
+          const cropName = obj?.analysis_crop?.name || `Objetivo ${obj?.id}`;
+          const label = `${cropName} · Secundario #${obj?.id ?? ""}`.trim();
+          options.push(`<option value="secondary:${obj?.id}">${label}</option>`);
+        });
+        options.push("</optgroup>");
+      }
+      if(cropObjectives.length){
+        options.push('<optgroup label="Objetivos de cultivo">');
+        cropObjectives.forEach(obj => {
+          const cropName = obj?.crop_name || `Cultivo ${obj?.crop_id ?? ""}`;
+          const target = typeof obj?.target_value === "number" ? ` · Target ${obj.target_value}` : "";
+          const label = `Objetivo ${cropName}${target}`.trim();
+          options.push(`<option value="crop:${obj?.id}">${label}</option>`);
+        });
+        options.push("</optgroup>");
+      }
+      el.compareObjectiveSelect.innerHTML = options.join("");
+    }
+
+    function updateCompareMode(){
+      if(!el.compareLotObjective || !el.compareLotLot){
+        return;
+      }
+      const mode = getSelectedCompareMode();
+      const isObjective = mode === "lot_vs_objective";
+      el.compareLotObjective.classList.toggle("hidden", !isObjective);
+      el.compareLotLot.classList.toggle("hidden", isObjective);
+      updateComparisonButtonState();
+    }
+
+    function parseObjectiveValue(value){
+      if(!value){
+        return { type: null, id: null };
+      }
+      const parts = String(value).split(":");
+      if(parts.length === 2){
+        return { type: parts[0], id: Number(parts[1]) };
+      }
+      return { type: "crop", id: Number(value) };
+    }
+
+    function getLatestCommonAnalysisId(lotId){
+      if(!lotId || !Array.isArray(commonAnalyses)){
+        return null;
+      }
+      let latestId = null;
+      let latestStamp = -1;
+      commonAnalyses.forEach(item => {
+        if(!item || Number(item?.lot_id) !== Number(lotId)){
+          return;
+        }
+        const rawDate = item?.date || item?.created_at || "";
+        const stamp = Date.parse(rawDate);
+        const resolved = Number.isFinite(stamp) ? stamp : 0;
+        if(latestId === null || resolved > latestStamp){
+          latestId = item?.id ?? null;
+          latestStamp = resolved;
+        }
+      });
+      return latestId;
+    }
+
+    function getSelectedLotLabel(lotId){
+      if(el.compareLotSelect){
+        const option = el.compareLotSelect.options[el.compareLotSelect.selectedIndex];
+        if(option && option.textContent){
+          return option.textContent.trim();
+        }
+      }
+      return lotId ? `Lote ${lotId}` : "Lote";
+    }
+
+    function getLotEntryById(entryId){
+      if(!entryId){
+        return null;
+      }
+      return lotState.get(Number(entryId)) || null;
+    }
+
+    function getEntryLabel(entry){
+      if(!entry){
+        return "Lote";
+      }
+      const linked = entry.linkedLotName ? ` · ${entry.linkedLotName}` : "";
+      return `${entry.name}${linked}`.trim();
+    }
+
+    function computeAreaHaForLayer(layer){
+      if(!layer){
+        return null;
+      }
+      const verts = getRasterVertices(layer) || extractVertices(layer);
+      if(!Array.isArray(verts) || verts.length < 3){
+        return null;
+      }
+      if(mppX == null){
+        return null;
+      }
+      const _mppY = (mppY != null) ? mppY : mppX;
+      const px2 = polygonAreaVerticesPx2(verts);
+      const m2 = px2 * mppX * _mppY;
+      const ha = m2 / 10000;
+      return Number.isFinite(ha) ? ha : null;
+    }
+
+    function updateLotAreaInput(force = false){
+      if(!el.analysisLotAreaInput){
+        return;
+      }
+      if(!force && el.analysisLotAreaInput.dataset.manual === "1" && el.analysisLotAreaInput.value){
+        return;
+      }
+      const layer = activeLayerId !== null ? drawnItems.getLayer(activeLayerId) : null;
+      if(!layer){
+        return;
+      }
+      const ha = computeAreaHaForLayer(layer);
+      if(!Number.isFinite(ha) || ha <= 0){
+        return;
+      }
+      el.analysisLotAreaInput.value = ha.toFixed(2);
+    }
+
+    function getSelectedCompareMode(){
+      if(!el.compareModeInputs){
+        return "lot_vs_objective";
+      }
+      const input = Array.from(el.compareModeInputs).find(node => node.checked);
+      return input ? input.value : "lot_vs_objective";
+    }
+
+    function updateComparisonButtonState(){
+      if(!el.goToComparisonBtn){
+        return;
+      }
+      if(isGeneratingComparison){
+        el.goToComparisonBtn.disabled = true;
+        return;
+      }
+      const mode = getSelectedCompareMode();
+      let ready = false;
+      if(mode === "lot_vs_objective"){
+        const lot = el.compareLotSelect ? el.compareLotSelect.value : "";
+        const objective = el.compareObjectiveSelect ? el.compareObjectiveSelect.value : "";
+        const analysisOk = !el.compareAnalysisSelect || !!el.compareAnalysisSelect.value;
+        ready = !!(lot && objective && analysisOk);
+      }else{
+        const lotA = el.compareLotASelect ? el.compareLotASelect.value : "";
+        const lotB = el.compareLotBSelect ? el.compareLotBSelect.value : "";
+        const entryB = getLotEntryById(lotB);
+        const hasLinkedLot = entryB && Number.isFinite(Number(entryB.linkedLotId));
+        const hasCommon = entryB && (entryB.linkedCommonAnalysisId || getLatestCommonAnalysisId(entryB.linkedLotId));
+        ready = !!(lotA && lotB && lotA !== lotB && hasLinkedLot && hasCommon);
+      }
+      el.goToComparisonBtn.disabled = !ready;
+      if(ready){
+        setCompareHint("Comparación lista para revisar los resultados nutricionales.");
+        return;
+      }
+      if(mode === "lot_vs_lot"){
+        const lotA = el.compareLotASelect ? el.compareLotASelect.value : "";
+        const lotB = el.compareLotBSelect ? el.compareLotBSelect.value : "";
+        if(!lotA || !lotB){
+          setCompareHint("Selecciona los dos lotes dibujados para generar la comparación.");
+          return;
+        }
+        if(lotA === lotB){
+          setCompareHint("Selecciona dos lotes diferentes.", true);
+          return;
+        }
+        const entryB = getLotEntryById(lotB);
+        if(!entryB || !entryB.linkedLotId){
+          setCompareHint("Guarda el análisis foliar del Lote B antes de generar el informe.", true);
+          return;
+        }
+        if(!entryB.linkedCommonAnalysisId && !getLatestCommonAnalysisId(entryB.linkedLotId)){
+          setCompareHint("El Lote B no tiene un análisis común registrado.", true);
+          return;
+        }
+        const entryA = getLotEntryById(lotA);
+        if(entryA && (!entryA.areaStats || !Array.isArray(entryA.areaStats.nutrients) || entryA.areaStats.nutrients.length === 0)){
+          setCompareHint("Haz clic en el Lote A para calcular sus datos antes de comparar.");
+          return;
+        }
+        setCompareHint("Selecciona ambos lotes para comparar y generar el informe.");
+        return;
+      }
+      const lotValue = el.compareLotSelect ? el.compareLotSelect.value : "";
+      if(lotValue && el.compareAnalysisSelect && el.compareAnalysisSelect.disabled){
+        setCompareHint("El lote seleccionado no tiene análisis foliares registrados.", true);
+        return;
+      }
+      if(lotValue && el.compareAnalysisSelect && !el.compareAnalysisSelect.value){
+        setCompareHint("Selecciona el análisis del lote que quieres comparar.");
+        return;
+      }
+      const objectiveValue = el.compareObjectiveSelect ? el.compareObjectiveSelect.value : "";
+      if(objectiveValue || lotValue){
+        setCompareHint("Selecciona el lote, su análisis y el objetivo ideal para generar la comparación.");
+        return;
+      }
+      setCompareHint("Cuando tengas al menos un lote con análisis guardado podrás lanzar la comparación y ver la tabla de Ley de Mínimos.");
+    }
+
+    async function ensureAreaStatsForEntry(entry){
+      if(!entry){
+        return null;
+      }
+      if(entry.areaStats && Array.isArray(entry.areaStats.nutrients) && entry.areaStats.nutrients.length){
+        return entry.areaStats;
+      }
+      const layer = drawnItems.getLayer(entry.id);
+      if(!layer){
+        return null;
+      }
+      await updateStatsForLayer(layer);
+      return entry.areaStats || null;
+    }
+
+    function toggleNewLotFields(force){
+      if(!el.analysisNewLotFields || !el.analysisCreateLotToggle){
+        return;
+      }
+      const shouldShow = typeof force === "boolean" ? force : !!el.analysisCreateLotToggle.checked;
+      el.analysisNewLotFields.classList.toggle("hidden", !shouldShow);
+      if(el.analysisLotSelect){
+        el.analysisLotSelect.disabled = shouldShow;
+      }
+      if(shouldShow){
+        updateLotAreaInput(true);
+      }
+    }
+
+    function resetFoliarForm(){
+      if(el.foliarForm){
+        el.foliarForm.reset();
+      }
+      setFoliarMessage("");
+      toggleNewLotFields(false);
+      const today = new Date().toISOString().split("T")[0];
+      if(el.analysisDateInput){
+        el.analysisDateInput.value = today;
+      }
+      if(el.analysisMonthInput){
+        const month = new Date().getMonth() + 1;
+        el.analysisMonthInput.value = month;
+      }
+      if(el.analysisProteinInput){
+        const value = lastAreaStats && typeof lastAreaStats.protein === "number"
+          ? lastAreaStats.protein
+          : lastAreaStats?.protein_average;
+        if(value != null && isFinite(value)){
+          el.analysisProteinInput.value = Number(value).toFixed(2);
+        }else{
+          el.analysisProteinInput.value = "";
+        }
+      }
+      if(el.analysisEnergyInput){
+        const energyMcal = lastAreaStats?.bromatologia?.energia_mcal;
+        if(energyMcal != null && isFinite(energyMcal)){
+          el.analysisEnergyInput.value = Number(energyMcal).toFixed(2);
+        }else{
+          el.analysisEnergyInput.value = "";
+        }
+      }
+      if(el.analysisYieldInput){
+        const yieldUaHa = lastAreaStats?.bromatologia?.aforo_ua_ha;
+        if(yieldUaHa != null && isFinite(yieldUaHa)){
+          el.analysisYieldInput.value = Number(yieldUaHa).toFixed(2);
+        }else{
+          el.analysisYieldInput.value = "";
+        }
+      }
+      if(el.analysisLotAreaInput){
+        el.analysisLotAreaInput.dataset.manual = "0";
+      }
+      renderFarmOptions(window.currentFarmId);
+      renderLotOptions(window.currentFarmId);
+
+      // Mostrar coordenadas del polígono activo
+      const _drawnLayers = window.drawnItems ? window.drawnItems.getLayers() : [];
+      const _hasPolygon = _drawnLayers.length > 0;
+      if(el.polygonCoordinatesBox){
+        el.polygonCoordinatesBox.classList.toggle("hidden", !_hasPolygon);
+      }
+      if(_hasPolygon){
+        const _gj = _drawnLayers[0].toGeoJSON();
+        if(el.polygonGeojsonPreview){
+          el.polygonGeojsonPreview.textContent = JSON.stringify(_gj, null, 2);
+        }
+        if(el.polygonAreaPreview){
+          const _ha = computeAreaHaForLayer(_drawnLayers[0]);
+          el.polygonAreaPreview.textContent = Number.isFinite(_ha) ? `${_ha.toFixed(2)} ha` : "";
+        }
+      }
+    }
+
+    function openFoliarModal(){
+      if(!lastAreaStats || !Array.isArray(lastAreaStats.nutrients) || lastAreaStats.nutrients.length === 0){
+        setStatus("Dibuja un poligono y espera los resultados antes de crear un analisis foliar.");
+        return;
+      }
+      resetFoliarForm();
+      if(el.foliarModal){
+        el.foliarModal.classList.remove("hidden");
+        el.foliarModal.setAttribute("aria-hidden", "false");
+      }
+      if(el.analysisEnergyInput){
+        el.analysisEnergyInput.focus();
+      }
+    }
+
+    function closeFoliarModal(){
+      if(el.foliarModal){
+        el.foliarModal.classList.add("hidden");
+        el.foliarModal.setAttribute("aria-hidden", "true");
+      }
+      setFoliarMessage("");
+      if(el.foliarForm){
+        el.foliarForm.reset();
+      }
+    }
+
+    async function fetchFarmsAndLots(){
+      try{
+        const [farmsRes, lotsRes] = await Promise.all([
+          fetch(ENDPOINTS.foliageFarms, { credentials: "include" }),
+          fetch(ENDPOINTS.foliageLots, { credentials: "include" }),
+        ]);
+        if(farmsRes.ok){
+          const farms = await farmsRes.json().catch(() => []);
+          foliarState.farms = Array.isArray(farms) ? farms : [];
+        }
+        if(lotsRes.ok){
+          const lots = await lotsRes.json().catch(() => []);
+          foliarState.lots = Array.isArray(lots) ? lots : [];
+        }
+        renderFarmOptions();
+        renderLotOptions();
+        renderCompareLotOptions();
+      }catch(err){
+        console.error("foliage-data", err);
+      }
+    }
+
+    async function fetchLotCrops(){
+      if(lotCropsLoaded){
+        return lotCrops;
+      }
+      try{
+        const res = await fetch(ENDPOINTS.foliageLotCrops, { credentials: "include" });
+        if(!res.ok){
+          lotCropsLoaded = true;
+          lotCrops = [];
+          return lotCrops;
+        }
+        const data = await res.json().catch(() => []);
+        lotCrops = Array.isArray(data) ? data : [];
+      }catch(err){
+        console.error("lot-crops", err);
+        lotCrops = [];
+      }finally{
+        lotCropsLoaded = true;
+      }
+      return lotCrops;
+    }
+
+    function resolveCropIdForLot(lotId){
+      if(!lotId){
+        return null;
+      }
+      const items = lotCrops.filter(item => Number(item?.lot_id) === Number(lotId));
+      if(items.length === 0){
+        return null;
+      }
+      const active = items.find(item => !item?.end_date);
+      if(active && active.crop_id){
+        return active.crop_id;
+      }
+      items.sort((a, b) => {
+        const dateA = Date.parse(a?.start_date || "") || 0;
+        const dateB = Date.parse(b?.start_date || "") || 0;
+        return dateB - dateA;
+      });
+      return items[0]?.crop_id || null;
+    }
+
+    async function fetchSecondaryObjectives(){
+      try{
+        const res = await fetch(ENDPOINTS.secondaryObjectives, { credentials: "include" });
+        if(!res.ok){
+          return;
+        }
+        const data = await res.json().catch(() => []);
+        secondaryObjectives = Array.isArray(data) ? data : [];
+        renderObjectiveOptions();
+        updateComparisonButtonState();
+      }catch(err){
+        console.error("secondary-objectives", err);
+      }
+    }
+
+    async function fetchCropObjectives(){
+      try{
+        const res = await fetch(ENDPOINTS.cropObjectives, { credentials: "include" });
+        if(!res.ok){
+          return;
+        }
+        const data = await res.json().catch(() => []);
+        cropObjectives = Array.isArray(data) ? data : [];
+        renderObjectiveOptions();
+        updateComparisonButtonState();
+      }catch(err){
+        console.error("crop-objectives", err);
+      }
+    }
+
+    async function fetchCommonAnalyses(){
+      try{
+        const res = await fetch(ENDPOINTS.commonAnalyses, { credentials: "include" });
+        if(!res.ok){
+          return;
+        }
+        const data = await res.json().catch(() => []);
+        commonAnalyses = Array.isArray(data) ? data : [];
+        renderAnalysisDates();
+        renderCompareAnalysisOptions();
+      }catch(err){
+        console.error("common-analyses", err);
+      }
+    }
+
+    function renderAnalysisDates(){
+      if(!el.analysisDateSelect){
+        return;
+      }
+      if(!Array.isArray(commonAnalyses) || commonAnalyses.length === 0){
+        el.analysisDateSelect.innerHTML = '<option>No hay análisis disponibles</option>';
+        el.analysisDateSelect.disabled = true;
+        return;
+      }
+      const options = ['<option value=\"\">Selecciona un análisis disponible</option>'];
+      commonAnalyses.slice(0, 50).forEach(item => {
+        const date = item?.date || "";
+        const label = `${date} · ${item?.farm_name || "Finca"} / ${item?.lot_name || "Lote"}`;
+        options.push(`<option value=\"${item?.id}\">${label}</option>`);
+      });
+      el.analysisDateSelect.innerHTML = options.join("");
+      el.analysisDateSelect.disabled = false;
+    }
+
+    function ensureFoliarPrerequisites(){
+      if(!lastAreaStats || !Array.isArray(lastAreaStats.nutrients) || lastAreaStats.nutrients.length === 0){
+        setFoliarMessage("Selecciona un poligono y espera los valores calculados antes de guardar.", true);
+        return false;
+      }
+      return true;
+    }
+
+    async function submitFoliarForm(event){
+      event.preventDefault();
+      if(isSavingFoliar){
+        return;
+      }
+      if(!ensureFoliarPrerequisites()){
+        return;
+      }
+      const farmId = el.analysisFarmSelect ? el.analysisFarmSelect.value : "";
+      const lotIdRaw = el.analysisLotSelect ? el.analysisLotSelect.value : "";
+      const createLot = el.analysisCreateLotToggle ? el.analysisCreateLotToggle.checked : false;
+
+      // Capturar GeoJSON y área del polígono dibujado
+      const _submitDrawnLayers = window.drawnItems ? window.drawnItems.getLayers() : [];
+      const _submitGeojson = _submitDrawnLayers.length > 0
+        ? JSON.stringify(_submitDrawnLayers[0].toGeoJSON())
+        : null;
+      const _submitAreaHa = _submitDrawnLayers.length > 0
+        ? computeAreaHaForLayer(_submitDrawnLayers[0])
+        : null;
+
+      if(!farmId){
+        setFoliarMessage("Selecciona la finca del analisis.", true);
+        if(el.analysisFarmSelect){ el.analysisFarmSelect.focus(); }
+        return;
+      }
+
+      let lotId = lotIdRaw;
+      if(!createLot && !lotId){
+        setFoliarMessage("Selecciona el lote del analisis.", true);
+        if(el.analysisLotSelect){ el.analysisLotSelect.focus(); }
+        return;
+      }
+
+      const proteinValue = el.analysisProteinInput ? parseFloat(el.analysisProteinInput.value) : NaN;
+      const energyValue = el.analysisEnergyInput ? parseFloat(el.analysisEnergyInput.value) : NaN;
+      const restValue = el.analysisRestInput ? parseFloat(el.analysisRestInput.value) : NaN;
+      const restDaysValue = el.analysisRestDaysInput ? parseInt(el.analysisRestDaysInput.value, 10) : NaN;
+      const yieldValue = el.analysisYieldInput ? parseFloat(el.analysisYieldInput.value) : NaN;
+      const monthValue = el.analysisMonthInput ? parseInt(el.analysisMonthInput.value, 10) : NaN;
+
+      if(!Number.isFinite(proteinValue)){
+        setFoliarMessage("Ingresa el valor de proteina.", true);
+        el.analysisProteinInput?.focus();
+        return;
+      }
+      const numericChecks = [
+        { valid: Number.isFinite(energyValue), field: el.analysisEnergyInput, message: "Ingresa el valor de energia." },
+        { valid: Number.isFinite(restValue), field: el.analysisRestInput, message: "Ingresa el valor de descanso." },
+        { valid: Number.isFinite(restDaysValue), field: el.analysisRestDaysInput, message: "Ingresa los dias de descanso." },
+        { valid: Number.isFinite(yieldValue), field: el.analysisYieldInput, message: "Ingresa el valor de aforo." },
+        { valid: Number.isFinite(monthValue) && monthValue >= 1 && monthValue <= 12, field: el.analysisMonthInput, message: "Ingresa el ciclo de pastoreo entre 1 y 12." },
+      ];
+      for(const item of numericChecks){
+        if(!item.valid){
+          setFoliarMessage(item.message, true);
+          item.field?.focus();
+          return;
+        }
+      }
+
+      const dateValue = el.analysisDateInput ? el.analysisDateInput.value : "";
+
+      const csrf = getCsrfToken();
+      isSavingFoliar = true;
+      el.foliarSubmit?.classList.add("opacity-70");
+      el.foliarSubmit?.setAttribute("disabled", "disabled");
+      setFoliarMessage("Guardando analisis...", false);
+
+      try{
+        if(createLot){
+          const name = el.analysisLotNameInput ? el.analysisLotNameInput.value.trim() : "";
+          const areaRaw = el.analysisLotAreaInput ? parseFloat(el.analysisLotAreaInput.value) : NaN;
+          if(!name){
+            throw new Error("Ingresa el nombre del lote nuevo.");
+          }
+          if(!Number.isFinite(areaRaw) || areaRaw <= 0){
+            throw new Error("Ingresa un area valida para el lote.");
+          }
+          const lotPayload = {
+            name,
+            area: areaRaw,
+            farm_id: Number(farmId),
+            ...(_submitGeojson ? { geometry: _submitGeojson } : {}),
+          };
+          const lotRes = await fetch(ENDPOINTS.foliageLots, {
+            method: "POST",
+            credentials: "include",
+            headers: {
+              "Content-Type": "application/json",
+              "X-CSRF-TOKEN": csrf || "",
+            },
+            body: JSON.stringify(lotPayload),
+          });
+          const lotBody = await lotRes.json().catch(() => ({}));
+          if(!lotRes.ok){
+            throw new Error(lotBody?.description || lotBody?.error || "No se pudo crear el lote.");
+          }
+          lotId = lotBody.id || lotBody?.data?.id || lotBody?.lot_id;
+          if(!lotId){
+            throw new Error("El lote se creo pero no se obtuvo el identificador.");
+          }
+          const normalizedLot = {
+            ...lotBody,
+            id: lotId,
+            farm_id: lotBody?.farm_id ?? Number(farmId),
+          };
+          foliarState.lots.push(normalizedLot);
+          renderLotOptions(farmId, lotId);
+        }
+
+        const commonPayload = {
+          lot_id: Number(lotId),
+          protein: proteinValue,
+          energy: energyValue,
+          rest: restValue,
+          rest_days: restDaysValue,
+          yield_estimate: yieldValue,
+          month: monthValue,
+        };
+        if(dateValue){
+          commonPayload.date = dateValue;
+        }
+
+        const commonRes = await fetch(ENDPOINTS.commonAnalyses, {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRF-TOKEN": csrf || "",
+          },
+          body: JSON.stringify(commonPayload),
+        });
+        const commonBody = await commonRes.json().catch(() => ({}));
+        if(!commonRes.ok){
+          throw new Error(commonBody?.description || commonBody?.error || "No se pudo crear el analisis comun.");
+        }
+        const commonId = commonBody.id || commonBody?.data?.id;
+        if(!commonId){
+          throw new Error("No se obtuvo el identificador del analisis comun.");
+        }
+        if(Array.isArray(commonAnalyses)){
+          const farmName = getFarmNameById(farmId) || commonBody?.farm_name || "Finca";
+          const lotName = foliarState.lots.find(item => Number(item?.id) === Number(lotId))?.name
+            || (createLot ? (el.analysisLotNameInput ? el.analysisLotNameInput.value.trim() : "") : "")
+            || "Lote";
+          const dateLabel = dateValue || new Date().toISOString().split("T")[0];
+          commonAnalyses.unshift({
+            id: Number(commonId),
+            lot_id: Number(lotId),
+            lot_name: lotName,
+            farm_name: farmName,
+            date: dateLabel,
+          });
+          renderAnalysisDates();
+          renderCompareAnalysisOptions();
+        }
+
+        const leafPayload = {
+          common_analysis_id: Number(commonId),
+        };
+        const nutrientList = Array.isArray(lastAreaStats.nutrients) ? lastAreaStats.nutrients : [];
+        for(const nutrient of nutrientList){
+          const nutrientId = nutrient?.nutrient_id;
+          if(!nutrientId){
+            continue;
+          }
+          const value = parseFloat(nutrient?.target_value);
+          if(!Number.isFinite(value)){
+            continue;
+          }
+          leafPayload[`nutrient_${nutrientId}`] = value;
+        }
+
+        const leafRes = await fetch(ENDPOINTS.leafAnalyses, {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRF-TOKEN": csrf || "",
+          },
+          body: JSON.stringify(leafPayload),
+        });
+        const leafBody = await leafRes.json().catch(() => ({}));
+        if(!leafRes.ok){
+          throw new Error(leafBody?.description || leafBody?.error || "No se pudo crear el analisis foliar.");
+        }
+
+        // Snapshot RGB del lote (best-effort): nunca bloquea el guardado.
+        try{
+          const snapVerts = _submitDrawnLayers.length > 0
+            ? getRasterVertices(_submitDrawnLayers[0])
+            : null;
+          const snapAssetId = imageMeta && imageMeta.media_asset_id ? Number(imageMeta.media_asset_id) : null;
+          if(snapVerts && snapVerts.length >= 3 && snapAssetId){
+            fetch(ENDPOINTS.lotSnapshot, {
+              method: "POST",
+              credentials: "include",
+              headers: { "Content-Type": "application/json", "X-CSRF-TOKEN": csrf || "" },
+              body: JSON.stringify({
+                common_analysis_id: Number(commonId),
+                media_asset_id: snapAssetId,
+                vertices: snapVerts,
+              }),
+            }).catch(() => {});
+          }
+        }catch(_snapErr){ /* silencioso */ }
+
+        // Asociar polígono al lote (solo si es lote existente y hay geometría activa)
+        if(!createLot && _submitGeojson){
+          const _geoUpdatePayload = {
+            id: Number(lotId),
+            geometry: _submitGeojson,
+            ...(Number.isFinite(_submitAreaHa) ? { area: parseFloat(_submitAreaHa.toFixed(2)) } : {}),
+          };
+          // Error silencioso: no interrumpe el flujo, ya el análisis fue guardado
+          fetch(ENDPOINTS.foliageLots, {
+            method: "PUT",
+            credentials: "include",
+            headers: { "Content-Type": "application/json", "X-CSRF-TOKEN": csrf || "" },
+            body: JSON.stringify(_geoUpdatePayload),
+          }).then(() => {
+            // Actualizar el estado local para que loadLotsForCurrentFarm() refleje la geometría sin reload
+            const _lotRef = foliarState.lots.find(l => Number(l?.id) === Number(lotId));
+            if(_lotRef){
+              _lotRef.geometry = _submitGeojson;
+              if(Number.isFinite(_submitAreaHa)) _lotRef.area = parseFloat(_submitAreaHa.toFixed(2));
+            }
+          }).catch(() => {});
+        }
+
+        const activeEntry = activeLayerId !== null ? lotState.get(activeLayerId) : null;
+        if(activeEntry){
+          activeEntry.linkedLotId = Number(lotId);
+          activeEntry.linkedCommonAnalysisId = Number(commonId);
+          const lotName = foliarState.lots.find(item => Number(item?.id) === Number(lotId))?.name
+            || (createLot ? (el.analysisLotNameInput ? el.analysisLotNameInput.value.trim() : "") : "");
+          activeEntry.linkedLotName = lotName || activeEntry.linkedLotName;
+          if(lastAreaStats){
+            activeEntry.areaStats = cloneAreaStats(lastAreaStats);
+          }
+          renderLotsList();
+          updateComparisonButtonState();
+        }
+        setFoliarMessage("Analisis foliar creado correctamente.", false);
+        setStatus("Analisis foliar guardado.");
+        closeFoliarModal();
+      }catch(err){
+        console.error(err);
+        setFoliarMessage(err?.message || "Error al guardar el analisis foliar", true);
+      }finally{
+        isSavingFoliar = false;
+        el.foliarSubmit?.classList.remove("opacity-70");
+        el.foliarSubmit?.removeAttribute("disabled");
+      }
+    }
+
+    async function handleCreateObjective(){
+      if(isSavingObjective){
+        return;
+      }
+      setAnalysisCropHint("", false);
+      if(!lastAreaStats || !Array.isArray(lastAreaStats.nutrients) || lastAreaStats.nutrients.length === 0){
+        setAnalysisCropHint("Dibuja un polígono para generar objetivos antes de guardar.", true);
+        return;
+      }
+      const selection = resolveAnalysisCropSelection();
+      if(!selection.id && !selection.name){
+        setAnalysisCropHint("Ingresa el cultivo de referencia para el objetivo.", true);
+        if(el.analysisCropInput){
+          el.analysisCropInput.focus();
+        }
+        return;
+      }
+
+      let proteinValue = lastAreaStats.protein;
+      if(proteinValue == null && typeof lastAreaStats.protein_average === "number"){
+        proteinValue = lastAreaStats.protein_average;
+      }
+      let nitrogenValue = lastAreaStats.nitrogen;
+      if(nitrogenValue == null && typeof lastAreaStats.nitrogen_estimated === "number"){
+        nitrogenValue = lastAreaStats.nitrogen_estimated;
+      }
+
+      const nutrientTargets = lastAreaStats.nutrients.map(item => ({ ...item }));
+
+      const payload = {
+        analysis_crop_id: selection.id,
+        analysis_crop_name: selection.name,
+        protein: proteinValue,
+        nitrogen: nitrogenValue,
+        nutrient_targets: nutrientTargets,
+      };
+
+      const csrf = getCsrfToken();
+      isSavingObjective = true;
+      if(el.btnCreateObjective){
+        el.btnCreateObjective.disabled = true;
+        el.btnCreateObjective.classList.add("opacity-70");
+      }
+
+      try{
+        const res = await fetch(ENDPOINTS.secondaryObjectives, {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRF-TOKEN": csrf || "",
+          },
+          body: JSON.stringify(payload),
+        });
+
+        let body = {};
+        try{ body = await res.json(); }catch{}
+        if(!res.ok){
+          const message = body?.description || "No se pudo guardar el objetivo.";
+          throw new Error(message);
+        }
+
+        setAnalysisCropHint("Objetivo secundario creado correctamente.", false);
+        if(body && body.analysis_crop){
+          const items = analysisCropsList.filter(item => item.id !== body.analysis_crop.id);
+          items.push(body.analysis_crop);
+          updateAnalysisCropOptions(items);
+        }
+      }catch(err){
+        console.error(err);
+        setAnalysisCropHint(err?.message || "Error al guardar el objetivo.", true);
+      }finally{
+        isSavingObjective = false;
+        if(el.btnCreateObjective){
+          el.btnCreateObjective.disabled = false;
+          el.btnCreateObjective.classList.remove("opacity-70");
+        }
+      }
+    }
+
+    function setVariableValue(key, value){
+      const node = varElems[key];
+      if(!node) return;
+      node.textContent = formatMetric(value, 3);
+    }
+
+    function resetVariableValues(){
+      VARIABLE_KEYS.forEach(key => {
+        const node = varElems[key];
+        if(node) node.textContent = "--";
+      });
+      renderNutrients(null);
+      setPrimaryMetrics(null);
+    }
+
+    function setProteinBox(protein, nitrogen, message){
+      if(el.proteinValue){ el.proteinValue.textContent = formatMetric(protein, 2); }
+      if(el.nitrogenValue){ el.nitrogenValue.textContent = formatMetric(nitrogen, 2); }
+      if(el.proteinMessage){
+        el.proteinMessage.textContent = message || "";
+      }else if(el.proteinBox){
+        if(message){ el.proteinBox.setAttribute("data-message", message); }
+        else { el.proteinBox.removeAttribute("data-message"); }
+      }
+    }
+
+    function setBromatologiaBox(broma){
+      if(!el.bromatologiaBox) return;
+      if(!broma){
+        el.bromatologiaBox.classList.add("hidden");
+        return;
+      }
+      el.bromatologiaBox.classList.remove("hidden");
+      if(el.bromaFda)  el.bromaFda.textContent  = broma.fda_pct   != null ? Number(broma.fda_pct).toFixed(2)   : "--";
+      if(el.bromaFdn)  el.bromaFdn.textContent  = broma.fdn_pct   != null ? Number(broma.fdn_pct).toFixed(2)   : "--";
+      if(el.bromaMcal) el.bromaMcal.textContent = broma.energia_mcal != null ? Number(broma.energia_mcal).toFixed(2) : "--";
+      if(el.bromaMj)   el.bromaMj.textContent   = broma.energia_mj != null ? Number(broma.energia_mj).toFixed(2)  : "--";
+      if(el.bromaEnl)  el.bromaEnl.textContent  = broma.energia2_mcal != null ? Number(broma.energia2_mcal).toFixed(2) : "--";
+      if(el.bromaAforo) el.bromaAforo.textContent = broma.aforo_ua_ha != null ? Number(broma.aforo_ua_ha).toFixed(2) : "--";
+      if(el.bromaWarning){
+        if(broma.en_rango === false){
+          el.bromaWarning.textContent = "Índice fuera del rango calibrado — estimación aproximada";
+          el.bromaWarning.classList.remove("hidden");
+        } else {
+          el.bromaWarning.classList.add("hidden");
+        }
+      }
+    }
+
+    resetVariableValues();
+    setProteinBox(null, null, "Selecciona un polígono");
+    setBromatologiaBox(null);
+    if(el.saveLotAnalysisBtn){
+      el.saveLotAnalysisBtn.disabled = true;
+    }
+    if(el.markAsObjectiveChk){
+      el.markAsObjectiveChk.disabled = true;
+    }
+    if(el.objectiveControls){
+      el.objectiveControls.classList.add("hidden");
+    }
+    renderLotsList();
+    fetchAnalysisCrops().catch(()=>{});
+    fetchFarmsAndLots().catch(()=>{});
+    fetchSecondaryObjectives().catch(()=>{});
+    fetchCropObjectives().catch(()=>{});
+    fetchCommonAnalyses().catch(()=>{});
+    updateCompareMode();
+
+    function getOverlayUrl(stamp){
+      const token = stamp || (imageMeta && imageMeta.ndvi_stamp) || Date.now();
+      const previews = (imageMeta && imageMeta.previews) ? imageMeta.previews : null;
+      let url = previews && previews[currentPreviewKey] ? previews[currentPreviewKey] : null;
+      if(!url && previews){
+        url = previews.rgb || Object.values(previews).find(Boolean) || null;
+      }
+      if(!url && imageMeta && imageMeta.preview_url){
+        url = imageMeta.preview_url;
+      }
+      if(url){
+        const sep = url.includes("?") ? "&" : "?";
+        return `${url}${sep}t=${token}`;
+      }
+      if(!imageId) return "";
+      return `${ENDPOINTS.image(imageId)}?t=${token}`;
+    }
+
+    function updateOverlayStamp(stamp){
+      if(stamp) imageMeta.ndvi_stamp = stamp;
+      if(overlay){
+        overlay.setUrl(getOverlayUrl(imageMeta?.ndvi_stamp));
+      }
+    }
+
+    function refreshMethodLabel(){
+      if(!el.methodValue){ return; }
+      const processed = !!(imageMeta && imageMeta.processed);
+      const method = processed && imageMeta && typeof imageMeta.method === "string" ? imageMeta.method : null;
+      const hasNir = !!(imageMeta && imageMeta.has_nir);
+      const visibleMethodRaw = imageMeta && imageMeta.visible_method != null ? String(imageMeta.visible_method) : "";
+      const vmKey = visibleMethodRaw.trim().toLowerCase();
+      const vmLabels = {
+        combined: "COMBINADO",
+        vari: "VARI",
+        gli: "GLI",
+        ngrdi: "NGRDI",
+        exg: "EXG",
+      };
+
+      let label = "Vista previa (sin NDVI)";
+      if(processed){
+        if(method === "ndvi"){
+          label = hasNir ? "NDVI (NIR real)" : "NDVI";
+        }else if(method === "ndvi_approx"){
+          const vmLabel = vmLabels[vmKey] || visibleMethodRaw.toUpperCase();
+          label = vmKey ? `NDVI aprox. (RGB) · ${vmLabel}` : "NDVI aprox. (RGB)";
+        }else if(method){
+          label = method.toUpperCase();
+        }else{
+          label = "NDVI procesado";
+        }
+      }
+      el.methodValue.textContent = label;
+    }
+
+    function getVariablesSource(source){
+      if(source && typeof source === "object" && source.variables && typeof source.variables === "object"){
+        return source.variables;
+      }
+      return source || {};
+    }
+
+    function cloneAreaStats(data){
+      if(!data || typeof data !== "object"){
+        return null;
+      }
+      const nutrientList = Array.isArray(data.nutrients)
+        ? data.nutrients.map(item => ({ ...item }))
+        : [];
+      return { ...data, nutrients: nutrientList };
+    }
+
+    function applyAreaStats(data){
+      if(!data){
+        resetVariableValues();
+        setProteinBox(null, null, "");
+        lastAreaStats = null;
+        if(el.saveLotAnalysisBtn){
+          el.saveLotAnalysisBtn.disabled = true;
+        }
+        if(el.markAsObjectiveChk){
+          el.markAsObjectiveChk.checked = false;
+        }
+        if(el.objectiveControls){
+          el.objectiveControls.classList.add("hidden");
+        }
+        return;
+      }
+      const vars = getVariablesSource(data);
+      VARIABLE_KEYS.forEach(key => {
+        setVariableValue(key, vars[key]);
+      });
+      setPrimaryMetrics(data);
+      setProteinBox(data.protein, data.nitrogen, "");
+      setBromatologiaBox(data.bromatologia || null);
+      const nutrientList = Array.isArray(data.nutrients)
+        ? data.nutrients.map(item => ({ ...item }))
+        : [];
+      renderNutrients(nutrientList);
+      lastAreaStats = { ...data, nutrients: nutrientList };
+      if(el.saveLotAnalysisBtn){
+        el.saveLotAnalysisBtn.disabled = false;
+      }
+      if(el.markAsObjectiveChk){
+        el.markAsObjectiveChk.disabled = false;
+      }
+      if(imageMeta){
+        if(typeof data.method === "string") imageMeta.method = data.method;
+        if(Object.prototype.hasOwnProperty.call(data, "visible_method")) imageMeta.visible_method = data.visible_method;
+        if(Object.prototype.hasOwnProperty.call(data, "has_nir")) imageMeta.has_nir = data.has_nir;
+        imageMeta.variables = vars;
+        imageMeta.nutrients = nutrientList;
+        refreshMethodLabel();
+      }
+    }
+
+    function revertToImageMeta(){
+      if(imageMeta){
+        const vars = getVariablesSource(imageMeta);
+        VARIABLE_KEYS.forEach(key => {
+          setVariableValue(key, vars[key]);
+        });
+        const nutrientList = Array.isArray(imageMeta.nutrients)
+          ? imageMeta.nutrients.map(item => ({ ...item }))
+          : [];
+        renderNutrients(nutrientList);
+        setPrimaryMetrics(imageMeta);
+      } else {
+        resetVariableValues();
+      }
+      setProteinBox(null, null, "Selecciona un polígono");
+      lastAreaStats = null;
+      if(el.saveLotAnalysisBtn){
+        el.saveLotAnalysisBtn.disabled = true;
+      }
+      if(el.markAsObjectiveChk){
+        el.markAsObjectiveChk.checked = false;
+        el.markAsObjectiveChk.disabled = true;
+      }
+      if(el.objectiveControls){
+        el.objectiveControls.classList.add("hidden");
+      }
+      refreshMethodLabel();
+    }
+
+    function extractVertices(layer){
+      const latlngs = layer.getLatLngs();
+      const first = Array.isArray(latlngs[0]) ? latlngs[0] : latlngs;
+      if(!first || first.length < 3){
+        return null;
+      }
+      return first.map(ll => [ll.lng, ll.lat]);
+    }
+
+    function getScaleFactors(){
+      const sx = isFiniteNumber(imageMeta?.scale_x)
+        ? imageMeta.scale_x
+        : (isFiniteNumber(imageMeta?.width_full) && isFiniteNumber(imageWidth) && imageWidth > 0
+            ? imageMeta.width_full / imageWidth
+            : null);
+      const sy = isFiniteNumber(imageMeta?.scale_y)
+        ? imageMeta.scale_y
+        : (isFiniteNumber(imageMeta?.height_full) && isFiniteNumber(imageHeight) && imageHeight > 0
+            ? imageMeta.height_full / imageHeight
+            : null);
+      const fx = isFiniteNumber(sx) ? sx : 1;
+      const fy = isFiniteNumber(sy) ? sy : fx;
+      return { sx: fx, sy: fy };
+    }
+
+    function verticesToRaster(vertices){
+      if(!Array.isArray(vertices) || vertices.length < 3){
+        return null;
+      }
+      const flipY = !!(imageMeta && imageMeta.media_asset_id);
+      const previewH = flipY
+        ? (isFiniteNumber(imageMeta?.height_preview) ? imageMeta.height_preview
+          : (isFiniteNumber(imageHeight) ? imageHeight : null))
+        : null;
+      const { sx, sy } = getScaleFactors();
+      return vertices.map(([x, y]) => {
+        const rowPreview = (flipY && previewH) ? (previewH - y) : y;
+        return [x * sx, rowPreview * sy];
+      });
+    }
+
+    function getRasterVertices(layer){
+      const verts = extractVertices(layer);
+      if(!verts){
+        return null;
+      }
+      return verticesToRaster(verts);
+    }
+    function getLayerKey(layer){
+      if(!layer || typeof layer._leaflet_id === "undefined"){
+        return null;
+      }
+      return layer._leaflet_id;
+    }
+    function fmtLinear(m){
+      if(m >= 1000) return (m/1000).toFixed(m % 1000 === 0 ? 0 : 1) + " km";
+      if(m >= 1)    return Math.round(m) + " m";
+      return (m*100).toFixed(0) + " cm";
+    }
+    function fmtAreaMeters(m2){
+      if(m2 >= 1e6) return (m2/1e6).toFixed(m2 % 1e6 === 0 ? 0 : 2) + " km²";
+      if(m2 >= 1e4) return (m2/1e4).toFixed(2) + " ha";
+      if(m2 >= 1)   return Math.round(m2) + " m²";
+      return (m2*1e4).toFixed(0) + " cm²";
+    }
+    function fmtAreaHa(m2){
+      if(m2 >= 1){
+        return (m2 / 1e4).toFixed(4) + " ha";
+      }
+      return (m2 * 1e4).toFixed(2) + " cm²";
+    }
+    function fmtPixels(px){ return Math.round(px) + " px"; }
+    function fmtAreaPx2(px2){
+      if(mppX != null){
+        const _mppY = (mppY != null) ? mppY : mppX;
+        const m2 = px2 * mppX * _mppY;
+        return fmtAreaHa(m2);
+      }
+      return Math.round(px2) + " px²";
+    }
+    // Shoelace area in "map units" (CRS.Simple => lat=Y, lng=X)
+    function polygonAreaPx2(latlngs){
+      const pts = latlngs.map(ll => [ll.lng, ll.lat]);
+      let s = 0;
+      for(let i=0, n=pts.length; i<n; i++){
+        const [x1,y1] = pts[i];
+        const [x2,y2] = pts[(i+1)%n];
+        s += x1*y2 - x2*y1;
+      }
+      return Math.abs(s)/2;
+    }
+    function polygonAreaVerticesPx2(vertices){
+      if(!Array.isArray(vertices) || vertices.length < 3){
+        return 0;
+      }
+      let s = 0;
+      for(let i=0, n=vertices.length; i<n; i++){
+        const [x1,y1] = vertices[i];
+        const [x2,y2] = vertices[(i+1)%n];
+        s += x1*y2 - x2*y1;
+      }
+      return Math.abs(s)/2;
+    }
+    function setStatus(msg){ if(el.status) el.status.textContent = msg; }
+
+    /* ---------- Media Picker (Modal) ---------- */
+    const MP = (()=>{
+      const pickerEvent = 'media-library:select';
+      const pickerUrl = '{{ url_for('media.library') }}?picker=1&allowed=geotiff&type=geotiff&multi=0&event=media-library:select';
+
+      const back = document.createElement('div'); back.className = 'media-picker-backdrop';
+      const wrap = document.createElement('div'); wrap.className = 'media-picker-modal';
+      const panel = document.createElement('div'); panel.className = 'media-picker-panel';
+      const closeBtn = document.createElement('button');
+      closeBtn.type = 'button';
+      closeBtn.className = 'media-picker-close px-3 py-1 rounded-md bg-gray-200 text-gray-700 hover:bg-gray-300';
+      closeBtn.textContent = 'Cerrar';
+
+      const loader = document.createElement('div');
+      loader.className = 'media-picker-loader';
+      loader.innerHTML = '<div class="px-4 py-3 rounded bg-gray-900/70 text-white text-sm">Cargando biblioteca…</div>';
+
+      const frame = document.createElement('iframe');
+      frame.className = 'media-picker-frame';
+      frame.setAttribute('title', 'Biblioteca de medios');
+      frame.setAttribute('loading', 'lazy');
+
+      panel.appendChild(closeBtn);
+      panel.appendChild(frame);
+      panel.appendChild(loader);
+      wrap.appendChild(panel);
+      document.body.appendChild(back);
+      document.body.appendChild(wrap);
+
+      loader.hidden = true;
+      frame.src = 'about:blank';
+
+      let isOpen = false;
+      let onPick = async (_payload)=>{};
+
+      function hide(){
+        isOpen = false;
+        back.style.display = 'none';
+        wrap.style.display = 'none';
+        loader.hidden = true;
+        frame.src = 'about:blank';
+      }
+
+      function show(){
+        if(isOpen) return;
+        isOpen = true;
+        loader.hidden = false;
+        back.style.display = 'block';
+        wrap.style.display = 'flex';
+        frame.src = `${pickerUrl}&ts=${Date.now()}`;
+      }
+
+      async function handleSelection(asset){
+        if(!asset || !asset.id){
+          alert('Respuesta inválida desde la biblioteca de medios');
+          return;
+        }
+        loader.hidden = false;
+        try{
+          // Phase 1 — fast: only display PNG dimensions from DB (< 200ms).
+          const dispResp = await fetch(ENDPOINTS.displayInfo(asset.id), { credentials: 'include' });
+          if(dispResp.status === 202){
+            throw new Error('La imagen aún está siendo procesada. Espera unos momentos e intenta de nuevo.');
+          }
+          if(!dispResp.ok){
+            throw new Error(await dispResp.text());
+          }
+          const displayMeta = await dispResp.json();
+          await onPick({ meta: displayMeta, asset });
+          hide();
+        }catch(err){
+          console.error(err);
+          alert('Error al cargar la metadata del activo seleccionado');
+          return;
+        }finally{
+          loader.hidden = true;
+        }
+
+        // Phase 2 — lazy: load analysis layers in background, update previews when ready.
+        _loadAnalysisLayersLazy(asset.id);
+      }
+
+      async function _loadAnalysisLayersLazy(assetId){
+        try{
+          const resp = await fetch(ENDPOINTS.mediaMeta(assetId), { credentials: 'include' });
+          if(!resp.ok) return;
+          const fullMeta = await resp.json();
+          // Abort if the user has already switched to a different image.
+          if(!imageMeta || imageMeta.asset_id !== assetId) return;
+          // Merge analysis previews into current imageMeta.
+          if(fullMeta.previews && typeof fullMeta.previews === 'object'){
+            Object.assign(imageMeta.previews, fullMeta.previews);
+          }
+          if(fullMeta.cache_npy_key) imageMeta.cache_npy_key = fullMeta.cache_npy_key;
+          if(fullMeta.cache_wb_key) imageMeta.cache_wb_key = fullMeta.cache_wb_key;
+          // Enable layer selector options that are now available.
+          const availableKeys = Object.keys(imageMeta.previews).filter(k => !!imageMeta.previews[k]);
+          if(el.previewSelector){
+            el.previewSelector.querySelectorAll('option').forEach(opt => {
+              opt.disabled = !availableKeys.includes(opt.value);
+            });
+          }
+          // Auto-switch to nd_index_rgba (Índice espectral) if the user hasn't
+          // manually changed the layer (still on the rgb fallback set by applyMeta).
+          if(currentPreviewKey === 'rgb' && imageMeta.previews['nd_index_rgba']){
+            currentPreviewKey = 'nd_index_rgba';
+            if(el.previewSelector) el.previewSelector.value = 'nd_index_rgba';
+            if(overlay) overlay.setUrl(getOverlayUrl());
+          }
+        }catch(_){ /* silent — layers will remain unavailable */ }
+      }
+
+      function handleMessage(event){
+        if(!event || !event.data || typeof event.data.type !== 'string'){
+          return;
+        }
+        const { type, payload } = event.data;
+        if(type === pickerEvent){
+          handleSelection(payload).catch(()=>{});
+        }else if(type === `${pickerEvent}:cancel`){
+          hide();
+        }else if(type === `${pickerEvent}:ready`){
+          loader.hidden = true;
+        }
+      }
+
+      closeBtn.addEventListener('click', hide);
+      back.addEventListener('click', hide);
+      window.addEventListener('message', handleMessage);
+
+      return {
+        show,
+        hide,
+        setOnPick(fn){
+          onPick = typeof fn === 'function' ? fn : (()=>{});
+        },
+      };
+    })();
+
+    /* ---------- Leaflet Map ---------- */
+    const map = L.map("map", { crs: L.CRS.Simple }).setView([0,0], 0);
+
+    const drawnItems = new L.FeatureGroup();
+    map.addLayer(drawnItems);
+    window.drawnItems = drawnItems; // Exponer globalmente para updateSaveButtonState()
+
+    const drawCtl = new L.Control.Draw({
+      draw:{ polygon:true, rectangle:true, polyline:false, circle:false, marker:false, circlemarker:false },
+      edit:{ featureGroup: drawnItems }
+    });
+    map.addControl(drawCtl);
+
+    /* Simple scale control that respects mpp if present */
+    function addSimpleScaleControl(getMppX){
+      const ScaleCtl = L.Control.extend({
+        options:{ position:"bottomleft" },
+        onAdd:function(){
+          const box = L.DomUtil.create("div","leaflet-control scale-simple");
+          Object.assign(box.style, {
+            background:"rgba(255,255,255,0.9)",
+            padding:"6px 8px",
+            border:"1px solid #ddd",
+            borderRadius:"6px",
+            font:"12px/1.2 system-ui, sans-serif",
+            userSelect:"none"
+          });
+          this._label = document.createElement("div");
+          this._label.style.textAlign = "center";
+          this._bar = document.createElement("div");
+          Object.assign(this._bar.style, { height:"6px", marginTop:"4px", background:"#333", width:"100px" });
+          box.appendChild(this._label);
+          box.appendChild(this._bar);
+          map.on("zoom move resize", this._update, this);
+          this._container = box;
+          this._update();
+          return box;
+        },
+        onRemove:function(){ map.off("zoom move resize", this._update, this); },
+        _update:function(){
+          if(!this._container) return;
+          const mpp = getMppX();
+          const S = 150; // px sample span
+          const a = map.containerPointToLatLng([0,0]);
+          const b = map.containerPointToLatLng([S,0]);
+          const units = Math.abs(b.lng - a.lng);
+          const totalMeters = (mpp != null) ? units * mpp : null;
+
+          let label, barPx;
+          if(totalMeters != null){
+            const n = niceStep(totalMeters);
+            label = fmtLinear(n);
+            barPx = S * (n / totalMeters);
+          } else {
+            const n = niceStep(units);
+            label = fmtPixels(n);
+            barPx = S * (n / units);
+          }
+          this._label.textContent = label;
+          this._bar.style.width = Math.max(30, Math.min(220, barPx)) + "px";
+        }
+      });
+      map.addControl(new ScaleCtl());
+    }
+    addSimpleScaleControl(() => mppX);
+
+    /* ---------- Rulers (Top & Right Canvases) ---------- */
+    const rulerTop = document.createElement("canvas");
+    const rulerRight = document.createElement("canvas");
+    Object.assign(rulerTop.style,  { position:"absolute", right:"0", top:"0", height:TOP_RULER_H+"px", width:"100%", pointerEvents:"none", zIndex:500 });
+    Object.assign(rulerRight.style,{ position:"absolute", right:"0", top:"0", width:RIGHT_RULER_W+"px", height:"100%", pointerEvents:"none", zIndex:500 });
+    el.map.appendChild(rulerTop);
+    el.map.appendChild(rulerRight);
+    el.map.style.setProperty("--ruler-right-w", RIGHT_RULER_W + "px");
+
+    function drawRulers(){
+      const rect = el.map.getBoundingClientRect();
+
+      // Top ruler
+      rulerTop.width = Math.max(1, Math.floor(rect.width));
+      rulerTop.height = TOP_RULER_H;
+      const ctxT = rulerTop.getContext("2d");
+      ctxT.clearRect(0,0,rulerTop.width,rulerTop.height);
+      ctxT.fillStyle = "rgba(255,255,255,0.9)";
+      ctxT.fillRect(0,0,rulerTop.width,rulerTop.height);
+      ctxT.strokeStyle = "#333"; ctxT.fillStyle = "#333"; ctxT.lineWidth = 1;
+      ctxT.beginPath(); ctxT.moveTo(0, TOP_RULER_H - 0.5); ctxT.lineTo(rulerTop.width, TOP_RULER_H - 0.5); ctxT.stroke();
+
+      // Right ruler
+      rulerRight.width  = RIGHT_RULER_W;
+      rulerRight.height = Math.max(1, Math.floor(rect.height));
+      const ctxR = rulerRight.getContext("2d");
+      ctxR.clearRect(0,0,rulerRight.width,rulerRight.height);
+      ctxR.fillStyle = "rgba(255,255,255,0.9)";
+      ctxR.fillRect(0,0,rulerRight.width,rulerRight.height);
+      ctxR.strokeStyle = "#333"; ctxR.fillStyle = "#333"; ctxR.lineWidth = 1;
+      ctxR.beginPath(); ctxR.moveTo(rulerRight.width - 0.5, 0); ctxR.lineTo(rulerRight.width - 0.5, rulerRight.height); ctxR.stroke();
+
+      const sample = 200; // px sample distance for unit computation
+      const a = map.containerPointToLatLng([0,0]);
+      const b = map.containerPointToLatLng([sample,0]);
+      const c = map.containerPointToLatLng([0,sample]);
+      const unitPerPxX = Math.abs(b.lng - a.lng) / sample;
+      const unitPerPxY = Math.abs(c.lat - a.lat) / sample;
+
+      const mX = (mppX != null) ? unitPerPxX * mppX : null;
+      const _mppY = (mppY != null) ? mppY : mppX;
+      const mY = (_mppY != null) ? unitPerPxY * _mppY : null;
+
+      // Top ticks
+      const wantX = 140;
+      const spanUnitsX = unitPerPxX * wantX;
+      const spanMetersX = (mX != null) ? mX * wantX : null;
+      let stepUX, labelXFn;
+      if(spanMetersX != null){
+        const s = niceStep(spanMetersX);
+        stepUX = s / (mppX || 1);
+        labelXFn = (units) => fmtLinear(units * (mppX || 1));
+      } else {
+        const s = niceStep(spanUnitsX);
+        stepUX = s;
+        labelXFn = (units) => fmtPixels(units);
+      }
+      const x0 = a.lng;
+      const firstX = Math.ceil(x0 / stepUX) * stepUX;
+      ctxT.font = "11px system-ui"; ctxT.textAlign = "center"; ctxT.textBaseline = "top";
+      for(let u = firstX;; u += stepUX){
+        const sx = (u - x0) / unitPerPxX;
+        if(sx > rulerTop.width) break;
+        if(sx < 0) { if(u > x0) break; else continue; }
+        ctxT.beginPath(); ctxT.moveTo(Math.round(sx)+0.5, TOP_RULER_H - 12); ctxT.lineTo(Math.round(sx)+0.5, TOP_RULER_H); ctxT.stroke();
+        ctxT.fillText(labelXFn(u), Math.round(sx), 2);
+      }
+
+      // Right ticks
+      const wantY = 90;
+      const spanUnitsY = unitPerPxY * wantY;
+      const spanMetersY = (mY != null) ? mY * wantY : null;
+      let stepUY, labelYFn;
+      if(spanMetersY != null){
+        const s = niceStep(spanMetersY);
+        stepUY = s / (_mppY || 1);
+        labelYFn = (units) => fmtLinear(units * (_mppY || 1));
+      } else {
+        const s = niceStep(spanUnitsY);
+        stepUY = s;
+        labelYFn = (units) => fmtPixels(units);
+      }
+      const y0 = a.lat;
+      const firstY = Math.floor(y0 / stepUY) * stepUY;
+      ctxR.font = "11px system-ui"; ctxR.textAlign = "right"; ctxR.textBaseline = "middle";
+      const textPad = 8;
+      for(let u = firstY;; u -= stepUY){
+        const sy = (y0 - u) / unitPerPxY;
+        if(sy > rulerRight.height) break;
+        if(sy < 0) continue;
+        ctxR.beginPath(); ctxR.moveTo(RIGHT_RULER_W - 12, Math.round(sy)+0.5);
+        ctxR.lineTo(RIGHT_RULER_W, Math.round(sy)+0.5); ctxR.stroke();
+        ctxR.fillText(labelYFn(u), RIGHT_RULER_W - textPad, Math.round(sy));
+      }
+    }
+    function scheduleRulersRedraw(){ requestAnimationFrame(drawRulers); }
+    map.on("zoom move resize", scheduleRulersRedraw);
+    window.addEventListener("resize", scheduleRulersRedraw);
+    setTimeout(scheduleRulersRedraw, 0);
+
+    /* ---------- View helpers ---------- */
+    function fitImage(){
+      if(!overlay || !imgBounds) return;
+      map.invalidateSize();
+      const size = map.getSize();
+      const scale = Math.min(size.x / imageWidth, size.y / imageHeight);
+      const minZoom = Math.min(0, Math.floor(Math.log2(scale)));
+      map.setMinZoom(minZoom);
+      map.fitBounds(imgBounds);
+      scheduleRulersRedraw();
+    }
+    function updateAreaForLayer(layer){
+      const rings = layer.getLatLngs();
+      const latlngs = Array.isArray(rings[0]) ? rings[0] : rings;
+      if(!latlngs || latlngs.length < 3){ el.areaBox.textContent = "—"; return; }
+      currentVertices = extractVertices(layer);
+      currentVerticesRaster = verticesToRaster(currentVertices);
+      toggleKmzButton();
+
+      // Calcular área en hectáreas usando coordenadas raster (píxeles full-res) + mpp del GeoTIFF
+      if(currentVerticesRaster && currentVerticesRaster.length >= 3){
+        const rasterPx2 = polygonAreaVerticesPx2(currentVerticesRaster);
+        el.areaBox.textContent = "Área: " + fmtAreaPx2(rasterPx2);
+      } else {
+        // Respaldo: usar área en píxeles del mapa si no hay coordenadas raster
+        const px2 = polygonAreaPx2(latlngs);
+        el.areaBox.textContent = "Área: " + fmtAreaPx2(px2);
+      }
+    }
+    function toggleKmzButton(){
+      if(!el.btnDownloadKmz) return;
+      const enabled = Array.isArray(currentVerticesRaster) && currentVerticesRaster.length >= 3;
+      el.btnDownloadKmz.disabled = !enabled;
+      el.btnDownloadKmz.classList.toggle("opacity-60", !enabled);
+      el.btnDownloadKmz.classList.toggle("opacity-100", enabled);
+      el.btnDownloadKmz.classList.toggle("cursor-not-allowed", !enabled);
+      el.btnDownloadKmz.classList.toggle("cursor-pointer", enabled);
+      el.btnDownloadKmz.classList.toggle("text-gray-400", !enabled);
+      el.btnDownloadKmz.classList.toggle("text-gray-500", !enabled);
+      el.btnDownloadKmz.classList.toggle("text-gray-800", enabled);
+      el.btnDownloadKmz.classList.toggle("dark:text-gray-400", !enabled);
+      el.btnDownloadKmz.classList.toggle("dark:text-gray-100", enabled);
+    }
+
+    function resetMapState(clearLayers = false){
+      if(clearLayers){
+        drawnItems.clearLayers();
+      }
+      if(el.areaBox){
+        el.areaBox.textContent = "Selecciona un polígono";
+      }
+      statsRequestToken += 1;
+      areaStatsCache.clear();
+      lotState.clear();
+      lotCounter = 0;
+      activeLayerId = null;
+      renderLotsList();
+      setText(el.activeLotName, "Sin lote seleccionado");
+      currentVertices = null;
+      currentVerticesRaster = null;
+      toggleKmzButton();
+      revertToImageMeta();
+      setStatus(imageMeta && imageMeta.processed ? "NDVI listo." : "Vista previa cargada. Dibuja un polígono para procesar NDVI.");
+    }
+
+    /* ---------- Upload ---------- */
+    function getCsrfToken(){
+      const value = `; ${document.cookie}`;
+      const parts = value.split('; csrf_access_token=');
+      if(parts.length === 2) return parts.pop().split(';').shift();
+      return '';
+    }
+    async function uploadFile(file){
+      const fd = new FormData(); fd.append("file", file);
+      const csrf = getCsrfToken();
+      const res = await fetch(ENDPOINTS.upload, {
+        method: "POST",
+        credentials: "include",
+        headers: { "X-CSRF-TOKEN": csrf || "" },
+        body: fd,
+      });
+      if(!res.ok){
+        let msg = "Upload error";
+        try{ msg = await res.text(); } catch {}
+        throw new Error(msg);
+      }
+      return res.json();
+    }
+    function applyMeta(meta){
+      imageMeta = (meta && typeof meta === "object") ? { ...meta } : null;
+      imageId = imageMeta ? (imageMeta.id || null) : null;
+      const widthPreview  = imageMeta && typeof imageMeta.width_preview === "number" ? imageMeta.width_preview : null;
+      const heightPreview = imageMeta && typeof imageMeta.height_preview === "number" ? imageMeta.height_preview : null;
+      const widthFull  = imageMeta && typeof imageMeta.width_full === "number" ? imageMeta.width_full : null;
+      const heightFull = imageMeta && typeof imageMeta.height_full === "number" ? imageMeta.height_full : null;
+      imageMeta.width_preview = widthPreview;
+      imageMeta.height_preview = heightPreview;
+      imageMeta.width_full = widthFull;
+      imageMeta.height_full = heightFull;
+      imageWidth  = (widthPreview && isFinite(widthPreview)) ? widthPreview : (imageMeta && typeof imageMeta.width === "number" ? imageMeta.width : 0);
+      imageHeight = (heightPreview && isFinite(heightPreview)) ? heightPreview : (imageMeta && typeof imageMeta.height === "number" ? imageMeta.height : 0);
+      mppX = imageMeta && typeof imageMeta.mppX === "number" && isFinite(imageMeta.mppX) ? imageMeta.mppX : null;
+      mppY = imageMeta && typeof imageMeta.mppY === "number" && isFinite(imageMeta.mppY) ? imageMeta.mppY : null;
+      imageMeta.preview_url = imageMeta && typeof imageMeta.preview_url === "string" ? imageMeta.preview_url : null;
+      imageMeta.cache_npz_key = imageMeta && typeof imageMeta.cache_npz_key === "string" ? imageMeta.cache_npz_key : null;
+      imageMeta.media_asset_id = imageMeta && typeof imageMeta.asset_id === "number" ? imageMeta.asset_id : null;
+      imageMeta.source = imageMeta && imageMeta.source ? String(imageMeta.source) : "agrovista";
+      imageMeta.previews = imageMeta && typeof imageMeta.previews === "object" && imageMeta.previews !== null ? { ...imageMeta.previews } : {};
+      if(!imageMeta.previews.rgb && imageMeta.preview_url){ imageMeta.previews.rgb = imageMeta.preview_url; }
+      if(!imageMeta.previews[currentPreviewKey]){
+        const _firstAvail = Object.keys(imageMeta.previews).find(k => !!imageMeta.previews[k]);
+        currentPreviewKey = _firstAvail || "rgb";
+        if(el.previewSelector){ el.previewSelector.value = currentPreviewKey; }
+      }
+      imgBounds = [[0,0], [imageHeight, imageWidth]];
+      if(imageMeta){
+        areaStatsCache.clear();
+        const vars = getVariablesSource(imageMeta);
+        imageMeta.variables = vars;
+        imageMeta.processed = !!imageMeta.processed;
+        imageMeta.ndvi_stamp = imageMeta.ndvi_stamp || meta?.ndvi_stamp || Date.now();
+        if(!imageMeta.method){ imageMeta.method = "ndvi_approx"; }
+        if(!imageMeta.visible_method){ imageMeta.visible_method = "combined"; }
+        imageMeta.has_nir = false;
+        imageMeta.nutrients = Array.isArray(meta?.nutrients)
+          ? meta.nutrients.map(item => ({ ...item }))
+          : [];
+      }
+
+      refreshMethodLabel();
+
+      resetVariableValues();
+      if(imageMeta){
+        const vars = getVariablesSource(imageMeta);
+        VARIABLE_KEYS.forEach(key => {
+          setVariableValue(key, vars[key]);
+        });
+        renderNutrients(imageMeta.nutrients);
+        setPrimaryMetrics(imageMeta);
+      }
+
+      setProteinBox(null, null, imageMeta && imageMeta.processed ? "Selecciona un polígono" : "Calcula NDVI dibujando un polígono");
+      setStatus(imageMeta && imageMeta.processed ? "NDVI listo." : "Vista previa cargada. Dibuja un polígono para procesar NDVI.");
+    }
+    async function handleFileChange(ev){
+      const file = ev.target.files?.[0];
+      if(!file) return;
+      try{
+        setStatus("Procesando...");
+        if(file && file.name){
+          updateAssetLabels(file.name);
+        }
+        const meta = await uploadFile(file);
+        applyMeta(meta);
+        if(overlay) map.removeLayer(overlay);
+        overlay = L.imageOverlay(getOverlayUrl(), imgBounds).addTo(map);
+        fitImage();
+        if(el.previewSelector){
+          const availableKeys = imageMeta && imageMeta.previews ? Object.keys(imageMeta.previews).filter(k => !!imageMeta.previews[k]) : [];
+          const options = el.previewSelector.querySelectorAll('option');
+          options.forEach(opt => {
+            opt.disabled = availableKeys.length > 0 ? !availableKeys.includes(opt.value) : false;
+          });
+          if(availableKeys.length > 0 && !availableKeys.includes(currentPreviewKey)){
+            currentPreviewKey = availableKeys.includes("rgb") ? "rgb" : availableKeys[0];
+            el.previewSelector.value = currentPreviewKey;
+          }
+        }
+        setStatus(mppX != null ? `Escala automática: ~${mppX} m/px` : "Escala en píxeles (mpp no disponible)");
+        drawnItems.eachLayer(layer => { if(layer instanceof L.Polygon || layer instanceof L.Rectangle){ updateAreaForLayer(layer); } });
+      }catch(e){
+        setStatus("Error al procesar el archivo");
+      }
+    }
+
+    // Picker callback usa metadata directa desde Media (sin re-subir)
+    MP.setOnPick(async (payload)=>{
+      try{
+        setStatus("Procesando...");
+        let meta = null;
+        if(payload && payload.meta){
+          meta = payload.meta;
+        }else if(payload && payload.file){
+          meta = await uploadFile(payload.file);
+        }else{
+          throw new Error("Selección inválida");
+        }
+        const assetName = payload?.asset?.original_name || payload?.asset?.name || payload?.meta?.filename || payload?.file?.name;
+        if(assetName){
+          updateAssetLabels(assetName);
+        }
+        applyMeta(meta);
+        if(overlay) map.removeLayer(overlay);
+        overlay = L.imageOverlay(getOverlayUrl(), imgBounds).addTo(map);
+        fitImage();
+        if(el.previewSelector){
+          const availableKeys = imageMeta && imageMeta.previews ? Object.keys(imageMeta.previews).filter(k => !!imageMeta.previews[k]) : [];
+          const options = el.previewSelector.querySelectorAll('option');
+          options.forEach(opt => {
+            opt.disabled = availableKeys.length > 0 ? !availableKeys.includes(opt.value) : false;
+          });
+          if(availableKeys.length > 0 && !availableKeys.includes(currentPreviewKey)){
+            currentPreviewKey = availableKeys.includes("rgb") ? "rgb" : availableKeys[0];
+            el.previewSelector.value = currentPreviewKey;
+          }
+        }
+        setStatus(mppX != null ? `Escala automática: ~${mppX} m/px` : "Escala en píxeles (mpp no disponible)");
+        drawnItems.eachLayer(layer => { if(layer instanceof L.Polygon || layer instanceof L.Rectangle){ updateAreaForLayer(layer); } });
+      }catch(e){ setStatus("Error al procesar el archivo"); }
+    });
+
+    /* ---------- Draw events ---------- */
+    async function fetchAreaStats(verts, coordsFullRes){
+      const csrf = getCsrfToken();
+      const res = await fetch(ENDPOINTS.protein, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-TOKEN": csrf || "",
+        },
+        body: JSON.stringify({
+          id: imageId,
+          media_asset_id: imageMeta && imageMeta.media_asset_id ? imageMeta.media_asset_id : null,
+          source: imageMeta && imageMeta.source ? imageMeta.source : "agrovista",
+          visible_method: imageMeta && imageMeta.visible_method ? imageMeta.visible_method : null,
+          width_preview: imageMeta && imageMeta.width_preview ? imageMeta.width_preview : imageWidth,
+          height_preview: imageMeta && imageMeta.height_preview ? imageMeta.height_preview : imageHeight,
+          width_full: imageMeta && imageMeta.width_full ? imageMeta.width_full : null,
+          height_full: imageMeta && imageMeta.height_full ? imageMeta.height_full : null,
+          scale_x: imageMeta && imageMeta.scale_x ? imageMeta.scale_x : null,
+          scale_y: imageMeta && imageMeta.scale_y ? imageMeta.scale_y : null,
+          coords_full_res: !!coordsFullRes,
+          vertices: verts,
+        }),
+      });
+      let data = {};
+      try{ data = await res.json(); }catch{}
+      if(!res.ok){ throw new Error(data?.description || "Área inválida"); }
+      return data;
+    }
+    function wireArea(layer){
+      layer.on("click", () => {
+        setActiveLayer(layer);
+        updateStatsForLayer(layer);
+      });
+    }
+
+    async function updateStatsForLayer(layer){
+      updateAreaForLayer(layer);
+      if(!imageId){ return; }
+      const layerKey = getLayerKey(layer);
+      if(layerKey !== null && areaStatsCache.has(layerKey)){
+        const cached = areaStatsCache.get(layerKey);
+        applyAreaStats(cached);
+        const entry = ensureLotEntry(layer);
+        if(entry){
+          entry.stats = getPrimaryStatsFromData(cached);
+          entry.areaStats = cloneAreaStats(cached);
+        }
+        renderLotsList();
+        if(el.analysisCreateLotToggle && el.analysisCreateLotToggle.checked){
+          updateLotAreaInput(false);
+        }
+        setStatus("Resultados recuperados del caché local.");
+        return;
+      }
+      const verts = getRasterVertices(layer);
+      if(!verts){
+        setProteinBox(null, null, "Selecciona un polígono");
+        resetVariableValues();
+        return;
+      }
+      const token = ++statsRequestToken;
+      setProteinBox(null, null, "Calculando…");
+      setStatus("Procesando área seleccionada…");
+      // Mark entry as computing
+      const entry = ensureLotEntry(layer);
+      if(entry){
+        entry.computing = true;
+        renderLotsList();
+      }
+      try{
+        const data = await fetchAreaStats(verts, true);
+        if(token !== statsRequestToken) return;
+        applyAreaStats(data);
+        if(layerKey !== null){
+          areaStatsCache.set(layerKey, data);
+        }
+        const entry = ensureLotEntry(layer);
+        if(entry){
+          entry.stats = getPrimaryStatsFromData(data);
+          entry.areaStats = cloneAreaStats(data);
+          entry.computing = false;
+        }
+        renderLotsList();
+        if(el.analysisCreateLotToggle && el.analysisCreateLotToggle.checked){
+          updateLotAreaInput(false);
+        }
+        if(data && data.ndvi_ready){
+          imageMeta.processed = true;
+          if(typeof data.ndvi_stamp !== "undefined" && data.ndvi_stamp !== null){
+            updateOverlayStamp(data.ndvi_stamp);
+          }
+        }
+        setStatus("Área procesada.");
+      }catch(err){
+        if(token !== statsRequestToken) return;
+        if(layerKey !== null){
+          const errEntry = lotState.get(layerKey);
+          if(errEntry){ errEntry.computing = false; }
+        }
+        renderLotsList();
+        if(imageMeta){
+          const vars = getVariablesSource(imageMeta);
+          VARIABLE_KEYS.forEach(key => {
+            setVariableValue(key, vars[key]);
+          });
+        } else {
+          resetVariableValues();
+        }
+        setProteinBox(null, null, (err && err.message) || "Error al calcular la proteína");
+        setStatus("Error al procesar el área.");
+      }
+    }
+
+    map.on(L.Draw.Event.CREATED, async (e)=>{
+      const { layer, layerType } = e;
+      drawnItems.addLayer(layer);
+
+      if(layerType === "polygon" || layerType === "rectangle"){
+        ensureLotEntry(layer);
+        wireArea(layer);
+        setActiveLayer(layer);
+        await updateStatsForLayer(layer);
+        toggleKmzButton();
+        updateSaveButtonState(); // Actualizar estado del botón de guardar
+      }
+    });
+
+    map.on(L.Draw.Event.EDITED, (e)=>{
+      e.layers.eachLayer(layer => {
+        const k = getLayerKey(layer);
+        if(k !== null){ areaStatsCache.delete(k); }
+        if(layer instanceof L.Polygon || layer instanceof L.Rectangle){
+          updateStatsForLayer(layer);
+        }
+      });
+      updateSaveButtonState(); // Actualizar estado del botón tras editar
+    });
+    map.on(L.Draw.Event.DELETED, ()=>{
+      resetMapState(false);
+      updateSaveButtonState(); // Actualizar estado del botón tras borrar polígono
+    });
+
+    /* ---------- Fullscreen ---------- */
+    function enterFullscreen(){
+      el.workzone.requestFullscreen().catch(()=>{});
+      setTimeout(() => { map.invalidateSize(); scheduleRulersRedraw(); }, 80);
+    }
+    function exitFullscreen(){ document.exitFullscreen(); }
+    function onFsChange(){
+      const isFs = document.fullscreenElement === el.workzone;
+      el.btnFsIn.classList.toggle("hidden", isFs);
+      el.btnFsOut.classList.toggle("hidden", !isFs);
+      setTimeout(() => { map.invalidateSize(); scheduleRulersRedraw(); }, 80);
+    }
+
+    /* ---------- Wire UI Events ---------- */
+    if(el.uploader) el.uploader.addEventListener("change", handleFileChange);
+    if(el.uploadTrigger && el.uploader){
+      el.uploadTrigger.addEventListener("click", () => el.uploader.click());
+    }
+    if(el.btnFit){ el.btnFit.addEventListener("click", fitImage); }
+    if(el.btnFsIn){ el.btnFsIn.addEventListener("click", enterFullscreen); }
+    if(el.btnFsOut){ el.btnFsOut.addEventListener("click", exitFullscreen); }
+    if(el.toggleLegendBtn){ el.toggleLegendBtn.addEventListener("click", toggleLegend); }
+    document.addEventListener("fullscreenchange", onFsChange);
+    window.addEventListener("resize", () => { map.invalidateSize(); scheduleRulersRedraw(); });
+    if(el.btnOpenPicker){ el.btnOpenPicker.addEventListener('click', ()=> MP.show()); }
+    if(el.previewSelector){
+      el.previewSelector.addEventListener('change', ()=>{
+        currentPreviewKey = el.previewSelector.value || "rgb";
+        if(overlay){
+          overlay.setUrl(getOverlayUrl(imageMeta?.ndvi_stamp));
+        }
+      });
+    }
+    if(el.btnDownloadKmz){
+      el.btnDownloadKmz.addEventListener('click', async ()=>{
+        const verts = currentVerticesRaster || currentVertices;
+        if(!verts || verts.length < 3){
+          return;
+        }
+        el.btnDownloadKmz.disabled = true;
+        try{
+          const csrf = getCsrfToken();
+          const res = await fetch(ENDPOINTS.kmz, {
+            method: "POST",
+            credentials: "include",
+            headers: {
+              "Content-Type": "application/json",
+              "X-CSRF-TOKEN": csrf || "",
+            },
+            body: JSON.stringify({
+              id: imageId,
+              media_asset_id: imageMeta && imageMeta.media_asset_id ? imageMeta.media_asset_id : null,
+              coords_full_res: Array.isArray(currentVerticesRaster),
+              vertices: verts,
+              width_preview: imageMeta && imageMeta.width_preview ? imageMeta.width_preview : imageWidth,
+              height_preview: imageMeta && imageMeta.height_preview ? imageMeta.height_preview : imageHeight,
+              width_full: imageMeta && imageMeta.width_full ? imageMeta.width_full : null,
+              height_full: imageMeta && imageMeta.height_full ? imageMeta.height_full : null,
+              scale_x: imageMeta && imageMeta.scale_x ? imageMeta.scale_x : null,
+              scale_y: imageMeta && imageMeta.scale_y ? imageMeta.scale_y : null,
+            }),
+          });
+          if(!res.ok){
+            throw new Error("No se pudo generar el KMZ");
+          }
+          const blob = await res.blob();
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `polygon_${imageId || "area"}.kmz`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(url);
+        }catch(err){
+          console.error(err);
+          alert("Error al descargar el KMZ");
+        }finally{
+          el.btnDownloadKmz.disabled = false;
+        }
+      });
+    }
+    if(el.btnCreateObjective){ el.btnCreateObjective.addEventListener('click', handleCreateObjective); }
+    if(el.analysisCropInput){
+      el.analysisCropInput.addEventListener('input', () => setAnalysisCropHint('', false));
+    }
+    if(el.saveLotAnalysisBtn){ el.saveLotAnalysisBtn.addEventListener('click', openFoliarModal); }
+    if(el.foliarClose){ el.foliarClose.addEventListener('click', closeFoliarModal); }
+    if(el.foliarCancel){ el.foliarCancel.addEventListener('click', closeFoliarModal); }
+    if(el.foliarForm){ el.foliarForm.addEventListener('submit', submitFoliarForm); }
+    if(el.foliarModal){
+      el.foliarModal.addEventListener('click', (ev) => {
+        if(ev.target === el.foliarModal){
+          closeFoliarModal();
+        }
+      });
+    }
+    if(el.analysisCreateLotToggle){
+      el.analysisCreateLotToggle.addEventListener('change', () => toggleNewLotFields());
+    }
+    if(el.analysisLotAreaInput){
+      el.analysisLotAreaInput.addEventListener('input', () => {
+        el.analysisLotAreaInput.dataset.manual = "1";
+      });
+    }
+    if(el.analysisFarmSelect){
+      el.analysisFarmSelect.addEventListener('change', (event) => {
+        const value = event.target.value;
+        window.currentFarmId = value ? Number(value) : null;
+        renderLotOptions(value);
+        const farmName = getFarmNameById(value);
+        if(farmName){
+          setText(el.contextFarm, farmName, "Seleccionar finca…");
+        }
+        window.loadLotsForCurrentFarm(); // Cargar lotes en el bloque "Lote de referencia"
+      });
+    }
+
+    // Farm picker listeners
+    if(el.contextFarm){
+      el.contextFarm.addEventListener('click', openFarmPicker);
+    }
+    if(el.farmPickerClose) el.farmPickerClose.addEventListener('click', closeFarmPicker);
+    if(el.farmPickerCancel) el.farmPickerCancel.addEventListener('click', closeFarmPicker);
+    if(el.farmPickerModal){
+      el.farmPickerModal.addEventListener('click', ev => {
+        if(ev.target === el.farmPickerModal) closeFarmPicker();
+      });
+    }
+    if(el.farmPickerList){
+      el.farmPickerList.addEventListener('click', ev => {
+        const btn = ev.target.closest('[data-farm-id]');
+        if(!btn) return;
+        selectFarmFromPicker(Number(btn.dataset.farmId), btn.dataset.farmName);
+      });
+    }
+
+    if(el.markAsObjectiveChk){
+      el.markAsObjectiveChk.addEventListener('change', () => {
+        if(!el.objectiveControls){
+          return;
+        }
+        el.objectiveControls.classList.toggle('hidden', !el.markAsObjectiveChk.checked);
+      });
+    }
+    if(el.compareModeInputs && el.compareModeInputs.length){
+      el.compareModeInputs.forEach(input => {
+        input.addEventListener('change', updateCompareMode);
+      });
+    }
+    if(el.compareLotSelect){ el.compareLotSelect.addEventListener('change', renderCompareAnalysisOptions); }
+    if(el.compareAnalysisSelect){ el.compareAnalysisSelect.addEventListener('change', updateComparisonButtonState); }
+    if(el.compareObjectiveSelect){ el.compareObjectiveSelect.addEventListener('change', updateComparisonButtonState); }
+    if(el.compareLotASelect){ el.compareLotASelect.addEventListener('change', updateComparisonButtonState); }
+    if(el.compareLotBSelect){ el.compareLotBSelect.addEventListener('change', updateComparisonButtonState); }
+    if(el.goToComparisonBtn){
+      el.goToComparisonBtn.addEventListener('click', async () => {
+        if(el.goToComparisonBtn.disabled || isGeneratingComparison){
+          return;
+        }
+        const mode = getSelectedCompareMode();
+        const compareUrl = el.goToComparisonBtn.dataset.compareUrl;
+        if(!compareUrl){
+          setCompareHint("No se encontro la ruta para configurar la comparación.", true);
+          return;
+        }
+        isGeneratingComparison = true;
+        el.goToComparisonBtn.disabled = true;
+        el.goToComparisonBtn.setAttribute("aria-busy", "true");
+        el.goToComparisonBtn.textContent = "Preparando comparación...";
+        setCompareHint("Preparando comparación...", false);
+        try{
+          let payload = { mode };
+          if(mode === "lot_vs_objective"){
+            const lotIdRaw = el.compareLotSelect ? el.compareLotSelect.value : "";
+            const objectiveRaw = el.compareObjectiveSelect ? el.compareObjectiveSelect.value : "";
+            const objectiveInfo = parseObjectiveValue(objectiveRaw);
+            if(!lotIdRaw || !objectiveRaw){
+              throw new Error("Selecciona un lote guardado y un objetivo ideal.");
+            }
+            const lotId = Number(lotIdRaw);
+            if(!Number.isFinite(lotId)){
+              throw new Error("Selecciona un lote valido para generar el informe.");
+            }
+            const analysisRaw = el.compareAnalysisSelect ? el.compareAnalysisSelect.value : "";
+            const commonId = analysisRaw ? Number(analysisRaw) : getLatestCommonAnalysisId(lotId);
+            if(!commonId || !Number.isFinite(Number(commonId))){
+              throw new Error("Selecciona el análisis del lote para generar la comparación.");
+            }
+            payload.lot_id = lotId;
+            payload.common_analysis_id = Number(commonId);
+            payload.objective = {
+              type: objectiveInfo.type,
+              id: Number(objectiveInfo.id),
+              label: el.compareObjectiveSelect
+                ? (el.compareObjectiveSelect.options[el.compareObjectiveSelect.selectedIndex]?.textContent || "").trim()
+                : "",
+            };
+            payload.lot_label = getSelectedLotLabel(lotId);
+          }else{
+            const lotAId = el.compareLotASelect ? el.compareLotASelect.value : "";
+            const lotBId = el.compareLotBSelect ? el.compareLotBSelect.value : "";
+            if(!lotAId || !lotBId || lotAId === lotBId){
+              throw new Error("Selecciona dos lotes diferentes para comparar.");
+            }
+            const entryA = getLotEntryById(lotAId);
+            const entryB = getLotEntryById(lotBId);
+            if(!entryA || !entryB){
+              throw new Error("Selecciona los lotes dibujados para comparar.");
+            }
+            if(!entryB.linkedLotId){
+              throw new Error("Guarda el análisis foliar del Lote B antes de generar el informe.");
+            }
+            const commonId = entryB.linkedCommonAnalysisId || getLatestCommonAnalysisId(entryB.linkedLotId);
+            if(!commonId){
+              throw new Error("El Lote B no tiene un análisis común registrado.");
+            }
+            const areaStats = await ensureAreaStatsForEntry(entryA);
+            if(!areaStats || !Array.isArray(areaStats.nutrients) || areaStats.nutrients.length === 0){
+              throw new Error("Calcula los datos del Lote A antes de generar el informe.");
+            }
+            const layerA = drawnItems.getLayer(entryA.id);
+            const layerB = drawnItems.getLayer(entryB.id);
+            payload.lot_a = {
+              id: entryA.id,
+              name: entryA.name,
+              stats: entryA.stats,
+              area_stats: cloneAreaStats(areaStats),
+              area_ha: layerA ? computeAreaHaForLayer(layerA) : null,
+              linked_lot_id: entryA.linkedLotId ? Number(entryA.linkedLotId) : null,
+              linked_common_analysis_id: entryA.linkedCommonAnalysisId
+                ? Number(entryA.linkedCommonAnalysisId)
+                : null,
+            };
+            payload.lot_b = {
+              id: entryB.id,
+              name: entryB.name,
+              stats: entryB.stats,
+              area_stats: cloneAreaStats(entryB.areaStats),
+              area_ha: layerB ? computeAreaHaForLayer(layerB) : null,
+              linked_lot_id: Number(entryB.linkedLotId),
+              linked_common_analysis_id: Number(commonId),
+              linked_lot_name: entryB.linkedLotName || "",
+            };
+          }
+          // Build URL query params for reliable navigation (primary method)
+          const params = new URLSearchParams();
+          params.set("mode", mode);
+
+          if (mode === "lot_vs_objective") {
+            params.set("lot_id", String(payload.lot_id));
+            params.set("common_analysis_id", String(payload.common_analysis_id));
+            params.set("objective_id", String(payload.objective.id));
+            params.set("objective_type", payload.objective.type || "crop");
+            params.set("objective_label", payload.objective.label || "");
+            if (payload.lot_label) params.set("lot_label", payload.lot_label);
+          } else {
+            params.set("lot_a_id", String(payload.lot_a.id));
+            params.set("lot_a_name", payload.lot_a.name || "");
+            params.set("lot_a_area_ha", payload.lot_a.area_ha ? String(payload.lot_a.area_ha) : "");
+            if (payload.lot_a.linked_lot_id) params.set("lot_a_linked_lot_id", String(payload.lot_a.linked_lot_id));
+            if (payload.lot_a.linked_common_analysis_id) params.set("lot_a_linked_common_analysis_id", String(payload.lot_a.linked_common_analysis_id));
+            params.set("lot_b_id", String(payload.lot_b.id));
+            params.set("lot_b_name", payload.lot_b.name || "");
+            params.set("lot_b_area_ha", payload.lot_b.area_ha ? String(payload.lot_b.area_ha) : "");
+            params.set("linked_lot_id", String(payload.lot_b.linked_lot_id));
+            params.set("linked_common_analysis_id", String(payload.lot_b.linked_common_analysis_id));
+            if (payload.lot_b.linked_lot_name) params.set("linked_lot_name", payload.lot_b.linked_lot_name);
+            // Stats complejos van solo por sessionStorage como respaldo
+            const token = `cmp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+            sessionStorage.setItem(`agrovista_comparison_${token}`, JSON.stringify(payload));
+            params.set("token", token);
+          }
+
+          // Keep sessionStorage as backup for complex data (lot_vs_lot area_stats)
+          if (mode === "lot_vs_objective") {
+            const token = `cmp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+            sessionStorage.setItem(`agrovista_comparison_${token}`, JSON.stringify(payload));
+            params.set("token", token);
+          }
+
+          window.location.href = `${compareUrl}?${params.toString()}`;
+        }catch(err){
+          const message = err?.message || "Error al preparar la comparación.";
+          isGeneratingComparison = false;
+          el.goToComparisonBtn.textContent = compareButtonLabel || "Ver comparación nutricional";
+          el.goToComparisonBtn.removeAttribute("aria-busy");
+          updateComparisonButtonState();
+          setCompareHint(message, true);
+        }
+      });
+    }
+    if(el.drawPolygonBtn){
+      el.drawPolygonBtn.addEventListener('click', () => {
+        if(!drawCtl){
+          return;
+        }
+        const polygonOptions = {
+          allowIntersection: false,
+          showArea: true,
+        };
+        const drawer = new L.Draw.Polygon(map, polygonOptions);
+        drawer.enable();
+        setStatus('Dibuja un polígono sobre la ortofoto.');
+      });
+    }
+    if(el.drawRectangleBtn){
+      el.drawRectangleBtn.addEventListener('click', () => {
+        if(!drawCtl){
+          return;
+        }
+        const rectangleOptions = {
+          showArea: true,
+        };
+        const drawer = new L.Draw.Rectangle(map, rectangleOptions);
+        drawer.enable();
+        setStatus('Dibuja un rectángulo sobre la ortofoto.');
+      });
+    }
+    if(el.selectPolygonBtn){
+      el.selectPolygonBtn.addEventListener('click', () => {
+        setStatus('Haz clic sobre un polígono para ver sus índices.');
+      });
+    }
+    if(el.resetMapBtn){
+      el.resetMapBtn.addEventListener('click', () => {
+        resetMapState(true);
+      });
+    }
+
+    // ===== Lot Reference (Geometry) Loader =====
+    (function() {
+      const lotSelector = document.getElementById('referenceLotsSelect');
+      const lotStatus = document.getElementById('lotPolygonStatus');
+      const savePolygonBtn = document.getElementById('savePolygonToLotBtn');
+      const contextFarmEl = document.getElementById('contextFarm');
+
+      let lotGeometryMap = {};
+      let currentLotPolygon = null;
+      let selectedLotId = null;
+
+      if (!lotSelector) return;
+
+      // Cargar lotes cuando se cambia de finca
+      function loadLotsForCurrentFarm() {
+        // Usar window.currentFarmId como fuente de verdad (establecido por farm picker o analysisFarmSelect)
+        const farmId = window.currentFarmId;
+        if (!farmId) {
+          lotSelector.innerHTML = '<option value="">-- Sin finca seleccionada --</option>';
+          lotStatus.textContent = 'Selecciona una finca para ver los lotes disponibles';
+          updateSaveButtonState();
+          return;
+        }
+
+        fetch('/api/foliage/lots/?filter_value=' + farmId, {
+          credentials: 'include'
+        })
+        .then(r => r.json())
+        .then(lots => {
+          lotSelector.innerHTML = '<option value="">-- Seleccionar lote --</option>';
+          lotGeometryMap = {};
+          (lots || []).forEach(function(lot) {
+            var opt = document.createElement('option');
+            opt.value = lot.id;
+            const hasGeometry = lot.geometry && lot.geometry.trim() !== '';
+            const icon = hasGeometry ? '📍' : '○';
+            opt.textContent = icon + ' ' + lot.name + ' (' + lot.area + ' ha)';
+            opt.dataset.hasGeometry = hasGeometry ? '1' : '0';
+            lotSelector.appendChild(opt);
+            if (hasGeometry) {
+              lotGeometryMap[lot.id] = lot.geometry;
+            }
+          });
+          updateSaveButtonState();
+        })
+        .catch(err => {
+          lotStatus.textContent = '❌ Error al cargar lotes: ' + (err.message || '');
+          console.error('Error loading lots:', err);
+        });
+      }
+
+      lotSelector.addEventListener('change', function() {
+        removeLotPolygon();
+        selectedLotId = this.value;
+
+        if (!selectedLotId) {
+          lotStatus.textContent = 'Selecciona un lote para visualizar su polígono';
+          updateSaveButtonState();
+          return;
+        }
+
+        if (lotGeometryMap[selectedLotId]) {
+          drawLotPolygon(lotGeometryMap[selectedLotId]);
+          lotStatus.innerHTML = '✓ <strong>Polígono del lote cargado</strong><br><span class="text-xs">Mostrado en naranja punteado. Dibuja un nuevo polígono para reemplazarlo.</span>';
+        } else {
+          lotStatus.innerHTML = '○ <strong>Este lote no tiene límites definidos aún</strong><br><span class="text-xs">Dibuja un polígono en el mapa para asociarlo a este lote.</span>';
+        }
+        updateSaveButtonState();
+      });
+
+      function drawLotPolygon(geojsonStr) {
+        try {
+          var geoJsonObj = JSON.parse(geojsonStr);
+          // Extraer coordenadas del GeoJSON (formato: [lng, lat])
+          var coords = [];
+          if (geoJsonObj.type === 'Feature' && geoJsonObj.geometry) {
+            geoJsonObj = geoJsonObj.geometry;
+          }
+          if (geoJsonObj.type === 'Polygon' && geoJsonObj.coordinates && geoJsonObj.coordinates[0]) {
+            // Convertir [lng, lat] a [lat, lng] para Leaflet
+            coords = geoJsonObj.coordinates[0].map(function(c) { return [c[1], c[0]]; });
+          } else if (geoJsonObj.type === 'MultiPolygon' && geoJsonObj.coordinates && geoJsonObj.coordinates[0]) {
+            coords = geoJsonObj.coordinates[0][0].map(function(c) { return [c[1], c[0]]; });
+          }
+
+          if (coords.length < 3) {
+            throw new Error('GeoJSON no contiene un polígono válido');
+          }
+
+          // Crear polígono funcional y agregarlo a drawnItems (no solo al mapa)
+          currentLotPolygon = L.polygon(coords, {
+            color: '#ff6600',
+            weight: 3,
+            opacity: 0.8,
+            fillOpacity: 0.15,
+            dashArray: '5, 5'
+          });
+          drawnItems.addLayer(currentLotPolygon);
+
+          // Hacerlo funcional: registrar en lotState y activarlo
+          ensureLotEntry(currentLotPolygon);
+          setActiveLayer(currentLotPolygon);
+          wireArea(currentLotPolygon);
+          updateStatsForLayer(currentLotPolygon);
+
+          // Centrar mapa en el polígono
+          if (currentLotPolygon.getBounds && currentLotPolygon.getBounds().isValid()) {
+            map.fitBounds(currentLotPolygon.getBounds(), { padding: [50, 50] });
+          }
+        } catch(e) {
+          lotStatus.textContent = '❌ Error al cargar polígono: ' + (e.message || '');
+          console.error('GeoJSON parse error:', e);
+        }
+      }
+
+      function removeLotPolygon() {
+        if (currentLotPolygon) {
+          // Remover de drawnItems y del mapa
+          drawnItems.removeLayer(currentLotPolygon);
+          map.removeLayer(currentLotPolygon);
+          // Si era el polígono activo, resetear activeLayerId
+          const layerKey = getLayerKey(currentLotPolygon);
+          if (layerKey !== null && activeLayerId === layerKey) {
+            activeLayerId = null;
+            setText(el.activeLotName, "Sin lote seleccionado");
+          }
+          currentLotPolygon = null;
+        }
+      }
+
+      function updateSaveButtonState() {
+        if (!savePolygonBtn) return;
+
+        const hasLotSelected = !!selectedLotId;
+        const lotHasGeometry = hasLotSelected && lotGeometryMap[selectedLotId];
+        const hasPolygonDrawn = window.drawnItems && window.drawnItems.getLayers && window.drawnItems.getLayers().length > 0;
+
+        // Resetear clases de color (remover clases de color anteriores)
+        savePolygonBtn.classList.remove('bg-blue-600', 'hover:bg-blue-700', 'bg-amber-600', 'bg-emerald-600');
+
+        // Caso 1: No hay lote seleccionado
+        if (!hasLotSelected) {
+          savePolygonBtn.disabled = true;
+          savePolygonBtn.innerHTML = '<i class="fas fa-save mr-2"></i>Guardar polígono en lote';
+          savePolygonBtn.classList.add('bg-blue-600', 'hover:bg-blue-700');
+          savePolygonBtn.title = 'Selecciona un lote primero';
+          return;
+        }
+
+        // Caso 2: Lote con geometría existente
+        if (lotHasGeometry) {
+          savePolygonBtn.innerHTML = '<i class="fas fa-exchange-alt mr-2"></i>Actualizar polígono del lote';
+          savePolygonBtn.classList.add('bg-amber-600');
+          savePolygonBtn.classList.remove('hover:bg-blue-700');
+          savePolygonBtn.classList.add('hover:bg-amber-700');
+          savePolygonBtn.disabled = !hasPolygonDrawn;
+          savePolygonBtn.title = hasPolygonDrawn
+            ? '⚠️ Esto sobrescribirá la geometría actual. Confirma al hacer click.'
+            : '⚠️ Dibuja un polígono primero para actualizar los límites';
+          return;
+        }
+
+        // Caso 3: Lote sin geometría
+        if (hasPolygonDrawn) {
+          savePolygonBtn.innerHTML = '<i class="fas fa-plus-circle mr-2"></i>Asociar polígono al lote';
+          savePolygonBtn.classList.add('bg-emerald-600');
+          savePolygonBtn.classList.remove('hover:bg-blue-700');
+          savePolygonBtn.classList.add('hover:bg-emerald-700');
+          savePolygonBtn.disabled = false;
+          savePolygonBtn.title = '✓ Listo para guardar. Click aquí para asociar el polígono.';
+        } else {
+          savePolygonBtn.innerHTML = '<i class="fas fa-plus-circle mr-2"></i>Asociar polígono al lote';
+          savePolygonBtn.classList.add('bg-blue-600', 'hover:bg-blue-700');
+          savePolygonBtn.disabled = true;
+          savePolygonBtn.title = 'Dibuja un polígono en el mapa primero';
+        }
+      }
+
+      savePolygonBtn.addEventListener('click', function() {
+        if (!selectedLotId) {
+          alert('Selecciona un lote primero');
+          return;
+        }
+
+        // Buscar polígono dibujado en el mapa
+        var drawnLayers = [];
+        if (window.drawnItems) {
+          window.drawnItems.eachLayer(function(layer) {
+            if (layer instanceof L.Polygon || layer instanceof L.Rectangle) {
+              drawnLayers.push(layer);
+            }
+          });
+        }
+
+        if (drawnLayers.length === 0) {
+          alert('Dibuja un polígono primero');
+          return;
+        }
+
+        var geojsonStr = JSON.stringify(drawnLayers[0].toGeoJSON());
+
+        // PUT request to update lot with geometry
+        fetch('/api/foliage/lots/', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            id: parseInt(selectedLotId),
+            geometry: geojsonStr
+          })
+        })
+        .then(r => r.json())
+        .then(function() {
+          alert('✓ Polígono guardado exitosamente');
+          lotGeometryMap[selectedLotId] = geojsonStr;
+          removeLotPolygon();
+          drawLotPolygon(geojsonStr);
+          lotStatus.textContent = '✓ Polígono guardado en lote';
+        })
+        .catch(function(err) {
+          alert('❌ Error al guardar: ' + (err.message || ''));
+        });
+      });
+
+      // Exponer globalmente para que sea accesible desde selectFarmFromPicker y analysisFarmSelect
+      window.loadLotsForCurrentFarm = loadLotsForCurrentFarm;
+
+      // Intentar cargar lotes inicialmente (si hay farm_id disponible)
+      // El ndvi_tool.js debe establecer window.currentFarmId
+      loadLotsForCurrentFarm();
+    })();
+  })();
+  </script>
+{% endblock %}

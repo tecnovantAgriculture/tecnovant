@@ -2,7 +2,414 @@
 {# usaje example: login.j2 #}
 {% extends "base.j2" %}
 {% set basic_form_view = true %}
+{% block extra_css %}
+{{ super() }}
+{% if login_view %}
+<style>
+  html,
+  body {
+    width: 100%;
+    min-height: 100%;
+    margin: 0;
+  }
+
+  body.home {
+    min-height: 100vh;
+    overflow: hidden;
+    background: #042f35;
+  }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  #main-content,
+  #main-content > div,
+  .login-screen {
+    width: 100%;
+    min-height: 100vh;
+  }
+
+  .login-screen {
+    position: relative;
+    display: grid;
+    place-items: center end;
+    padding: 2rem clamp(2rem, 12vw, 14rem) 2rem 2rem;
+    box-sizing: border-box;
+    overflow: hidden;
+    background:
+      linear-gradient(90deg, rgba(0, 42, 45, 0.22), rgba(0, 42, 45, 0.08) 45%, rgba(0, 42, 45, 0.18)),
+      url("/img/TECNOVAN%20%20Tecnolog%C3%ADa%20para%20el%20Campo%20(1).png") center / cover no-repeat;
+  }
+
+  .login-screen::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 40, 42, 0.02);
+    pointer-events: none;
+  }
+
+  .login-panel {
+    position: relative;
+    z-index: 1;
+    width: min(100%, 360px);
+    transform: translateY(2.5rem);
+  }
+
+  .login-form {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.45rem;
+    width: 100%;
+    padding: 1rem 0;
+    box-sizing: border-box;
+    font-family: "Montserrat", "Segoe UI", Arial, Helvetica, sans-serif;
+  }
+
+  .login-title {
+    margin: 0;
+    padding: 0;
+    color: #ffffff;
+    font-family: "Montserrat", "Segoe UI", Arial, Helvetica, sans-serif;
+    font-size: clamp(1.8rem, 3.6vw, 2.35rem);
+    font-weight: 750;
+    line-height: 1;
+    text-align: center;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    text-shadow: 0 3px 14px rgba(0, 0, 0, 0.22);
+  }
+
+  .login-field {
+    position: relative;
+    width: 100%;
+    height: 46px;
+  }
+
+  .login-field input {
+    width: 100%;
+    height: 100%;
+    border: 0;
+    border-radius: 999px;
+    background: rgba(104, 132, 134, 0.82);
+    color: #042d33;
+    font: 650 0.88rem "Montserrat", "Segoe UI", Arial, Helvetica, sans-serif;
+    outline: none;
+    box-shadow: none;
+    box-sizing: border-box;
+    transition: background 160ms ease, box-shadow 160ms ease;
+  }
+
+  .login-field input::placeholder {
+    color: rgba(3, 42, 48, 0.86);
+    opacity: 1;
+  }
+
+  .login-field input:focus {
+    background: rgba(126, 153, 155, 0.92);
+    box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.22);
+  }
+
+  .login-field__icon {
+    position: absolute;
+    top: 50%;
+    z-index: 2;
+    display: grid;
+    width: 52px;
+    height: 52px;
+    place-items: center;
+    border-radius: 999px;
+    background: #ffffff;
+    color: #082f36;
+    font-size: 1.15rem;
+    line-height: 1;
+    transform: translateY(-50%);
+    box-shadow: 0 10px 22px rgba(0, 0, 0, 0.16);
+  }
+
+  .login-field--username .login-field__icon {
+    left: 0;
+  }
+
+  .login-field--username input {
+    padding: 0 1.25rem 0 4.5rem;
+  }
+
+  .login-field--password .login-field__icon {
+    right: 0;
+  }
+
+  .login-field--password input {
+    padding: 0 4.5rem 0 1.25rem;
+  }
+
+  .login-submit {
+    width: 100%;
+    min-height: 46px;
+    border: 0;
+    border-radius: 999px;
+    background: #ffffff;
+    color: #082f36;
+    font: 800 1rem/1 "Montserrat", "Segoe UI", Arial, Helvetica, sans-serif;
+    text-align: center;
+    cursor: pointer;
+    box-shadow: 0 12px 26px rgba(0, 0, 0, 0.18);
+    transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease;
+  }
+
+  .login-submit:hover {
+    background: #f4fbfa;
+    transform: translateY(-1px);
+    box-shadow: 0 16px 30px rgba(0, 0, 0, 0.22);
+  }
+
+  .login-message {
+    min-height: 1.25rem;
+    margin-top: -0.75rem;
+    color: #ffffff;
+    font: 700 0.82rem "Montserrat", "Segoe UI", Arial, Helvetica, sans-serif;
+    text-align: center;
+  }
+
+  .login-message--success {
+    color: #bbf7d0;
+  }
+
+  .login-message--error {
+    color: #fecaca;
+  }
+
+  .login-links {
+    margin-top: -0.95rem;
+    text-align: center;
+  }
+
+  .login-links a {
+    color: rgba(255, 255, 255, 0.9);
+    font: 700 0.82rem "Montserrat", "Segoe UI", Arial, Helvetica, sans-serif;
+    text-decoration: none;
+  }
+
+  .login-links a:hover {
+    color: #ffffff;
+    text-decoration: underline;
+  }
+
+  .login-contact {
+    position: absolute;
+    top: 1.5rem;
+    right: clamp(1.25rem, 5vw, 4rem);
+    z-index: 3;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    min-width: 132px;
+    min-height: 40px;
+    padding: 0 1.25rem;
+    border: 1px solid rgba(255, 255, 255, 0.58);
+    border-radius: 999px;
+    background: rgba(104, 132, 134, 0.72);
+    color: #ffffff;
+    font: 750 0.86rem/1 "Montserrat", "Segoe UI", Arial, Helvetica, sans-serif;
+    text-decoration: none;
+    box-shadow: 0 10px 22px rgba(0, 0, 0, 0.14);
+    transition: background 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+  }
+
+  .login-contact:hover {
+    background: rgba(126, 153, 155, 0.9);
+    color: #ffffff;
+    transform: translateY(-1px);
+    box-shadow: 0 14px 26px rgba(0, 0, 0, 0.18);
+  }
+
+  .login-contact i {
+    font-size: 0.9rem;
+    line-height: 1;
+  }
+
+  @media (max-width: 520px) {
+    .login-screen {
+      place-items: center;
+      padding: 5rem 1rem 2rem;
+    }
+
+    .login-contact {
+      top: 1rem;
+      right: 1rem;
+      min-width: 112px;
+      min-height: 36px;
+      padding: 0 1rem;
+      font-size: 0.8rem;
+    }
+
+    .login-panel {
+      width: min(100%, 320px);
+      transform: translateY(1.25rem);
+    }
+
+    .login-form {
+      gap: 1.25rem;
+    }
+
+    .login-field {
+      height: 44px;
+    }
+
+    .login-field__icon {
+      width: 50px;
+      height: 50px;
+      font-size: 1.1rem;
+    }
+
+    .login-field--username input {
+      padding-left: 4.25rem;
+    }
+
+    .login-field--password input {
+      padding-right: 4.25rem;
+    }
+  }
+</style>
+{% endif %}
+{% endblock %}
+
+{% block header %}
+{% if not login_view %}
+{{ super() }}
+{% endif %}
+{% endblock %}
+
 {% block content %}
+{% if login_view %}
+<section class="login-screen">
+    <a class="login-contact" href="https://tecnovant.net/es/contacto/" target="_blank" rel="noopener">
+        <i class="fa-solid fa-envelope" aria-hidden="true"></i>
+        <span>Contacto</span>
+    </a>
+    <div class="login-panel">
+        <form id="{{ form_id }}" class="login-form" autocomplete="on">
+            <h1 class="login-title">INICIAR SESIÓN</h1>
+            {% for field in fields %}
+            <div class="login-field login-field--{{ field.name }}">
+                <label for="{{ field.name }}" class="sr-only">{{ field.label|safe }}</label>
+                <span class="login-field__icon" aria-hidden="true">
+                    <i class="fa-solid {{ field.icon|default('fa-user') }}"></i>
+                </span>
+                <input type="{{ field.type }}"
+                       id="{{ field.name }}"
+                       name="{{ field.name }}"
+                       placeholder="{{ field.placeholder|default(field.label)|striptags }}"
+                       {% if field.name == 'username' %}autocomplete="username"{% elif field.name == 'password' %}autocomplete="current-password"{% elif field.name == 'email' %}autocomplete="email"{% elif field.name == 'new_password' %}autocomplete="new-password"{% elif field.name == 'current_password' %}autocomplete="current-password"{% elif field.name == 'confirm_password' %}autocomplete="new-password"{% endif %}
+                       required>
+            </div>
+            {% endfor %}
+            <button type="submit" class="login-submit">{{ button_text }}</button>
+            <div id="message" class="login-message" role="status" aria-live="polite"></div>
+            {% if extra_links %}
+            <div class="login-links">
+                {% for link in extra_links %}
+                <a href="{{ link.url }}">{{ link.text|safe }}</a>{% if not loop.last %} | {% endif %}
+                {% endfor %}
+            </div>
+            {% endif %}
+        </form>
+    </div>
+</section>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script>
+function showLoginAlert(type, title, text, options = {}) {
+    if (window.Swal) {
+        return Swal.fire({
+            icon: type,
+            title: title,
+            text: text,
+            confirmButtonText: options.confirmButtonText || 'OK',
+            showConfirmButton: options.showConfirmButton ?? true,
+            timer: options.timer,
+            timerProgressBar: Boolean(options.timer),
+            allowOutsideClick: options.allowOutsideClick ?? true,
+            customClass: {
+                confirmButton: 'login-alert-button'
+            }
+        });
+    }
+
+    const messageDiv = document.getElementById('message');
+    messageDiv.className = type === 'success'
+        ? 'login-message login-message--success'
+        : 'login-message login-message--error';
+    messageDiv.textContent = text;
+    return Promise.resolve();
+}
+
+async function apiLogin(username, password) {
+    try {
+        const response = await fetch('{{ api_url }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            credentials: 'include',
+            body: JSON.stringify({
+                username: username,
+                password: password
+            })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            await showLoginAlert('success', 'Inicio exitoso', data.msg || 'Bienvenido a TecnoAgro.', {
+                timer: 1200,
+                showConfirmButton: false,
+                allowOutsideClick: false
+            });
+            window.location.href = "{{ url_for('core.dashboard') }}";
+        } else {
+            await showLoginAlert('error', 'No se pudo iniciar sesion', data.msg || 'Revisa tus credenciales e intenta de nuevo.');
+        }
+    } catch (error) {
+        console.error('Error durante el inicio de sesion:', error);
+        await showLoginAlert('error', 'Error de conexion', 'Ocurrio un error. Por favor, intenta de nuevo mas tarde.');
+    }
+}
+
+document.getElementById('loginForm').addEventListener('submit', async function(event) {
+    event.preventDefault();
+
+    const username = document.getElementById('username').value.trim();
+    const password = document.getElementById('password').value;
+
+    if (!username || !password) {
+        await showLoginAlert('warning', 'Campos incompletos', 'Por favor, completa usuario y contrasena.');
+        return;
+    }
+
+    await apiLogin(username, password);
+});
+</script>
+<style>
+  .login-alert-button {
+    border-radius: 999px !important;
+    background: #0ea5a4 !important;
+    padding: 0.65rem 1.8rem !important;
+    font-family: "Montserrat", "Segoe UI", Arial, Helvetica, sans-serif !important;
+    font-weight: 750 !important;
+  }
+</style>
+{% else %}
 <div class="home flex flex-col lg:flex-row">
      <div class="hidden lg:flex lg:w-1/2 bg-emerald-800 justify-center items-center dark:bg-gray-900 ">
         <h1 class="text-white text-5xl font-bold dark:text-white">{{ title }}</h1>
@@ -37,6 +444,13 @@
         {% endif %}
     </div>
 </div>
+{% endif %}
+{% endblock %}
+
+{% block footer %}
+{% if not login_view %}
+{{ super() }}
+{% endif %}
 {% endblock %}
 
 {% block extra_js %}

@@ -17,7 +17,9 @@ class SidebarManager {
   init() {
     this.setupMobileBehavior();
     this.setupSubmenus();
+    this.forceCloseAllSubmenus();
     this.setupActiveLinks();
+    this.forceCloseAllSubmenus();
     this.setupDarkModeToggle();
     this.setupDesktopToggle();
     this.setupResizeListener();
@@ -133,7 +135,7 @@ class SidebarManager {
 
   closeSubmenu(button) {
     const submenu = button.nextElementSibling;
-    if (!submenu || submenu.classList.contains('hidden')) return;
+    if (!submenu) return;
 
     const icon = button.querySelector('svg:last-child');
     if (icon) {
@@ -156,6 +158,22 @@ class SidebarManager {
     this.submenuButtons.forEach(button => this.closeSubmenu(button));
   }
 
+  forceCloseAllSubmenus() {
+    this.submenuButtons.forEach(button => {
+      const submenu = button.nextElementSibling;
+      if (submenu) {
+        submenu.classList.add('hidden');
+      }
+
+      const icon = button.querySelector('svg:last-child');
+      if (icon) {
+        icon.classList.remove('rotate-180');
+      }
+
+      button.setAttribute('aria-expanded', 'false');
+    });
+  }
+
   // Enlaces activos
   setupActiveLinks() {
     this.sidebarLinks.forEach(link => {
@@ -165,14 +183,12 @@ class SidebarManager {
       if (href && this.currentPath.includes(href.replace('.html', ''))) {
         link.classList.add('active');
         
-        // Expandir parent submenu si existe
+        // Marcar el submenú padre, pero no abrirlo automáticamente al cargar.
         const parentLi = link.closest('[data-visible="onClick"]');
         if (parentLi) {
           const button = parentLi.querySelector('button');
           if (button) {
-            // Mark button as having an active child link
             button.setAttribute('data-submenu-active', 'true');
-            this.openSubmenu(button);
           }
         }
       }
@@ -188,6 +204,8 @@ class SidebarManager {
   }
 
   openSubmenu(button) {
+    return;
+
     // Don't open submenus when sidebar is collapsed (they are hidden)
     if (document.documentElement.classList.contains('sidebar-collapsed')) {
       return;
@@ -205,11 +223,9 @@ class SidebarManager {
     button.setAttribute('aria-expanded', 'true');
   }
 
-  // Reopen active submenus when sidebar expands (after being collapsed)
+  // Mantener submenús cerrados al expandir el sidebar.
   refreshActiveSubmenus() {
-    // Find all buttons marked as having active child links
-    const activeButtons = document.querySelectorAll('#sidebar [data-submenu-active="true"]');
-    activeButtons.forEach(button => this.openSubmenu(button));
+    this.forceCloseAllSubmenus();
   }
 
   // Dark mode toggle en sidebar

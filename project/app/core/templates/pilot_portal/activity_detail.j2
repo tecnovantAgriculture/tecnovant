@@ -1,0 +1,141 @@
+{% extends "pilot_portal/base.j2" %}
+
+{% block body %}
+<main class="pilot-shell">
+  <header class="app-header">
+    <a class="icon-button" href="{{ url_for('core.pilot_calendar') }}" aria-label="Agenda"><i class="fas fa-chevron-left"></i></a>
+    <div style="text-align: right;">
+      <p class="pilot-eyebrow">Detalle de operacion</p>
+      <p class="app-subtitle">{{ activity.starts_at.strftime("%d/%m/%Y") }}</p>
+    </div>
+  </header>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="pilot-alerts">
+        {% for category, message in messages %}
+          <div class="pilot-alert pilot-alert-{{ 'success' if category == 'success' else 'error' }}">{{ message }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <section class="detail-hero">
+    <span class="pilot-badge" data-status="{{ activity.status }}">{{ status_label(activity.status) }}</span>
+    <h1>{{ activity.title }}</h1>
+    <p>{{ activity.operation_type }} · {{ activity.client_project or "Sin proyecto" }}</p>
+    <div class="pilot-actions">
+      {% if activity.status == "scheduled" %}
+        <form method="post" action="{{ url_for('core.pilot_start_activity', activity_id=activity.id) }}">
+          <button class="pilot-btn" type="submit"><i class="fas fa-play"></i> Iniciar</button>
+        </form>
+      {% endif %}
+      {% if activity.status in ["scheduled", "in_progress"] %}
+        <form method="post" action="{{ url_for('core.pilot_finish_activity', activity_id=activity.id) }}">
+          <button class="pilot-btn" type="submit"><i class="fas fa-check"></i> Finalizar</button>
+        </form>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="section-title">
+    <h2>Resumen</h2>
+    <span>{{ activity.duration_minutes }} min</span>
+  </section>
+
+  <section class="detail-grid">
+    <div class="detail-tile">
+      <span>Inicio</span>
+      <strong>{{ activity.starts_at.strftime("%I:%M %p") }}</strong>
+    </div>
+    <div class="detail-tile">
+      <span>Fin</span>
+      <strong>{{ activity.ends_at.strftime("%I:%M %p") }}</strong>
+    </div>
+    <div class="detail-tile">
+      <span>Lugar</span>
+      <strong>{{ activity.place }}</strong>
+    </div>
+    <div class="detail-tile">
+      <span>Dron</span>
+      <strong>{{ activity.drone.brand }} {{ activity.drone.model }}</strong>
+    </div>
+  </section>
+
+  {% if activity.observations %}
+    <section class="pilot-card" style="margin-top: 14px;">
+      <p class="pilot-eyebrow">Notas</p>
+      <p class="pilot-muted" style="margin: 0;">{{ activity.observations }}</p>
+    </section>
+  {% endif %}
+
+  <section class="section-title">
+    <h2>Bitacora</h2>
+    <a href="{{ url_for('core.pilot_flight_log') }}?activity_id={{ activity.id }}">Registrar manual</a>
+  </section>
+
+  <section class="pilot-card">
+    {% if flight_log %}
+      <div class="detail-grid">
+        <div class="detail-tile">
+          <span>Fecha</span>
+          <strong>{{ flight_log.flight_date.strftime("%d/%m/%Y") }}</strong>
+        </div>
+        <div class="detail-tile">
+          <span>Horas</span>
+          <strong>{{ (flight_log.flight_minutes / 60)|round(1) }}</strong>
+        </div>
+      </div>
+    {% else %}
+      <div class="empty-state">Esta operacion aun no tiene bitacora registrada.</div>
+      <div class="pilot-actions">
+        <a class="pilot-btn pilot-btn-primary" href="{{ url_for('core.pilot_flight_log') }}?activity_id={{ activity.id }}">
+          <i class="fas fa-clipboard-list"></i> Registrar bitacora
+        </a>
+      </div>
+    {% endif %}
+  </section>
+
+  <section class="section-title">
+    <h2>Novedades</h2>
+    <span>{{ reports|length }}</span>
+  </section>
+
+  <section class="pilot-card">
+    <form class="pilot-form" method="post" action="{{ url_for('core.pilot_report_issue', activity_id=activity.id) }}">
+      <div class="pilot-field">
+        <label for="report_type">Tipo</label>
+        <select id="report_type" name="report_type">
+          <option value="clima">Clima no apto</option>
+          <option value="dron">Novedad del dron</option>
+          <option value="zona">Zona / permiso</option>
+          <option value="cliente">Cliente / proyecto</option>
+          <option value="general">General</option>
+        </select>
+      </div>
+      <div class="pilot-field">
+        <label for="message">Detalle</label>
+        <textarea id="message" name="message" required placeholder="Describe la novedad"></textarea>
+      </div>
+      <button class="pilot-btn" type="submit"><i class="fas fa-paper-plane"></i> Enviar novedad</button>
+    </form>
+    {% if reports %}
+      <div class="pilot-list" style="margin-top: 12px;">
+        {% for report in reports %}
+          <div class="pilot-item">
+            <strong>{{ report.report_type }}</strong>
+            <p class="pilot-muted">{{ report.message }}</p>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </section>
+</main>
+
+<nav class="pilot-nav" aria-label="Portal piloto">
+  <a href="{{ url_for('core.pilot_panel') }}"><i class="fas fa-th-large"></i><span>Inicio</span></a>
+  <a class="is-active" href="{{ url_for('core.pilot_calendar') }}"><i class="fas fa-calendar-alt"></i><span>Agenda</span></a>
+  <a href="{{ url_for('core.pilot_orthophotos') }}"><i class="fas fa-images"></i><span>Ortofotos</span></a>
+  <a href="{{ url_for('core.pilot_flight_log') }}"><i class="fas fa-clipboard-list"></i><span>Bitacora</span></a>
+</nav>
+{% endblock %}

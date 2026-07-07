@@ -136,6 +136,7 @@ downloads/
 project/app/modules/agrovista/data/*
 !project/app/modules/agrovista/data/.gitkeep
 project/storage/
+project/secrets/
 target
 
 # AI Agent system
