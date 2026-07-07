@@ -129,9 +129,7 @@ class Config:
     MAIL_DEFAULT_SENDER = os.getenv("MAIL_DEFAULT_SENDER")
     CONTACT_EMAIL = os.getenv("CONTACT_EMAIL")
 
-    # Validate mail configuration
-    validate_mail_config()
-
+    # Mail is optional; deployments can run without SMTP settings.
     # JWT configuration
     JWT_SECRET_KEY = SECRET_KEY
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(days=2)
