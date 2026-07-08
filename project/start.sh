@@ -8,5 +8,4 @@ exec gunicorn \
   --workers 2 \
   --timeout 300 \
   --log-level=debug \
-  --reload \
   run:app
