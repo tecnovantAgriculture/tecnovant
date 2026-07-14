@@ -425,6 +425,7 @@ def dashboard():
             current_app.logger.exception("orthophotos: no se pudo reconciliar estado WebODM")
     created_id = request.args.get("created", type=int)
     created_mission = OrthophotoMission.query.get(created_id) if created_id else None
+    active_processing_count = sum(1 for mission in missions if mission.status in ACTIVE_STATUSES)
     webodm_vm_status = {
         "status": "loading",
         "label": "Consultando procesamiento",
@@ -436,6 +437,7 @@ def dashboard():
         missions=missions,
         created_mission=created_mission,
         webodm_vm_status=webodm_vm_status,
+        active_processing_count=active_processing_count,
         pilot_upload_url=lambda mission_id: _public_url_for(
             "orthophotos.pilot_upload",
             mission_id=mission_id,

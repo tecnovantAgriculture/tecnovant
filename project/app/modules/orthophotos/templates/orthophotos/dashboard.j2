@@ -467,7 +467,7 @@
 <script>
 document.addEventListener('DOMContentLoaded', () => {
   const uploadEndpoint = {{ url_for('orthophotos_api.upload_photos')|tojson }};
-  const activeProcessing = {{ missions | selectattr('status', 'in', ['starting_webodm', 'submitting', 'uploading_to_webodm', 'queued', 'running']) | list | length }};
+  const activeProcessing = {{ active_processing_count|default(0)|int }};
   if (activeProcessing > 0) {
     window.setTimeout(() => window.location.reload(), 30000);
   }
@@ -535,7 +535,7 @@ document.addEventListener('DOMContentLoaded', () => {
               body: formData
             });
           } catch (error) {
-            errors.push(`${file.name}: la conexión se cerró antes de terminar la subida. Revisa el tamaño del archivo y los logs de Railway.`);
+            errors.push(`${file.name}: la conexiï¿½n se cerrï¿½ antes de terminar la subida. Revisa el tamaï¿½o del archivo y los logs de Railway.`);
             break;
           }
           const data = await response.json().catch(() => ({}));
