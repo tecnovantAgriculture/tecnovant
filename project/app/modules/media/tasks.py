@@ -11,9 +11,13 @@ from typing import Optional
 
 from flask import current_app
 
+from app.extensions import db
+
 from .helpers import (
     PreprocessConfig,
     _media_root,
+    extract_geo_info_if_tiff,
+    extract_image_info,
     generate_nd_index_rgba,
     generate_webp_thumbnails,
     preprocess_rgb_once,
@@ -22,6 +26,21 @@ from .models import Asset, AssetType, AssetVariant, StorageLocation
 from .storage import ensure_local_file, gcs_enabled, upload_file_to_gcs
 
 _executor: Optional[ThreadPoolExecutor] = None
+
+
+
+def _derive_mpp_from_transform(geo) -> Optional[float]:
+    if not geo or not geo.transform:
+        return None
+    t = geo.transform
+    a = abs(t.get("a", 0) or 0)
+    e = abs(t.get("e", 0) or 0)
+    if not a or not e:
+        return None
+    crs_str = (geo.crs or "").upper()
+    is_degrees = "EPSG:4326" in crs_str or "GEOGCRS" in crs_str or "DEGREE" in crs_str
+    factor = 111320.0 if is_degrees else 1.0
+    return max(a, e) * factor
 
 
 def _get_executor() -> ThreadPoolExecutor:
@@ -81,6 +100,32 @@ def _run_preprocess(app, asset_id: int) -> None:
             )
             return
 
+        if asset.width is None or asset.height is None or (
+            asset.asset_type == AssetType.GEOTIFF.value and asset.transform is None
+        ):
+            try:
+                img = extract_image_info(str(source_path))
+                geo = extract_geo_info_if_tiff(str(source_path))
+                if img.width is not None:
+                    asset.width = img.width
+                if img.height is not None:
+                    asset.height = img.height
+                if asset.asset_type == AssetType.GEOTIFF.value:
+                    asset.is_geo = geo.is_geo
+                    asset.crs = geo.crs
+                    asset.bounds = geo.bounds
+                    asset.transform = geo.transform
+                    asset.mpp = _derive_mpp_from_transform(geo)
+                elif img.exif is not None:
+                    asset.exif = img.exif
+                db.session.add(asset)
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+                app.logger.exception(
+                    "media: deferred metadata extraction failed for asset %s",
+                    asset.uuid,
+                )
         cache_dir = _resolve_cache_dir(app, asset.uuid)
         processing_flag = cache_dir / ".processing"
         status_file = cache_dir / ".status.json"

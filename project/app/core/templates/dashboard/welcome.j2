@@ -4,7 +4,7 @@
 {% set rounded = "" %}
 {% set shadow = "" %}
 {% set padding = "" %}
-{% set main_clases = "flex-grow overflow-hidden w-full px-0 py-0" %}
+{% set main_clases = "flex-grow overflow-y-auto w-full px-0 py-0" %}
 
 {% block extra_css %}
 {{ super() }}
@@ -678,6 +678,57 @@
         background: linear-gradient(90deg, #ffd38a, #d97806);
     }
 
+    @media (max-height: 860px), (max-width: 1440px) {
+        body.tv-dashboard-fixed {
+            overflow-y: auto !important;
+            overflow-x: hidden !important;
+        }
+
+        body.tv-dashboard-fixed > .flex.flex-grow,
+        body.tv-dashboard-fixed #main-content,
+        body.tv-dashboard-fixed #main-content > div {
+            height: auto;
+            min-height: calc(100vh - 4rem);
+            overflow: visible !important;
+        }
+
+        .tv-home {
+            height: auto;
+            min-height: calc(100vh - 4rem);
+            overflow: visible;
+        }
+
+        .tv-home-shell,
+        .tv-home-grid,
+        .tv-home-grid > main,
+        .tv-stack {
+            height: auto;
+            overflow: visible;
+        }
+
+        .tv-home-shell {
+            padding: 12px 14px 22px;
+        }
+
+        .tv-home-grid {
+            align-items: start;
+        }
+
+        .tv-home-grid > main,
+        .tv-home-grid > aside.tv-stack:first-child,
+        .tv-home-grid > aside.tv-stack:last-child {
+            grid-template-rows: none;
+        }
+
+        .tv-primary-card,
+        .tv-primary-card a {
+            min-height: 168px;
+        }
+
+        .tv-card-pad {
+            padding: 15px;
+        }
+    }
     @media (max-width: 1280px) {
         .tv-home-grid {
             grid-template-columns: 1fr;

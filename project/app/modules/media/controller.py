@@ -12,12 +12,13 @@ from werkzeug.datastructures import FileStorage
 from app.extensions import db
 
 from .helpers import (
+    GeoInfo,
+    ImageInfo,
     allocate_storage_path,
     allowed_extension,
     capture_upload_to_temp,
     extract_geo_info_if_tiff,
     extract_image_info,
-    generate_webp_thumbnails,
     guess_mime,
     validate_tiff_upload,
 )
@@ -87,76 +88,24 @@ class MediaController:
         )
         if existing_asset:
             capture.discard()
-            try:
-                existing_variants = {
-                    variant.kind for variant in existing_asset.variants
-                }
-            except Exception:
-                existing_variants = set()
-
-            thumb_specs = current_app.config.get("MEDIA_THUMBNAIL_SPECS") or {
-                "gallery": {"max_width": 512, "max_height": 512}
-            }
-            required_kinds = set(thumb_specs.keys())
-            missing_kinds = required_kinds - existing_variants
-
-            if missing_kinds:
-                from .helpers import _media_root
-
-                if existing_asset.storage == StorageLocation.GCS.value:
-                    abs_existing_path = str(ensure_local_file(existing_asset.storage_key))
-                else:
-                    abs_existing_path = os.path.join(
-                        _media_root(), existing_asset.storage_key
-                    )
-                if not os.path.isfile(abs_existing_path):
-                    current_app.logger.warning(
-                        "Physical file missing for asset %s; cannot build thumbnail.",
-                        existing_asset.uuid,
-                    )
-                    return existing_asset, False
-                new_variants = False
-                try:
-                    thumb_results = generate_webp_thumbnails(
-                        abs_existing_path, existing_asset.uuid, specs=thumb_specs
-                    )
-                    for thumb in thumb_results:
-                        if thumb.kind not in missing_kinds:
-                            continue
-                        variant_storage = StorageLocation.GCS.value if gcs_enabled() else StorageLocation.LOCAL.value
-                        if variant_storage == StorageLocation.GCS.value:
-                            upload_file_to_gcs(
-                                os.path.join(_media_root(), thumb.storage_key),
-                                thumb.storage_key,
-                                "image/webp",
-                            )
-                        existing_asset.variants.append(
-                            AssetVariant(
-                                kind=thumb.kind,
-                                storage=variant_storage,
-                                storage_key=thumb.storage_key,
-                                width=thumb.width,
-                                height=thumb.height,
-                            )
-                        )
-                        new_variants = True
-                    if new_variants:
-                        db.session.add(existing_asset)
-                        db.session.commit()
-                except Exception:
-                    current_app.logger.exception(
-                        "Thumbnail regeneration failed for existing asset %s",
-                        existing_asset.uuid,
-                    )
+            # The API route enqueues preprocessing after this method returns.
+            # Rebuilding missing thumbnails here made repeated large GeoTIFF
+            # uploads wait on Pillow/rasterio work inside the HTTP request.
             return existing_asset, False
 
         storage_key, abs_path = allocate_storage_path(ext)
         capture.move_to(abs_path)
 
-        # Metadata
+        # Metadata. For large GeoTIFFs this must stay light: rasterio/Pillow
+        # inspection can be expensive in Railway, so the background worker fills
+        # dimensions and geospatial fields after the upload response returns.
         mime = guess_mime(abs_path)
-        img = extract_image_info(abs_path)
-        geo = extract_geo_info_if_tiff(abs_path)
+        if ext in {".tif", ".tiff"}:
+            img = ImageInfo()
+            geo = GeoInfo(is_geo=True)
+        else:
+            img = extract_image_info(abs_path)
+            geo = extract_geo_info_if_tiff(abs_path)
 
         storage_location = StorageLocation.GCS.value if gcs_enabled() else StorageLocation.LOCAL.value
         if storage_location == StorageLocation.GCS.value:

@@ -2548,7 +2548,10 @@
           // Phase 1 — fast: only display PNG dimensions from DB (< 200ms).
           const dispResp = await fetch(ENDPOINTS.displayInfo(asset.id), { credentials: 'include' });
           if(dispResp.status === 202){
-            throw new Error('La imagen aún está siendo procesada. Espera unos momentos e intenta de nuevo.');
+            setStatus('Ortofoto guardada. La vista del mapa sigue procesandose en segundo plano. Actualiza e intenta seleccionarla en unos momentos.');
+            alert('La ortofoto quedo guardada, pero la vista del mapa aun se esta generando. Intenta seleccionarla en unos momentos.');
+            hide();
+            return;
           }
           if(!dispResp.ok){
             throw new Error(await dispResp.text());

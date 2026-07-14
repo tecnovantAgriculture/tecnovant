@@ -31,8 +31,8 @@
        <div class="absolute inset-0 rounded-full border-4 border-emerald-500 border-t-transparent animate-spin"></div>
       <div class="absolute inset-2 rounded-full bg-white/95 dark:bg-gray-900/95"></div>
     </div>
-    <p class="text-sm font-medium text-gray-700 dark:text-gray-200">Subiendo archivo…</p>
-    <p class="text-xs text-gray-500 dark:text-gray-400">Esto puede tardar unos segundos.</p>
+    <p class="text-sm font-medium text-gray-700 dark:text-gray-200">Subiendo al almacenamiento…</p>
+    <p class="text-xs text-gray-500 dark:text-gray-400">En ortofotos grandes puede tardar varios minutos; el procesamiento queda en segundo plano.</p>
   </div>
 </div>
 <div class="max-w-3xl">
@@ -56,7 +56,7 @@
   </form>
 
   <div class="mt-6 text-sm text-gray-500 dark:text-gray-300">
-    Al subir, se guarda localmente y se registra en la base de datos.
+    Al subir, se guarda en el almacenamiento configurado y el procesamiento de vistas queda en segundo plano.
   </div>
 
   <div id="upload-msg" class="mt-4 text-sm"></div>
@@ -153,7 +153,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
          msg.className = 'mt-4 text-sm text-emerald-700';
-        msg.textContent = 'Subida exitosa';
+        msg.textContent = 'Archivo recibido. La vista de la ortofoto se procesa en segundo plano.';
         input.value = '';
         {% if picker_mode %}
         // En modo picker, enviar el asset al padre después de subir
