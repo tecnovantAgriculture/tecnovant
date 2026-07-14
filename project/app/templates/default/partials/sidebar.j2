@@ -190,13 +190,13 @@
                         {% set icon_svg = item.icon %}
                         {% set chevron_svg = icon_caret_down %}
                         {% if is_active %}
-                            {% set icon_svg = icon_svg|replace('text-gray-500', 'text-emerald-600')|replace('dark:text-gray-400', 'dark:text-emerald-400')|replace('group-hover:text-gray-900', 'group-hover:text-emerald-600')|replace('dark:group-hover:text-white', 'dark:group-hover:text-emerald-400') %}
-                            {% set chevron_svg = chevron_svg|replace('text-gray-500', 'text-emerald-600')|replace('dark:text-gray-400', 'dark:text-emerald-400')|replace('group-hover:text-gray-900', 'group-hover:text-emerald-600')|replace('dark:group-hover:text-white', 'dark:group-hover:text-emerald-400') %}
+                            {% set icon_svg = icon_svg|replace('text-gray-500', 'text-gray-700')|replace('dark:text-gray-400', 'dark:text-gray-400')|replace('group-hover:text-gray-900', 'group-hover:text-gray-700')|replace('dark:group-hover:text-white', 'dark:group-hover:text-gray-400') %}
+                            {% set chevron_svg = chevron_svg|replace('text-gray-500', 'text-gray-700')|replace('dark:text-gray-400', 'dark:text-gray-400')|replace('group-hover:text-gray-900', 'group-hover:text-gray-700')|replace('dark:group-hover:text-white', 'dark:group-hover:text-gray-400') %}
                         {% endif %}
 
-                            <button type="button" data-active="{{ is_active }}" class="z-40 flex items-center w-full p-2 rounded-lg {% if not is_active %}hover:bg-gray-100 dark:hover:bg-gray-700{% endif %} group text-left transition-colors duration-150 {% if is_active %}bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300{% else %}text-gray-900 dark:text-white{% endif %}">
+                            <button type="button" data-active="{{ is_active }}" class="z-40 flex items-center w-full p-2 rounded-lg {% if not is_active %}hover:bg-gray-100 dark:hover:bg-gray-700{% endif %} group text-left transition-colors duration-150 {% if is_active %}bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100{% else %}text-gray-900 dark:text-white{% endif %}">
                              {{ icon_svg|safe }}
-                               <span class="sidebar__label flex-1 ms-3 whitespace-nowrap {% if is_active %}font-medium text-emerald-700 dark:text-emerald-300{% else %}{% if is_active %}font-medium text-gray-900 dark:text-white{% endif %}{% endif %}">{{ item.name }}</span>
+                               <span class="sidebar__label flex-1 ms-3 whitespace-nowrap {% if is_active %}font-medium text-gray-900 dark:text-gray-100{% else %}{% if is_active %}font-medium text-gray-900 dark:text-white{% endif %}{% endif %}">{{ item.name }}</span>
                             {{ chevron_svg|safe }}
                         </button>
                          <ul class="hidden pl-1 mt-2 space-y-2 rounded-lg bg-gray-100 dark:bg-gray-800">
@@ -205,7 +205,7 @@
                                 {% set normalized_submenu = submenu_item.url.rstrip('/') %}
                                 {% set is_sub_active = normalized_request == normalized_submenu %}
                                 <li>
-                                      <a href="{{ submenu_item.url }}" class="flex p-2 rounded-lg dark:text-white hover:bg-gray-300 dark:hover:bg-gray-700 group transition-colors duration-150 {% if is_sub_active %}bg-emerald-200 dark:bg-emerald-800 font-medium text-emerald-800 dark:text-emerald-200{% else %}text-gray-900{% endif %}">
+                                      <a href="{{ submenu_item.url }}" class="flex p-2 rounded-lg dark:text-white hover:bg-gray-300 dark:hover:bg-gray-700 group transition-colors duration-150 {% if is_sub_active %}bg-gray-200 dark:bg-gray-700 font-medium text-gray-900 dark:text-gray-100{% else %}text-gray-900{% endif %}">
                                          <span class="sidebar__label flex-1 ms-3 whitespace-nowrap">{{ submenu_item.name }}</span>
                                     </a>
                                 </li>
@@ -215,13 +215,13 @@
                         {% set normalized_request = request.path.rstrip('/') %}
                         {% set normalized_link = item.url.rstrip('/') %}
                         {% set is_link_active = normalized_request == normalized_link %}
-                         <a href="{{ item.url }}" data-active="{{ is_link_active }}" class="flex items-center p-2 rounded-lg {% if not is_link_active %}hover:bg-gray-100 dark:hover:bg-gray-700{% endif %} group transition-colors duration-150 {% if is_link_active %}bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300{% else %}text-gray-900 dark:text-white{% endif %}">
+                         <a href="{{ item.url }}" data-active="{{ is_link_active }}" class="flex items-center p-2 rounded-lg {% if not is_link_active %}hover:bg-gray-100 dark:hover:bg-gray-700{% endif %} group transition-colors duration-150 {% if is_link_active %}bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100{% else %}text-gray-900 dark:text-white{% endif %}">
                               {% set icon_svg = item.icon %}
                               {% if is_link_active %}
-                                  {% set icon_svg = icon_svg|replace('text-gray-500', 'text-emerald-600')|replace('dark:text-gray-400', 'dark:text-emerald-400') %}
+                                  {% set icon_svg = icon_svg|replace('text-gray-500', 'text-gray-700')|replace('dark:text-gray-400', 'dark:text-gray-400') %}
                               {% endif %}
                               {{ icon_svg|safe }}
-                                <span class="sidebar__label flex-1 ms-3 whitespace-nowrap {% if is_link_active %}font-medium text-emerald-700 dark:text-emerald-300{% else %}{% if is_link_active %}font-medium text-gray-900 dark:text-white{% endif %}{% endif %}">{{ item.name }}</span>
+                                <span class="sidebar__label flex-1 ms-3 whitespace-nowrap {% if is_link_active %}font-medium text-gray-900 dark:text-gray-100{% else %}{% if is_link_active %}font-medium text-gray-900 dark:text-white{% endif %}{% endif %}">{{ item.name }}</span>
                             {% if item.pro %}
                                 <span class="inline-flex items-center justify-center px-2 ms-3 text-sm font-medium text-gray-800 bg-gray-300 rounded-full dark:bg-gray-700 dark:text-gray-300">Pro</span>
                             {% endif %}

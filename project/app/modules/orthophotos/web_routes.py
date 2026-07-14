@@ -25,6 +25,8 @@ from app.extensions import db
 from app.helpers.dashboard_helpers import get_dashboard_menu
 from app.modules.media.controller import MediaController
 from app.modules.media.helpers import _media_root
+from app.modules.media.models import StorageLocation
+from app.modules.media.storage import ensure_local_file
 
 from . import orthophotos as web
 from .gcp_compute_client import GCPComputeClient, env_flag
@@ -233,7 +235,7 @@ def _submit_mission_to_webodm(app, mission_id: int, profile: str = "max_2d") -> 
                     asset = getattr(photo, "asset", None)
                     if asset is None:
                         continue
-                    path = os.path.join(media_root, asset.storage_key)
+                    path = str(ensure_local_file(asset.storage_key)) if asset.storage == StorageLocation.GCS.value else os.path.join(media_root, asset.storage_key)
                     if not os.path.isfile(path):
                         raise FileNotFoundError(
                             f"No existe el archivo {asset.original_name}"

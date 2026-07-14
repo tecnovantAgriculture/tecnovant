@@ -24,6 +24,7 @@ from app.modules.media.helpers import (
     read_tif_window_as_linear_rgb,
 )
 from app.modules.media.models import Asset, StorageLocation
+from app.modules.media.storage import ensure_local_file
 from app.modules.media.tasks import _resolve_cache_dir
 
 from . import agrovista_api as api
@@ -106,7 +107,7 @@ def _resolve_wb_sidecar(asset: Asset) -> Optional[Dict[str, float]]:
         media_root = Path(_media_root())
     except Exception:
         return None
-    source_path = media_root / asset.storage_key
+    source_path = ensure_local_file(asset.storage_key) if asset.storage == StorageLocation.GCS.value else media_root / asset.storage_key
     if not source_path.exists():
         return None
 
@@ -155,7 +156,7 @@ def _protein_from_media(
     asset = _find_media_asset(media_asset_id, img_id)
     if asset is None:
         abort(404, description="asset not found")
-    if asset.storage != StorageLocation.LOCAL.value:
+    if asset.storage not in {StorageLocation.LOCAL.value, StorageLocation.GCS.value}:
         abort(400, description="unsupported storage for media asset")
     if not asset.crs or not asset.transform:
         abort(400, description="asset lacks georeference")
@@ -164,7 +165,7 @@ def _protein_from_media(
         media_root = Path(_media_root())
     except Exception:
         abort(500, description="media storage unavailable")
-    source_path = media_root / asset.storage_key
+    source_path = ensure_local_file(asset.storage_key) if asset.storage == StorageLocation.GCS.value else media_root / asset.storage_key
     if not source_path.exists():
         abort(404, description="source TIF not found")
 

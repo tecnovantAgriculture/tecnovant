@@ -187,7 +187,10 @@ class ReportView(MethodView):
                 else None
             ),
             "productiveObjective": self._get_productive_objective(
-                recommendation.lot_id, recommendation.crop_id, recommendation.date
+                recommendation.lot_id,
+                recommendation.crop_id,
+                recommendation.date,
+                recommendation.common_analysis_id,
             ),
         }
 
@@ -398,18 +401,29 @@ class ReportView(MethodView):
 
         return data
 
-    def _get_productive_objective(self, lot_id, crop_id, analysis_date):
-        """Obtiene el objetivo productivo: actual (CommonAnalysis) vs meta (Objective)."""
+    def _get_productive_objective(self, lot_id, crop_id, analysis_date, common_analysis_id=None):
+        """Obtiene el objetivo productivo del análisis seleccionado vs meta."""
         if not lot_id or not crop_id:
             return {}
 
-        # Análisis actual del lote
-        common = (
-            CommonAnalysis.query.filter_by(lot_id=lot_id)
-            .order_by(CommonAnalysis.date.desc())
-            .first()
-        )
-        if not common:
+        common = None
+        if common_analysis_id:
+            common = CommonAnalysis.query.filter_by(
+                id=common_analysis_id,
+                lot_id=lot_id,
+            ).first()
+
+        if common is None and analysis_date:
+            common = (
+                CommonAnalysis.query.filter(
+                    CommonAnalysis.lot_id == lot_id,
+                    CommonAnalysis.date <= analysis_date,
+                )
+                .order_by(CommonAnalysis.date.desc(), CommonAnalysis.id.desc())
+                .first()
+            )
+
+        if common is None:
             return {}
 
         # Objetivo del cultivo

@@ -22,6 +22,7 @@ from .helpers import (
     validate_tiff_upload,
 )
 from .models import Asset, AssetType, AssetVariant, StorageLocation
+from .storage import delete_file_from_gcs, ensure_local_file, gcs_enabled, upload_file_to_gcs
 
 
 class MediaController:
@@ -102,9 +103,12 @@ class MediaController:
             if missing_kinds:
                 from .helpers import _media_root
 
-                abs_existing_path = os.path.join(
-                    _media_root(), existing_asset.storage_key
-                )
+                if existing_asset.storage == StorageLocation.GCS.value:
+                    abs_existing_path = str(ensure_local_file(existing_asset.storage_key))
+                else:
+                    abs_existing_path = os.path.join(
+                        _media_root(), existing_asset.storage_key
+                    )
                 if not os.path.isfile(abs_existing_path):
                     current_app.logger.warning(
                         "Physical file missing for asset %s; cannot build thumbnail.",
@@ -119,10 +123,17 @@ class MediaController:
                     for thumb in thumb_results:
                         if thumb.kind not in missing_kinds:
                             continue
+                        variant_storage = StorageLocation.GCS.value if gcs_enabled() else StorageLocation.LOCAL.value
+                        if variant_storage == StorageLocation.GCS.value:
+                            upload_file_to_gcs(
+                                os.path.join(_media_root(), thumb.storage_key),
+                                thumb.storage_key,
+                                "image/webp",
+                            )
                         existing_asset.variants.append(
                             AssetVariant(
                                 kind=thumb.kind,
-                                storage=StorageLocation.LOCAL.value,
+                                storage=variant_storage,
                                 storage_key=thumb.storage_key,
                                 width=thumb.width,
                                 height=thumb.height,
@@ -147,6 +158,10 @@ class MediaController:
         img = extract_image_info(abs_path)
         geo = extract_geo_info_if_tiff(abs_path)
 
+        storage_location = StorageLocation.GCS.value if gcs_enabled() else StorageLocation.LOCAL.value
+        if storage_location == StorageLocation.GCS.value:
+            upload_file_to_gcs(abs_path, storage_key, mime)
+
         # Derive meters-per-pixel from GeoTIFF affine transform
         mpp = _derive_mpp_from_transform(geo)
 
@@ -162,7 +177,7 @@ class MediaController:
             ext=ext.lstrip("."),
             mime=mime,
             asset_type=asset_type,
-            storage=StorageLocation.LOCAL.value,
+            storage=storage_location,
             storage_key=storage_key,
             sha256=digest,
             size_bytes=size_bytes,
@@ -217,6 +232,8 @@ class MediaController:
                 os.remove(abs_path)
         except Exception:
             pass
+        if asset.storage == StorageLocation.GCS.value:
+            delete_file_from_gcs(asset.storage_key)
 
         # 2. Remove variant files
         for variant in asset.variants:
@@ -226,6 +243,8 @@ class MediaController:
                     os.remove(v_path)
             except Exception:
                 pass
+            if variant.storage == StorageLocation.GCS.value:
+                delete_file_from_gcs(variant.storage_key)
 
         # 3. Remove preprocessing cache directory
         try:
@@ -344,3 +363,5 @@ def _derive_mpp_from_transform(geo) -> Optional[float]:
         if a < 0.001 or e < 0.001:
             return None
         return max(a, e)
+
+

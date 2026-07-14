@@ -633,8 +633,6 @@
 {% block extra_js %}
     {{ super() }}
     <script src="/js/chart.js"></script>
-    <script src="/js/html2canvas.min.js"></script>
-    <script src="/js/jspdf.umd.min.js"></script>
     <script src="/js/lightbox.js" defer></script>
     <script>
     window.REPORT_CONFIG = {
@@ -703,5 +701,5 @@
         }
     })();
     </script>
-    <script src="/js/report.js"></script>
+    <script src="/js/report.js?v=server-pdf-textual-20260714"></script>
 {% endblock %}

@@ -104,6 +104,35 @@ def _activity_log(activity, action, message=None):
 
 
 def _activity_payload(activity):
+    organization_id = None
+    farm_id = None
+    lot_id = None
+    billing_record = getattr(activity, "billing_record", None)
+    if billing_record and billing_record.organization_id:
+        organization_id = billing_record.organization_id
+
+    try:
+        from app.modules.foliage.models import Farm, Lot
+
+        if not organization_id and activity.client_project:
+            organization = Organization.query.filter(func.lower(Organization.name) == activity.client_project.lower()).first()
+            organization_id = organization.id if organization else None
+        if organization_id and activity.farm_name:
+            farm = Farm.query.filter(
+                Farm.org_id == organization_id,
+                func.lower(Farm.name) == activity.farm_name.lower(),
+            ).first()
+            if farm:
+                farm_id = farm.id
+                if activity.lot_code:
+                    lot = Lot.query.filter(
+                        Lot.farm_id == farm.id,
+                        func.lower(Lot.name) == activity.lot_code.lower(),
+                    ).first()
+                    lot_id = lot.id if lot else None
+    except Exception:
+        pass
+
     return {
         "id": activity.id,
         "title": activity.title,
@@ -117,6 +146,9 @@ def _activity_payload(activity):
         "ends_at": activity.ends_at.isoformat(),
         "duration_minutes": activity.duration_minutes,
         "place": activity.place,
+        "organization_id": organization_id,
+        "farm_id": farm_id,
+        "lot_id": lot_id,
         "client_project": activity.client_project or "",
         "farm_name": activity.farm_name or "",
         "paddocks": activity.paddocks or "",
@@ -131,6 +163,68 @@ def _activity_payload(activity):
         "status": activity.status,
     }
 
+
+
+def _month_name_es(value):
+    names = [
+        "ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO",
+        "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE",
+    ]
+    return names[value.month - 1]
+
+
+def _resolve_activity_catalog_selection():
+    from app.modules.foliage.models import Farm, Lot
+
+    organization = Organization.query.get(request.form.get("organization_id", type=int))
+    farm = Farm.query.get(request.form.get("farm_id", type=int))
+    lot = Lot.query.get(request.form.get("lot_id", type=int))
+
+    if lot:
+        farm = lot.farm
+    if farm and (not organization or organization.id != farm.org_id):
+        organization = farm.organization
+
+    return organization, farm, lot
+
+
+def _sync_activity_billing(activity):
+    organization, farm, lot = _resolve_activity_catalog_selection()
+    if not organization and activity.client_project:
+        organization = Organization.query.filter(func.lower(Organization.name) == activity.client_project.lower()).first()
+
+    if not organization and not farm:
+        return
+
+    record = getattr(activity, "billing_record", None)
+    if not record:
+        record = OperationBillingRecord(activity=activity)
+        db.session.add(record)
+
+    profile_data = organization.profile_data or {} if organization else {}
+    unit_price = _parse_optional_decimal(str(profile_data.get("billing_unit_price") or ""))
+    area = activity.area_hectares or (Decimal(str(lot.area)) if lot and lot.area is not None else None)
+    hours = Decimal(activity.duration_minutes or 0) / Decimal(60) if activity.duration_minutes else None
+
+    record.organization_id = organization.id if organization else record.organization_id
+    record.farm_name = farm.name if farm else activity.farm_name
+    record.paddock_name = lot.name if lot else (activity.lot_code or activity.paddocks)
+    record.area_hectares = area
+    record.scheduled_date = activity.starts_at.date() if activity.starts_at else None
+    record.executed_date = activity.completed_at.date() if activity.completed_at else (activity.starts_at.date() if activity.starts_at else None)
+    record.billing_month = _month_name_es(record.executed_date or record.scheduled_date) if (record.executed_date or record.scheduled_date) else None
+    record.unit_price = unit_price
+    record.invoice_total = (area * unit_price) if area is not None and unit_price is not None else None
+    record.pilot_name = activity.pilot.full_name if activity.pilot else None
+    record.operation_hours = hours
+    record.hectares_per_hour = (area / hours) if area is not None and hours and hours > 0 else None
+    record.observations = activity.observations
+    record.raw_payload = {
+        "source": "operational_calendar",
+        "activity_id": activity.id,
+        "activity_status": activity.status,
+        "invoice_status": "pending" if not record.invoice_number else "invoiced",
+    }
 
 def _has_activity_conflict(pilot_id, drone_id, starts_at, ends_at, activity_id=None):
     base = OperationalActivity.query.filter(
@@ -154,6 +248,14 @@ def _activity_form_payload():
     starts_at = _parse_datetime_fields(start_day, start_time)
     ends_at = _parse_datetime_fields(end_day, end_time)
     duration_minutes = int((ends_at - starts_at).total_seconds() // 60) if starts_at and ends_at else 0
+    organization, farm, lot = _resolve_activity_catalog_selection()
+    client_project = organization.name if organization else (request.form.get("client_project") or "").strip()
+    farm_name = farm.name if farm else (request.form.get("farm_name") or "").strip()
+    lot_code = lot.name if lot else (request.form.get("lot_code") or "").strip()
+    area_hectares = _parse_optional_decimal(request.form.get("area_hectares"))
+    if area_hectares is None and lot and lot.area is not None:
+        area_hectares = Decimal(str(lot.area))
+
     return {
         "title": (request.form.get("title") or "").strip(),
         "operation_type": (request.form.get("operation_type") or "").strip(),
@@ -161,23 +263,22 @@ def _activity_form_payload():
         "ends_at": ends_at,
         "duration_minutes": duration_minutes,
         "place": (request.form.get("place") or "").strip(),
-        "client_project": (request.form.get("client_project") or "").strip() or None,
-        "farm_name": (request.form.get("farm_name") or "").strip() or None,
+        "client_project": client_project or None,
+        "farm_name": farm_name or None,
         "paddocks": (request.form.get("paddocks") or "").strip() or None,
-        "area_hectares": _parse_optional_decimal(request.form.get("area_hectares")),
+        "area_hectares": area_hectares,
         "rest_days": request.form.get("rest_days", type=int),
-        "lot_code": (request.form.get("lot_code") or "").strip() or None,
+        "lot_code": lot_code or None,
         "pilot_id": request.form.get("pilot_id", type=int),
         "drone_id": request.form.get("drone_id", type=int),
         "observations": (request.form.get("observations") or "").strip() or None,
         "status": (request.form.get("status") or "scheduled").strip(),
     }
 
-
 def _validate_activity_payload(payload, activity_id=None):
-    required = ["title", "operation_type", "starts_at", "ends_at", "place", "pilot_id", "drone_id"]
+    required = ["title", "operation_type", "starts_at", "ends_at", "place", "client_project", "farm_name", "pilot_id", "drone_id"]
     if any(not payload.get(key) for key in required):
-        return "Completa los campos obligatorios."
+        return "Completa los campos obligatorios, cliente y finca."
     if payload["duration_minutes"] <= 0:
         return "La hora fin debe ser posterior a la hora inicio."
     if payload.get("area_hectares") is not None and payload["area_hectares"] < 0:
@@ -596,6 +697,79 @@ def dashboard():
             "lot_name": last_recommendation.lot.name,
         }
 
+    month_names_short = [
+        "Ene", "Feb", "Mar", "Abr", "May", "Jun",
+        "Jul", "Ago", "Sep", "Oct", "Nov", "Dic",
+    ]
+    current_month_start = today.replace(day=1)
+    next_month_start = (current_month_start + timedelta(days=32)).replace(day=1)
+    previous_month_start = (current_month_start - timedelta(days=1)).replace(day=1)
+    org_names = [org.name for org in organizations]
+
+    def _month_hectares_series(start_date, end_date):
+        day_count = (end_date - start_date).days
+        daily = [Decimal("0") for _ in range(day_count)]
+        logged_activity_ids = set()
+        log_query = (
+            PilotFlightLog.query.join(OperationalActivity, PilotFlightLog.activity_id == OperationalActivity.id)
+            .filter(
+                PilotFlightLog.flight_date >= start_date,
+                PilotFlightLog.flight_date < end_date,
+                PilotFlightLog.total_hectares.isnot(None),
+            )
+        )
+        if org_names:
+            log_query = log_query.filter(OperationalActivity.client_project.in_(org_names))
+        for log in log_query.all():
+            if not log.flight_date:
+                continue
+            day_index = (log.flight_date - start_date).days
+            if 0 <= day_index < day_count:
+                daily[day_index] += Decimal(str(log.total_hectares or 0))
+                if log.activity_id:
+                    logged_activity_ids.add(log.activity_id)
+
+        billing_query = OperationBillingRecord.query.filter(
+            OperationBillingRecord.area_hectares.isnot(None),
+            OperationBillingRecord.executed_date >= start_date,
+            OperationBillingRecord.executed_date < end_date,
+        )
+        if org_ids:
+            billing_query = billing_query.filter(OperationBillingRecord.organization_id.in_(org_ids))
+        for record in billing_query.all():
+            if record.activity_id and record.activity_id in logged_activity_ids:
+                continue
+            if not record.executed_date:
+                continue
+            day_index = (record.executed_date - start_date).days
+            if 0 <= day_index < day_count:
+                daily[day_index] += Decimal(str(record.area_hectares or 0))
+
+        running = Decimal("0")
+        cumulative = []
+        for value in daily:
+            running += value
+            cumulative.append(running)
+        return daily, cumulative
+
+    current_daily, current_cumulative = _month_hectares_series(current_month_start, next_month_start)
+    previous_daily, previous_cumulative = _month_hectares_series(previous_month_start, current_month_start)
+    chart_days = max(len(current_daily), len(previous_daily))
+
+    def _chart_values(values):
+        return [float(round(value, 2)) for value in values] + [None for _ in range(chart_days - len(values))]
+
+    hectares_chart = {
+        "labels": [str(day) for day in range(1, chart_days + 1)],
+        "current_month": f"{month_names_short[current_month_start.month - 1]} {current_month_start.year}",
+        "previous_month": f"{month_names_short[previous_month_start.month - 1]} {previous_month_start.year}",
+        "current_daily": _chart_values(current_daily),
+        "previous_daily": _chart_values(previous_daily),
+        "current_cumulative": _chart_values(current_cumulative),
+        "previous_cumulative": _chart_values(previous_cumulative),
+        "current_total": float(round(sum(current_daily, Decimal("0")), 2)),
+        "previous_total": float(round(sum(previous_daily, Decimal("0")), 2)),
+    }
     context = {
         "dashboard": True,
         "title": "Dashboard TecnoAgro",
@@ -614,6 +788,7 @@ def dashboard():
         "recent_lot_crops": recent_lot_crops,
         "recent_image_analyses": recent_image_analyses,
         "last_analysis_summary": last_analysis_summary,
+        "hectares_chart": hectares_chart,
         "operation_stats": {
             "lots_analyzed": lots_analyzed,
             "recommendations_generated": recommendations_generated,
@@ -652,6 +827,19 @@ def operational_calendar():
     )
     pilots = PilotProfile.query.order_by(PilotProfile.first_name.asc()).all()
     drones = MaintenanceDrone.query.order_by(MaintenanceDrone.brand.asc(), MaintenanceDrone.model.asc()).all()
+    from app.modules.foliage.models import Farm, Lot
+
+    clients = get_clients_for_user(get_jwt_identity())
+    if not clients:
+        clients = Organization.query.filter_by(active=True).order_by(Organization.name.asc()).all()
+    client_ids = [client.id for client in clients]
+    farms_query = Farm.query.order_by(Farm.name.asc())
+    lots_query = Lot.query.join(Farm).order_by(Lot.name.asc())
+    if client_ids:
+        farms_query = farms_query.filter(Farm.org_id.in_(client_ids))
+        lots_query = lots_query.filter(Farm.org_id.in_(client_ids))
+    farms = farms_query.all()
+    lots = lots_query.all()
 
     context = {
         "dashboard": True,
@@ -663,6 +851,15 @@ def operational_calendar():
         "data_menu": get_dashboard_menu(),
         "pilots": pilots,
         "drones": drones,
+        "clients": clients,
+        "farms": farms,
+        "lots": lots,
+        "clients_json": [
+            {"id": client.id, "name": client.name, "unit_price": (client.profile_data or {}).get("billing_unit_price") or ""}
+            for client in clients
+        ],
+        "farms_json": [{"id": farm.id, "name": farm.name, "organization_id": farm.org_id} for farm in farms],
+        "lots_json": [{"id": lot.id, "name": lot.name, "farm_id": lot.farm_id, "area": lot.area} for lot in lots],
         "activities": activities,
         "activities_json": [_activity_payload(activity) for activity in activities],
         "stats": {
@@ -753,6 +950,7 @@ def operational_calendar_create_activity():
     db.session.add(activity)
     db.session.flush()
     _activity_log(activity, "created", "Actividad creada.")
+    _sync_activity_billing(activity)
     db.session.commit()
     return jsonify({
         "success": True,
@@ -776,6 +974,7 @@ def operational_calendar_update_activity(activity_id):
     for key, value in payload.items():
         setattr(activity, key, value)
     _activity_log(activity, "updated", "Actividad actualizada.")
+    _sync_activity_billing(activity)
     db.session.commit()
     return jsonify({
         "success": True,
@@ -806,6 +1005,7 @@ def operational_calendar_complete_activity(activity_id):
     activity.status = "completed"
     activity.completed_at = datetime.utcnow()
     _activity_log(activity, "completed", "Actividad finalizada.")
+    _sync_activity_billing(activity)
     db.session.commit()
     return jsonify({"success": True, "message": "Actividad finalizada.", "activity": _activity_payload(activity)})
 
@@ -1005,6 +1205,7 @@ def pilot_flight_log():
             landing_location=(request.form.get("landing_location") or "").strip() or (activity.place if activity else None),
             weather=(request.form.get("weather") or "").strip() or None,
             battery_cycles=request.form.get("battery_cycles", type=int),
+            total_hectares=_parse_optional_decimal(request.form.get("total_hectares")),
             notes=(request.form.get("notes") or "").strip() or None,
         )
         db.session.add(flight_log)
@@ -1219,6 +1420,7 @@ def pilot_save_flight_log(activity_id):
         "landing_location": (request.form.get("landing_location") or "").strip() or activity.place,
         "weather": (request.form.get("weather") or "").strip() or None,
         "battery_cycles": request.form.get("battery_cycles", type=int),
+        "total_hectares": _parse_optional_decimal(request.form.get("total_hectares")),
         "notes": (request.form.get("notes") or "").strip() or None,
     }
     if flight_log:
@@ -1358,6 +1560,16 @@ def operation_executions():
                 hectares += Decimal(str(value))
         if hectares == 0 and billing_record and billing_record.area_hectares is not None:
             hectares = Decimal(str(billing_record.area_hectares))
+        planned_hectares = Decimal(str(activity.area_hectares)) if activity.area_hectares is not None else Decimal("0")
+        progress_hectares = hectares
+        if planned_hectares > 0:
+            hectares_progress = min(Decimal("100"), max(Decimal("0"), (progress_hectares / planned_hectares) * Decimal("100")))
+            hectares_progress_label = f"{progress_hectares:.1f}/{planned_hectares:.1f} ha - {hectares_progress:.0f}%"
+            hectares_progress_state = "ok" if hectares_progress >= 100 else ("shortfall" if status_key == "completed" else "partial")
+        else:
+            hectares_progress = Decimal("100") if status_key == "completed" and progress_hectares > 0 else Decimal("0")
+            hectares_progress_label = f"{progress_hectares:.1f} ha reportadas" if progress_hectares > 0 else "Sin hectareas reportadas"
+            hectares_progress_state = "ok" if progress_hectares > 0 else ("missing" if status_key == "completed" else "empty")
         total_minutes += minutes
         total_hectares += hectares
         if status_key == "in_progress":
@@ -1393,6 +1605,10 @@ def operation_executions():
             "duration_hours": round((activity.duration_minutes or 0) / 60, 1),
             "real_hours": round(minutes / 60, 1),
             "hectares": float(hectares),
+            "planned_hectares": float(planned_hectares),
+            "hectares_progress": float(round(hectares_progress, 1)),
+            "hectares_progress_state": hectares_progress_state,
+            "hectares_progress_label": hectares_progress_label,
             "report_count": len(reports),
             "log_count": len(logs),
             "latest_note": reports[0].message if reports else (logs[-1].message if logs else ((billing_record.observations if billing_record else None) or "Sin novedades registradas")),
@@ -1556,7 +1772,7 @@ def maintenance_drones():
         "page_title": "Drones",
         "data_menu": get_dashboard_menu(),
         "suppress_base_flashes": True,
-        "drones": drones,
+        "drones": drones,
         "total_hours": total_hours,
         "active_count": active_count,
     }

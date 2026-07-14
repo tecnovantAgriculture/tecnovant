@@ -25,6 +25,7 @@ from .helpers import (
     preprocess_rgb_once,
 )
 from .models import Asset, StorageLocation
+from .storage import ensure_local_file
 from .tasks import _resolve_cache_dir, enqueue_preprocess_asset
 
 
@@ -275,8 +276,8 @@ def asset_display_info(asset_id: int):
     from app.modules.agrovista.services.display_assets import _resolve_display_dir
 
     asset = Asset.query.get_or_404(asset_id)
-    if asset.storage != StorageLocation.LOCAL.value:
-        return jsonify({"message": "Solo se soportan assets locales."}), 400
+    if asset.storage not in {StorageLocation.LOCAL.value, StorageLocation.GCS.value}:
+        return jsonify({"message": "Almacenamiento de asset no soportado."}), 400
 
     # Resolve display PNG path — no computation, just path resolution.
     display_dir = _resolve_display_dir(asset.uuid)
@@ -374,21 +375,19 @@ def asset_agrovista_meta(asset_id: int):
     """
 
     asset = Asset.query.get_or_404(asset_id)
-    if asset.storage != StorageLocation.LOCAL.value:
+    if asset.storage not in {StorageLocation.LOCAL.value, StorageLocation.GCS.value}:
         return (
-            jsonify({"message": "Solo se soportan assets locales en este flujo."}),
+            jsonify({"message": "Almacenamiento de asset no soportado en este flujo."}),
             400,
         )
 
     try:
-        media_root = Path(_media_root())
+        source_path = ensure_local_file(asset.storage_key) if asset.storage == StorageLocation.GCS.value else Path(_media_root()) / asset.storage_key
     except Exception:
         return (
             jsonify({"message": "No se pudo resolver el almacenamiento de media."}),
             500,
         )
-
-    source_path = media_root / asset.storage_key
     if not source_path.exists():
         return jsonify({"message": "Archivo origen no encontrado."}), 404
 

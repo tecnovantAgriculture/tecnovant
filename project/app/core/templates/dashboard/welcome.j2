@@ -408,6 +408,25 @@
         min-height: 190px;
     }
 
+    .tv-compare-chart {
+        min-height: 252px;
+    }
+
+    .tv-compare-chart .tv-chart-wrap {
+        height: 178px;
+        min-height: 178px;
+    }
+
+    .tv-chart-total {
+        color: #173f36;
+        font-size: 12px;
+        font-weight: 650;
+    }
+
+    .dark .tv-chart-total {
+        color: #d9f99d;
+    }
+
     .tv-two-col {
         display: grid;
         grid-template-columns: 1fr 1fr;
@@ -711,16 +730,6 @@
 
 <div class="tv-home">
     <div class="tv-home-shell">
-        <header class="tv-home-topbar">
-            <div class="tv-home-title">
-                <h1>Hola, {{ greeting_name }}</h1>
-                <p>Selecciona una opción para empezar a trabajar con tus fincas, ortofotos y análisis agrícolas.</p>
-            </div>
-            <div class="tv-home-chip">
-                <i class="fas fa-leaf"></i>
-                Dashboard TecnoVant
-            </div>
-        </header>
 
         <div class="tv-home-grid">
             <aside class="tv-stack">
@@ -822,48 +831,24 @@
                 </section>
 
                 <section class="tv-two-col">
-                    <article class="tv-card tv-card-pad">
+                    <article class="tv-card tv-card-pad tv-compare-chart">
                         <div class="tv-section-head">
-                            <h2>Últimos análisis de imagen</h2>
-                            <a href="{{ url_for('agrovista.hello') }}">Ir a NDVI / VARI</a>
+                            <h2>Hectáreas voladas por día</h2>
+                            <span class="tv-chart-total">{{ hectares_chart.current_total }} ha este mes</span>
                         </div>
-                        {% if recent_image_analyses %}
-                            <div class="tv-list">
-                                {% for item in recent_image_analyses %}
-                                    <div class="tv-row">
-                                        <div class="tv-row-main">
-                                            <p class="tv-row-title">{{ item.filename }}</p>
-                                            <p class="tv-row-sub">Dimensiones: {{ item.dimensions }}</p>
-                                        </div>
-                                        <span class="tv-row-meta">{{ item.date }}</span>
-                                    </div>
-                                {% endfor %}
-                            </div>
-                        {% else %}
-                            <div class="tv-empty">Aún no hay análisis de imagen registrados.</div>
-                        {% endif %}
+                        <div class="tv-chart-wrap">
+                            <canvas id="tvHomeHectaresDailyChart"></canvas>
+                        </div>
                     </article>
 
-                    <article class="tv-card tv-card-pad">
+                    <article class="tv-card tv-card-pad tv-compare-chart">
                         <div class="tv-section-head">
-                            <h2>Fincas y lotes recientes</h2>
-                            <a href="{{ url_for('foliage.amd_farms') }}">Ver todas</a>
+                            <h2>Acumulado de hectáreas</h2>
+                            <span class="tv-chart-total">{{ hectares_chart.previous_total }} ha mes anterior</span>
                         </div>
-                        {% if recent_lot_crops %}
-                            <div class="tv-list">
-                                {% for item in recent_lot_crops %}
-                                    <div class="tv-row">
-                                        <div class="tv-row-main">
-                                            <p class="tv-row-title">{{ item.farm_name }}</p>
-                                            <p class="tv-row-sub">Lote: {{ item.lot_name }} · Cultivo: {{ item.crop_name }}</p>
-                                        </div>
-                                        <span class="tv-row-meta">{{ item.time_label }}</span>
-                                    </div>
-                                {% endfor %}
-                            </div>
-                        {% else %}
-                            <div class="tv-empty">Aún no hay fincas o lotes recientes.</div>
-                        {% endif %}
+                        <div class="tv-chart-wrap">
+                            <canvas id="tvHomeHectaresCumulativeChart"></canvas>
+                        </div>
                     </article>
                 </section>
             </main>
@@ -955,7 +940,8 @@
 
         const dashboardData = {
             kpis: {{ kpis | tojson }},
-            operation: {{ operation_stats | tojson }}
+            operation: {{ operation_stats | tojson }},
+            hectares: {{ hectares_chart | tojson }}
         };
 
         function getThemeColors() {
@@ -975,7 +961,82 @@
             const flowCanvas = document.getElementById("tvHomeFlowChart");
             const activityCanvas = document.getElementById("tvHomeActivityChart");
             const operationCanvas = document.getElementById("tvHomeOperationChart");
+            const hectaresDailyCanvas = document.getElementById("tvHomeHectaresDailyChart");
+            const hectaresCumulativeCanvas = document.getElementById("tvHomeHectaresCumulativeChart");
 
+
+            function drawHectaresLine(canvas, currentValues, previousValues, labelSuffix) {
+                if (!canvas) return;
+                new Chart(canvas, {
+                    type: "line",
+                    data: {
+                        labels: dashboardData.hectares.labels,
+                        datasets: [
+                            {
+                                label: dashboardData.hectares.current_month,
+                                data: currentValues,
+                                borderColor: "#16a34a",
+                                backgroundColor: "rgba(22, 163, 74, 0.10)",
+                                pointBackgroundColor: "#16a34a",
+                                pointBorderWidth: 0,
+                                pointRadius: 2.5,
+                                borderWidth: 2.5,
+                                tension: 0.36,
+                                fill: true
+                            },
+                            {
+                                label: dashboardData.hectares.previous_month,
+                                data: previousValues,
+                                borderColor: "#0ea5e9",
+                                backgroundColor: "rgba(14, 165, 233, 0.08)",
+                                pointBackgroundColor: "#0ea5e9",
+                                pointBorderWidth: 0,
+                                pointRadius: 2.5,
+                                borderWidth: 2.5,
+                                tension: 0.36,
+                                fill: true
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: "bottom",
+                                labels: { boxWidth: 10, boxHeight: 10, color: theme.text, font: { size: 11 } }
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function (context) {
+                                        const value = context.parsed.y || 0;
+                                        return `${context.dataset.label}: ${value.toLocaleString("es-CO")} ${labelSuffix}`;
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            x: {
+                                grid: { display: false },
+                                ticks: { color: theme.text, maxTicksLimit: 8 }
+                            },
+                            y: {
+                                beginAtZero: true,
+                                grace: "18%",
+                                suggestedMax: 10,
+                                grid: { color: theme.grid },
+                                ticks: {
+                                    color: theme.text,
+                                    callback: function (value) { return `${value} ha`; }
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+
+            drawHectaresLine(hectaresDailyCanvas, dashboardData.hectares.current_daily, dashboardData.hectares.previous_daily, "ha");
+            drawHectaresLine(hectaresCumulativeCanvas, dashboardData.hectares.current_cumulative, dashboardData.hectares.previous_cumulative, "ha acumuladas");
             if (flowCanvas) {
                 new Chart(flowCanvas, {
                     type: "line",

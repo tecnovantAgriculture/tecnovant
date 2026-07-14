@@ -278,34 +278,72 @@
     top: 9px;
     height: 22px;
     min-width: 82px;
-    border: 0;
+    border: 1px solid rgba(32, 74, 64, .16);
     border-radius: 999px;
-    background: #38c6b0;
-    box-shadow: 0 5px 12px rgba(15, 77, 64, .12), inset 0 -2px 0 rgba(0, 0, 0, .08);
+    background: #eef5f1;
+    box-shadow: 0 5px 12px rgba(15, 77, 64, .08);
     cursor: default;
+    overflow: hidden;
   }
 
-  .exec-gantt-bar::after {
-    content: attr(data-label);
+  .exec-gantt-progress {
+    position: absolute;
+    inset: 0 auto 0 0;
+    min-width: 0;
+    border-radius: inherit;
+    background: #38c6b0;
+    box-shadow: inset 0 -2px 0 rgba(0, 0, 0, .08);
+  }
+
+  .exec-gantt-label {
     position: absolute;
     inset: 0;
     display: flex;
     align-items: center;
     padding: 0 10px;
-    color: rgba(255,255,255,.96);
+    color: #10352e;
     font-size: 10px;
     font-weight: 650;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    z-index: 1;
   }
 
-  .exec-gantt-bar[data-status="scheduled"] { background: #55cfc0; }
-  .exec-gantt-bar[data-status="soon"] { background: #72c7e7; }
-  .exec-gantt-bar[data-status="in_progress"] { background: #10b99b; }
-  .exec-gantt-bar[data-status="reported"] { background: #f2a340; }
-  .exec-gantt-bar[data-status="completed"] { background: #284a43; }
-  .exec-gantt-bar[data-status="cancelled"] { background: #d75a62; }
+  .exec-gantt-bar[data-status="scheduled"] .exec-gantt-progress { background: #55cfc0; }
+  .exec-gantt-bar[data-status="soon"] .exec-gantt-progress { background: #72c7e7; }
+  .exec-gantt-bar[data-status="in_progress"] .exec-gantt-progress { background: #10b99b; }
+  .exec-gantt-bar[data-status="reported"] .exec-gantt-progress { background: #f2a340; }
+  .exec-gantt-bar[data-status="completed"] .exec-gantt-progress { background: #284a43; }
+  .exec-gantt-bar[data-status="cancelled"] .exec-gantt-progress { background: #d75a62; }
+  .exec-gantt-bar[data-progress-state="ok"] {
+    border-color: rgba(22, 101, 52, .25);
+    background: #dcfce7;
+  }
+  .exec-gantt-bar[data-progress-state="ok"] .exec-gantt-progress { background: #16a34a; }
+  .exec-gantt-bar[data-progress-state="partial"] {
+    border-color: rgba(14, 116, 144, .22);
+    background: #e0f2fe;
+  }
+  .exec-gantt-bar[data-progress-state="partial"] .exec-gantt-progress { background: #0891b2; }
+  .exec-gantt-bar[data-progress-state="shortfall"] {
+    border-color: rgba(220, 38, 38, .34);
+    background: #fee2e2;
+  }
+  .exec-gantt-bar[data-progress-state="shortfall"] .exec-gantt-progress { background: #22c55e; }
+  .exec-gantt-bar[data-progress-state="missing"] {
+    border-color: rgba(220, 38, 38, .38);
+    background: #fee2e2;
+  }
+  .exec-gantt-bar[data-progress-state="missing"] .exec-gantt-progress {
+    width: 100% !important;
+    background: #dc2626;
+  }
+  .exec-gantt-bar[data-progress-state="empty"] {
+    border-color: rgba(148, 163, 184, .28);
+    background: #f8fafc;
+  }
+  .exec-gantt-bar[data-progress-state="empty"] .exec-gantt-progress { background: #94a3b8; }
 
   .exec-today-line {
     position: absolute;
@@ -344,12 +382,7 @@
 
 {% block content %}
 <div class="exec-board">
-  <section class="exec-head">
-    <div>
-      <p class="exec-eyebrow">Operaciones</p>
-      <h1>Ejecuciones</h1>
-      <p class="exec-muted mt-2">Cronograma semanal de misiones programadas desde el calendario operativo.</p>
-    </div>
+  <section class="exec-top-actions">
     <div class="exec-actions">
       <a class="exec-btn" href="{{ url_for('core.operational_calendar') }}"><i class="fas fa-calendar-alt"></i> Calendario operativo</a>
       <a class="exec-btn exec-btn-primary" href="{{ url_for('core.operation_executions') }}"><i class="fas fa-sync-alt"></i> Actualizar</a>
@@ -389,7 +422,10 @@
               {% if item.status in ['in_progress', 'soon', 'reported'] %}
                 <span class="exec-today-line" style="left: {{ item.gantt_left }}%;"></span>
               {% endif %}
-              <span class="exec-gantt-bar" data-status="{{ item.status }}" data-label="{{ item.operation_days }} días · {{ item.status_label }}" title="{{ item.starts_label }} - {{ item.ends_label }}" style="left: {{ item.gantt_left }}%; width: max({{ item.gantt_width }}%, 82px);"></span>
+              <span class="exec-gantt-bar" data-status="{{ item.status }}" data-progress-state="{{ item.hectares_progress_state }}" title="{{ item.starts_label }} - {{ item.ends_label }} - {{ item.hectares_progress_label }}" style="left: {{ item.gantt_left }}%; width: max({{ item.gantt_width }}%, 82px);">
+                <span class="exec-gantt-progress" style="width: {{ item.hectares_progress }}%;"></span>
+                <span class="exec-gantt-label">{{ item.hectares_progress_label }} - {{ item.status_label }}</span>
+              </span>
             </div>
           </div>
         {% else %}

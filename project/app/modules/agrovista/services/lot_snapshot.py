@@ -1,9 +1,8 @@
 """Snapshot RGB del lote sobre la ortofoto.
 
-Genera un recorte PNG (RGB natural) del polígono dibujado en la herramienta
-NDVI, materializado una sola vez al guardar el análisis foliar. El recorte se
-persiste como ``AssetVariant`` (kind="lot_snapshot") del asset de media origen
-y se enlaza desde ``CommonAnalysis.lot_snapshot_variant_id``.
+Genera un recorte PNG del poligono dibujado en la herramienta NDVI. El recorte
+se persiste como ``AssetVariant`` (kind="lot_snapshot") del asset de media
+origen y se enlaza desde ``CommonAnalysis.lot_snapshot_variant_id``.
 """
 
 from __future__ import annotations
@@ -18,22 +17,34 @@ from PIL import Image, ImageDraw
 from app.extensions import db
 from app.modules.media.helpers import _media_root
 from app.modules.media.models import Asset, AssetVariant, StorageLocation
+from app.modules.media.storage import (
+    delete_file_from_gcs,
+    ensure_local_file,
+    gcs_enabled,
+    upload_file_to_gcs,
+)
 from app.modules.media.tasks import _resolve_cache_dir
 
 SNAPSHOT_KIND = "lot_snapshot"
 SNAPSHOT_DIR = "derived/lot_snapshots"
 SNAPSHOT_MAX_DIM = 1280
-OUTLINE_COLOR = (239, 68, 68)  # rojo visible sobre vegetación
+OUTLINE_COLOR = (239, 68, 68)
 
 
 class LotSnapshotError(Exception):
     """Errores del generador de snapshots de lote."""
 
 
-def _preview_path_for(asset: Asset) -> Path:
-    """Localiza el preview RGB preprocesado del asset (lo que ve el usuario)."""
+def _source_path_for(asset: Asset) -> Path:
     media_root = Path(_media_root())
-    source_path = media_root / asset.storage_key
+    if asset.storage == StorageLocation.GCS.value:
+        return ensure_local_file(asset.storage_key)
+    return media_root / asset.storage_key
+
+
+def _preview_path_for(asset: Asset) -> Path:
+    """Localiza el preview RGB preprocesado del asset."""
+    source_path = _source_path_for(asset)
     from flask import current_app
 
     cache_dir = _resolve_cache_dir(current_app._get_current_object(), asset.uuid)
@@ -61,26 +72,17 @@ def generate_lot_snapshot(
     *,
     max_dim: int = SNAPSHOT_MAX_DIM,
 ) -> AssetVariant:
-    """Recorta el bbox del polígono desde el preview RGB y dibuja su contorno.
-
-    Args:
-        asset: Asset de media (ortofoto) origen, almacenamiento local.
-        vertices_full: Vértices del polígono en coordenadas raster de
-            resolución completa (x=col, y=fila desde arriba) — la misma
-            convención que recibe ``/api/agrovista/protein`` con
-            ``coords_full_res=True``.
-        max_dim: Lado máximo del PNG resultante.
-
-    Returns:
-        AssetVariant agregado a la sesión (sin commit) apuntando al PNG.
-    """
-    if asset is None or asset.storage != StorageLocation.LOCAL.value:
-        raise LotSnapshotError("asset must be a local media asset")
+    """Recorta el bbox del poligono desde el preview RGB y dibuja su contorno."""
+    if asset is None or asset.storage not in {
+        StorageLocation.LOCAL.value,
+        StorageLocation.GCS.value,
+    }:
+        raise LotSnapshotError("asset must be a supported media asset")
     if not vertices_full or len(vertices_full) < 3:
         raise LotSnapshotError("polygon requires at least 3 vertices")
 
     media_root = Path(_media_root())
-    source_path = media_root / asset.storage_key
+    source_path = _source_path_for(asset)
     if not source_path.exists():
         raise LotSnapshotError(f"source file not found for asset {asset.uuid}")
 
@@ -131,14 +133,19 @@ def generate_lot_snapshot(
     out_dir = media_root / SNAPSHOT_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
     filename = f"{asset.uuid}_{uuid.uuid4().hex[:8]}.png"
+    storage_key = f"{SNAPSHOT_DIR}/{filename}"
     out_path = out_dir / filename
     crop.save(out_path, optimize=True)
+
+    variant_storage = StorageLocation.GCS.value if gcs_enabled() else StorageLocation.LOCAL.value
+    if variant_storage == StorageLocation.GCS.value:
+        upload_file_to_gcs(out_path, storage_key, "image/png")
 
     variant = AssetVariant(
         asset_id=asset.id,
         kind=SNAPSHOT_KIND,
-        storage=StorageLocation.LOCAL.value,
-        storage_key=f"{SNAPSHOT_DIR}/{filename}",
+        storage=variant_storage,
+        storage_key=storage_key,
         width=crop.width,
         height=crop.height,
     )
@@ -156,19 +163,21 @@ def discard_lot_snapshot(variant: Optional[AssetVariant]) -> None:
             path.unlink()
     except Exception:
         pass
+    if variant.storage == StorageLocation.GCS.value:
+        delete_file_from_gcs(variant.storage_key)
     db.session.delete(variant)
 
 
 def resolve_lot_snapshot_url(analysis) -> Optional[str]:
-    """URL servible del snapshot de un ``CommonAnalysis``, o ``None``.
-
-    Devuelve ``None`` si no hay variante enlazada, si el almacenamiento no es
-    local o si el archivo ya no existe en disco (el informe simplemente no
-    muestra la imagen).
-    """
+    """URL servible del snapshot de un ``CommonAnalysis``, o ``None``."""
     variant = getattr(analysis, "lot_snapshot_variant", None) if analysis else None
-    if variant is None or variant.storage != StorageLocation.LOCAL.value:
+    if variant is None or variant.storage not in {
+        StorageLocation.LOCAL.value,
+        StorageLocation.GCS.value,
+    }:
         return None
+    if variant.storage == StorageLocation.GCS.value:
+        return url_for("media.serve_file", key=variant.storage_key)
     try:
         path = Path(_media_root()) / variant.storage_key
     except Exception:

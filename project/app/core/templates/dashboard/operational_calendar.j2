@@ -39,6 +39,11 @@
     line-height: 1.5;
   }
 
+  .ops-top-actions {
+    display: flex;
+    justify-content: flex-end;
+  }
+
   .ops-actions {
     display: flex;
     flex-wrap: wrap;
@@ -144,7 +149,7 @@
 
   .ops-shell {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 340px;
+    grid-template-columns: minmax(0, 1fr);
     gap: 16px;
     align-items: start;
   }
@@ -482,13 +487,8 @@
 {% block content %}
 <div class="ops-calendar"
      data-create-activity-url="{{ url_for('core.operational_calendar_create_activity') }}"
-     data-create-pilot-url="{{ url_for('core.operational_calendar_create_pilot') }}">
-  <section class="ops-head">
-    <div>
-      <p class="ops-eyebrow">Operaciones</p>
-      <h1>Calendario Operativo</h1>
-      <p class="ops-muted mt-2">Planifica actividades, asigna pilotos y drones disponibles, y controla estados operativos.</p>
-    </div>
+     data-create-pilot-url="{{ url_for('core.operational_calendar_create_pilot') }}">
+    <section class="ops-top-actions">
     <div class="ops-actions">
       <button type="button" class="ops-btn" data-open-pilot>
         <i class="fas fa-user-plus"></i>
@@ -500,8 +500,7 @@
       </button>
     </div>
   </section>
-
-  <section class="ops-stats">
+<section class="ops-stats">
     <article class="ops-card ops-stat">
       <i class="ops-stat-icon fas fa-calendar-day"></i>
       <div><span>Hoy</span><strong data-stat="today">{{ stats.today }}</strong></div>
@@ -533,39 +532,16 @@
           <button type="button" class="ops-btn" data-calendar-next><i class="fas fa-chevron-right"></i></button>
         </div>
         <div class="ops-period" data-calendar-title></div>
-        <div class="ops-segment">
-          <button type="button" data-calendar-view="day">Dia</button>
-          <button type="button" data-calendar-view="week">Semana</button>
-          <button type="button" data-calendar-view="month" class="is-active">Mes</button>
+        <div class="ops-actions">
+          <div class="ops-segment">
+            <button type="button" data-calendar-view="day">Dia</button>
+            <button type="button" data-calendar-view="week">Semana</button>
+            <button type="button" data-calendar-view="month" class="is-active">Mes</button>
+          </div>
         </div>
       </div>
       <div class="ops-calendar-body" data-calendar-body></div>
-    </article>
-
-    <aside class="ops-side">
-      <article class="ops-card">
-        <div class="ops-side-head">
-          <h2 class="text-lg font-semibold text-gray-900">Actividades proximas</h2>
-          <p class="ops-muted mt-1">Haz clic sobre una actividad para editarla o cerrarla.</p>
-        </div>
-        <div class="ops-side-list" data-upcoming-list></div>
-      </article>
-      <article class="ops-card">
-        <div class="ops-side-head">
-          <h2 class="text-lg font-semibold text-gray-900">Recursos</h2>
-        </div>
-        <div class="ops-side-list">
-          <div class="ops-list-item">
-            <strong>{{ pilots|length }} pilotos</strong>
-            <span class="ops-muted">Perfiles operativos registrados.</span>
-          </div>
-          <div class="ops-list-item">
-            <strong>{{ drones|length }} drones</strong>
-            <span class="ops-muted">Drones leidos desde Mantenimiento.</span>
-          </div>
-        </div>
-      </article>
-    </aside>
+    </article>
   </section>
 </div>
 
@@ -626,18 +602,32 @@
           <input id="place" name="place" required placeholder="Municipio / finca / zona">
         </div>
         <div class="ops-field">
-          <label for="client_project">Cliente / proyecto</label>
-          <input id="client_project" name="client_project" placeholder="Proyecto asociado">
+          <label for="organization_id">Cliente</label>
+          <select id="organization_id" name="organization_id" required>
+            <option value="">Seleccionar cliente</option>
+            {% for client in clients %}
+              <option value="{{ client.id }}">{{ client.name }}</option>
+            {% endfor %}
+          </select>
+          <input id="client_project" name="client_project" type="hidden">
         </div>
       </div>
       <div class="ops-form-grid">
         <div class="ops-field">
-          <label for="farm_name">Finca</label>
-          <input id="farm_name" name="farm_name" placeholder="Ej: Amazonas">
+          <label for="farm_id">Finca</label>
+          <select id="farm_id" name="farm_id">
+            <option value="">Seleccionar finca</option>
+          </select>
+          <input id="farm_name_manual" placeholder="Escribir finca">
+          <input id="farm_name" name="farm_name" type="hidden" required>
         </div>
         <div class="ops-field">
-          <label for="lot_code">Lote</label>
-          <input id="lot_code" name="lot_code" placeholder="Ej: 1, 2 o PP">
+          <label for="lot_id">Lote</label>
+          <select id="lot_id" name="lot_id">
+            <option value="">Seleccionar lote</option>
+          </select>
+          <input id="lot_code_manual" placeholder="Escribir lote">
+          <input id="lot_code" name="lot_code" type="hidden">
         </div>
       </div>
       <div class="ops-form-grid">
@@ -673,6 +663,10 @@
             {% endfor %}
           </select>
         </div>
+      </div>
+      <div class="ops-field">
+        <label for="pilot_portal_link">Comparte este link con el piloto para que pueda ingresar a su panel</label>
+        <input id="pilot_portal_link" readonly value="{{ url_for('core.pilot_login', _external=True) }}">
       </div>
       <div class="ops-form-grid">
         <div class="ops-field">
@@ -751,6 +745,9 @@
 <script>
 document.addEventListener('DOMContentLoaded', function () {
   let activities = {{ activities_json | tojson }};
+  const clients = {{ clients_json | tojson }};
+  const farms = {{ farms_json | tojson }};
+  const lots = {{ lots_json | tojson }};
   let currentDate = new Date();
   let currentView = 'month';
   let activeActivity = null;
@@ -758,7 +755,6 @@ document.addEventListener('DOMContentLoaded', function () {
   const root = document.querySelector('.ops-calendar');
   const calendarBody = document.querySelector('[data-calendar-body]');
   const calendarTitle = document.querySelector('[data-calendar-title]');
-  const upcomingList = document.querySelector('[data-upcoming-list]');
   const activityModal = document.getElementById('activity-modal');
   const pilotModal = document.getElementById('pilot-modal');
   const activityForm = document.getElementById('activity-form');
@@ -767,6 +763,14 @@ document.addEventListener('DOMContentLoaded', function () {
   const pilotAlert = document.getElementById('pilot-alert');
   const cancelBtn = document.querySelector('[data-cancel-activity]');
   const completeBtn = document.querySelector('[data-complete-activity]');
+  const organizationSelect = document.getElementById('organization_id');
+  const farmSelect = document.getElementById('farm_id');
+  const lotSelect = document.getElementById('lot_id');
+  const clientProjectInput = document.getElementById('client_project');
+  const farmNameInput = document.getElementById('farm_name');
+  const farmNameManual = document.getElementById('farm_name_manual');
+  const lotCodeInput = document.getElementById('lot_code');
+  const lotCodeManual = document.getElementById('lot_code_manual');
 
   function pad(value) { return String(value).padStart(2, '0'); }
   function dateKey(date) { return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`; }
@@ -784,6 +788,47 @@ document.addEventListener('DOMContentLoaded', function () {
   function clearAlert(element) {
     element.textContent = '';
     element.classList.remove('is-open');
+  }
+  function optionText(select) {
+    const option = select.options[select.selectedIndex];
+    return option && option.value ? option.textContent.trim() : '';
+  }
+  function findClientId(name) {
+    const match = clients.find(item => item.name === name);
+    return match ? String(match.id) : '';
+  }
+  function findFarmId(name, organizationId) {
+    const match = farms.find(item => item.name === name && String(item.organization_id) === String(organizationId));
+    return match ? String(match.id) : '';
+  }
+  function findLotId(name, farmId) {
+    const match = lots.find(item => item.name === name && String(item.farm_id) === String(farmId));
+    return match ? String(match.id) : '';
+  }
+  function renderFarmOptions(organizationId, selectedId) {
+    const available = farms.filter(item => String(item.organization_id) === String(organizationId));
+    farmSelect.innerHTML = '<option value="">Seleccionar finca</option>' + available.map(item => `<option value="${item.id}">${item.name}</option>`).join('');
+    farmSelect.value = selectedId ? String(selectedId) : '';
+    const manualMode = available.length === 0;
+    farmSelect.style.display = manualMode ? 'none' : '';
+    farmNameManual.style.display = manualMode ? '' : 'none';
+    if (!manualMode) farmNameManual.value = '';
+    farmNameInput.value = manualMode ? farmNameManual.value.trim() : optionText(farmSelect);
+  }
+  function renderLotOptions(farmId, selectedId) {
+    const available = lots.filter(item => String(item.farm_id) === String(farmId));
+    lotSelect.innerHTML = '<option value="">Seleccionar lote</option>' + available.map(item => `<option value="${item.id}" data-area="${item.area || ''}">${item.name}</option>`).join('');
+    lotSelect.value = selectedId ? String(selectedId) : '';
+    const manualMode = available.length === 0;
+    lotSelect.style.display = manualMode ? 'none' : '';
+    lotCodeManual.style.display = manualMode ? '' : 'none';
+    if (!manualMode) lotCodeManual.value = '';
+    lotCodeInput.value = manualMode ? lotCodeManual.value.trim() : optionText(lotSelect);
+  }
+  function syncCatalogFields() {
+    clientProjectInput.value = optionText(organizationSelect);
+    farmNameInput.value = farmSelect.style.display === 'none' ? farmNameManual.value.trim() : optionText(farmSelect);
+    lotCodeInput.value = lotSelect.style.display === 'none' ? lotCodeManual.value.trim() : optionText(lotSelect);
   }
   function csrfToken() {
     if (typeof getCsrfToken === 'function') return getCsrfToken();
@@ -850,16 +895,7 @@ document.addEventListener('DOMContentLoaded', function () {
     });
     html += '</div>';
     calendarBody.innerHTML = html;
-  }
-  function renderUpcoming() {
-    const sorted = activities.slice().sort((a, b) => a.starts_at.localeCompare(b.starts_at)).slice(0, 8);
-    upcomingList.innerHTML = sorted.length ? sorted.map(item => `
-      <div class="ops-list-item" data-activity-id="${item.id}">
-        <strong>${item.title}</strong>
-        <span class="ops-muted">${item.date} ${item.start_time} - ${item.pilot_name}</span>
-        <span class="ops-badge" data-status="${item.status}">${statusLabel(item.status)}</span>
-      </div>`).join('') : '<div class="ops-muted">No hay actividades programadas.</div>';
-  }
+  }
   function statusLabel(status) {
     return { scheduled: 'Pendiente', in_progress: 'En proceso', completed: 'Finalizada', cancelled: 'Cancelada' }[status] || status;
   }
@@ -892,13 +928,16 @@ document.addEventListener('DOMContentLoaded', function () {
         return day;
       }));
     }
-    renderUpcoming();
     renderStats();
   }
   function openActivityModal(date, time, event) {
     clearAlert(activityAlert);
     activityForm.reset();
     activeActivity = event || null;
+    organizationSelect.value = '';
+    renderFarmOptions('', '');
+    renderLotOptions('', '');
+    syncCatalogFields();
     document.getElementById('activity-modal-title').textContent = event ? 'Editar solicitud' : 'Nueva solicitud';
     document.getElementById('activity_id').value = event ? event.id : '';
     document.getElementById('start_date').value = event ? event.start_date : (date || dateKey(currentDate));
@@ -909,9 +948,15 @@ document.addEventListener('DOMContentLoaded', function () {
       document.getElementById('activity_title').value = event.title;
       document.getElementById('operation_type').value = event.operation_type;
       document.getElementById('place').value = event.place;
-      document.getElementById('client_project').value = event.client_project;
-      document.getElementById('farm_name').value = event.farm_name || '';
-      document.getElementById('lot_code').value = event.lot_code || '';
+      const organizationId = event.organization_id || findClientId(event.client_project);
+      organizationSelect.value = organizationId ? String(organizationId) : '';
+      const farmId = event.farm_id || findFarmId(event.farm_name || '', organizationSelect.value);
+      renderFarmOptions(organizationSelect.value, farmId);
+      if (!farmId) farmNameManual.value = event.farm_name || '';
+      const lotId = event.lot_id || findLotId(event.lot_code || '', farmSelect.value);
+      renderLotOptions(farmSelect.value, lotId);
+      if (!lotId) lotCodeManual.value = event.lot_code || '';
+      syncCatalogFields();
       document.getElementById('area_hectares').value = event.area_hectares || '';
       document.getElementById('rest_days').value = event.rest_days || '';
       document.getElementById('paddocks').value = event.paddocks || '';
@@ -971,11 +1016,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     const target = event.target.closest('[data-day]');
     if (target) openActivityModal(target.dataset.day, target.dataset.time || '08:00');
-  });
-  upcomingList.addEventListener('click', function (event) {
-    const item = event.target.closest('[data-activity-id]');
-    if (item) openActivityModal(null, null, activities.find(activity => activity.id === Number(item.dataset.activityId)));
-  });
+  });
   document.getElementById('start_date').addEventListener('change', function () {
     if (!document.getElementById('end_date').value) document.getElementById('end_date').value = this.value;
     updateDuration();
@@ -983,10 +1024,28 @@ document.addEventListener('DOMContentLoaded', function () {
   document.getElementById('end_date').addEventListener('change', updateDuration);
   document.getElementById('start_time').addEventListener('change', updateDuration);
   document.getElementById('end_time').addEventListener('change', updateDuration);
+  organizationSelect.addEventListener('change', function () {
+    renderFarmOptions(this.value, '');
+    renderLotOptions('', '');
+    syncCatalogFields();
+  });
+  farmSelect.addEventListener('change', function () {
+    renderLotOptions(this.value, '');
+    syncCatalogFields();
+    if (!document.getElementById('place').value) document.getElementById('place').value = farmNameInput.value;
+  });
+  lotSelect.addEventListener('change', function () {
+    syncCatalogFields();
+    const area = this.selectedOptions[0] ? this.selectedOptions[0].dataset.area : '';
+    if (area) document.getElementById('area_hectares').value = area;
+  });
+  farmNameManual.addEventListener('input', syncCatalogFields);
+  lotCodeManual.addEventListener('input', syncCatalogFields);
 
   activityForm.addEventListener('submit', async function (event) {
     event.preventDefault();
     clearAlert(activityAlert);
+    syncCatalogFields();
     const id = document.getElementById('activity_id').value;
     const url = id ? `${root.dataset.createActivityUrl}/${id}` : root.dataset.createActivityUrl;
     try {
@@ -1033,4 +1092,12 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 </script>
 {% endblock %}
+
+
+
+
+
+
+
+
 

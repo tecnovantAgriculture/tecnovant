@@ -29,10 +29,24 @@ from app.helpers.dashboard_helpers import get_dashboard_menu
 from . import media as web
 from .controller import MediaController
 from .helpers import _media_root, friendly_preprocess_error
-from .models import Asset, AssetType
+from .models import Asset, AssetType, AssetVariant, StorageLocation
+from .storage import gcs_enabled, public_or_signed_url
 from .tasks import enqueue_preprocess_asset
 
 
+
+
+def _cloud_storage_redirect_for_key(key: str):
+    normalized_key = key.replace("\\", "/")
+    asset = Asset.query.filter_by(storage_key=key).first()
+    if asset and asset.storage == StorageLocation.GCS.value:
+        return redirect(public_or_signed_url(key))
+    variant = AssetVariant.query.filter_by(storage_key=key).first()
+    if variant and variant.storage == StorageLocation.GCS.value:
+        return redirect(public_or_signed_url(key))
+    if normalized_key.startswith("display/") and gcs_enabled():
+        return redirect(public_or_signed_url(normalized_key))
+    return None
 def _parse_allowed_types(raw: str | None) -> set[str]:
     """Normaliza la lista de tipos de activo permitidos dentro del selector.
 
@@ -409,6 +423,9 @@ def serve_file(key: str):
     """
     # Serve strictly under the media root. Passing the full key to
     # send_from_directory lets safe_join reject any traversal (404).
+    cloud_redirect = _cloud_storage_redirect_for_key(key)
+    if cloud_redirect is not None:
+        return cloud_redirect
     base = _media_root()
     return send_from_directory(base, key)
 
@@ -425,6 +442,9 @@ def download_file(key: str):
     :status 200: Archivo descargado como attachment
     :status 404: Archivo no encontrado
     """
+    cloud_redirect = _cloud_storage_redirect_for_key(key)
+    if cloud_redirect is not None:
+        return cloud_redirect
     base = _media_root()
     return send_from_directory(base, key, as_attachment=True)
 
@@ -547,3 +567,4 @@ def admin_cleanup():
             cache_dirs=[],
             title="Media Cache Admin",
         )
+

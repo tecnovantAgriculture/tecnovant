@@ -19,6 +19,7 @@ from .helpers import (
     preprocess_rgb_once,
 )
 from .models import Asset, AssetType, AssetVariant, StorageLocation
+from .storage import ensure_local_file, gcs_enabled, upload_file_to_gcs
 
 _executor: Optional[ThreadPoolExecutor] = None
 
@@ -58,14 +59,16 @@ def _run_preprocess(app, asset_id: int) -> None:
                 "media: asset %s disappeared before preprocessing", asset_id
             )
             return
-        if asset.storage != StorageLocation.LOCAL.value:
-            app.logger.info(
-                "media: skipping preprocessing for non-local asset %s", asset.uuid
-            )
-            return
-
         try:
-            source_path = Path(_media_root()) / asset.storage_key
+            if asset.storage == StorageLocation.GCS.value:
+                source_path = ensure_local_file(asset.storage_key)
+            elif asset.storage == StorageLocation.LOCAL.value:
+                source_path = Path(_media_root()) / asset.storage_key
+            else:
+                app.logger.info(
+                    "media: skipping preprocessing for unsupported asset storage %s", asset.uuid
+                )
+                return
         except RuntimeError:
             app.logger.exception(
                 "media: unable to resolve media root for asset %s", asset.uuid
@@ -159,10 +162,13 @@ def _run_preprocess(app, asset_id: int) -> None:
                     for thumb in thumb_results:
                         if thumb.kind in existing_kinds:
                             continue
+                        variant_storage = StorageLocation.GCS.value if gcs_enabled() else StorageLocation.LOCAL.value
+                        if variant_storage == StorageLocation.GCS.value:
+                            upload_file_to_gcs(Path(_media_root()) / thumb.storage_key, thumb.storage_key, "image/webp")
                         asset.variants.append(
                             AssetVariant(
                                 kind=thumb.kind,
-                                storage=StorageLocation.LOCAL.value,
+                                storage=variant_storage,
                                 storage_key=thumb.storage_key,
                                 width=thumb.width,
                                 height=thumb.height,

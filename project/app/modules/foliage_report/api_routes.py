@@ -408,6 +408,43 @@ def get_recommendation_results(recommendation_id):
     )
 
 
+# ===== PDF Export Endpoint =====
+@api.route("/<int:id>/export/pdf")
+@jwt_required()
+def export_report_pdf(id):
+    """Generate and stream the server-side PDF version of a report."""
+    rec = Recommendation.query.get_or_404(id)
+    lot = Lot.query.get_or_404(rec.lot_id) if rec.lot_id else None
+    if not lot:
+        return jsonify({"error": "Lot not found"}), 404
+
+    claims = get_jwt()
+    if not check_resource_access(lot.farm, claims):
+        return jsonify({"error": "Forbidden"}), 403
+
+    from .services.pdf_export import build_report_pdf_bytes, safe_report_filename
+
+    buf = build_report_pdf_bytes(id)
+    filename = safe_report_filename(
+        {
+            "analysisData": {
+                "common": {
+                    "finca": lot.farm.name if lot.farm else None,
+                    "lote": lot.name,
+                    "fechaAnalisis": rec.date.isoformat() if rec.date else None,
+                }
+            }
+        },
+        extension="pdf",
+    )
+
+    return send_file(
+        buf,
+        mimetype="application/pdf",
+        as_attachment=True,
+        download_name=filename,
+    )
+
 # ===== DOCX Export Endpoint =====
 @api.route("/<int:id>/export/docx")
 @jwt_required()

@@ -849,6 +849,7 @@ class PilotFlightLog(db.Model):
     landing_location = db.Column(db.String(180), nullable=True)
     weather = db.Column(db.String(120), nullable=True)
     battery_cycles = db.Column(db.Integer, nullable=True)
+    total_hectares = db.Column(db.Numeric(10, 2), nullable=True)
     notes = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(

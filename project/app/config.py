@@ -151,6 +151,12 @@ class Config:
     JSONIFY_PRETTYPRINT_REGULAR = False
 
     # Media storage
+    MEDIA_STORAGE_BACKEND = os.getenv("MEDIA_STORAGE_BACKEND", "local").lower()
+    MEDIA_GCS_BUCKET = os.getenv("MEDIA_GCS_BUCKET")
+    MEDIA_GCS_PUBLIC_BASE_URL = os.getenv("MEDIA_GCS_PUBLIC_BASE_URL")
+    MEDIA_GCS_SIGNED_URL_SECONDS = int(os.getenv("MEDIA_GCS_SIGNED_URL_SECONDS", "3600"))
+    GOOGLE_APPLICATION_CREDENTIALS = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+    GOOGLE_APPLICATION_CREDENTIALS_JSON = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
     MEDIA_STORAGE_DIR = os.getenv("MEDIA_STORAGE_DIR")
     MEDIA_MAX_UPLOAD_SIZE = os.getenv("MEDIA_MAX_UPLOAD_SIZE", "2G")
     MEDIA_MAX_UPLOAD_BYTES = _parse_size_bytes(
@@ -200,3 +206,4 @@ class Config:
 
 # Validate configuration on class initialization
 Config.validate_config()
+

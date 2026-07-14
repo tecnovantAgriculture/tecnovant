@@ -16,6 +16,7 @@ from rasterio.transform import Affine
 from rasterio.warp import transform_bounds
 
 from app.modules.media.helpers import _media_root
+from app.modules.media.storage import gcs_enabled, upload_file_to_gcs
 
 ModeLiteral = Literal["rgb", "auto", "pseudo_ndvi"]
 
@@ -293,12 +294,16 @@ def generate_display_assets(
     display_png = display_dir / "display.png"
     metadata_json = display_dir / "metadata.json"
     storage_key = os.path.join("display", image_id, "display.png")
+    metadata_key = os.path.join("display", image_id, "metadata.json")
 
     if not force and display_png.exists() and metadata_json.exists():
         try:
             with metadata_json.open("r", encoding="utf-8") as fh:
                 meta = json.load(fh)
             bounds = tuple(meta.get("bounds", [None, None, None, None]))
+            if gcs_enabled():
+                upload_file_to_gcs(display_png, storage_key, "image/png")
+                upload_file_to_gcs(metadata_json, metadata_key, "application/json")
             return {
                 "image_id": image_id,
                 "display_png_path": str(display_png),
@@ -360,6 +365,10 @@ def generate_display_assets(
     with metadata_json.open("w", encoding="utf-8") as fh:
         json.dump(metadata.to_dict(), fh, ensure_ascii=False, indent=2)
 
+    if gcs_enabled():
+        upload_file_to_gcs(display_png, storage_key, "image/png")
+        upload_file_to_gcs(metadata_json, metadata_key, "application/json")
+
     current_app.logger.info(
         "agrovista: generated display assets for %s at %s",
         image_id,
@@ -374,3 +383,6 @@ def generate_display_assets(
         "bounds": list(metadata.bounds),
         "metadata": metadata.to_dict(),
     }
+
+
+

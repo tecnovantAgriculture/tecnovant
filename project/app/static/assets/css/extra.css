@@ -127,8 +127,8 @@ h1, h2, h3, h4, h5, h6 {
 #sidebar .sidebar__item > button[data-active="True"],
 #sidebar .sidebar__item > a[data-active="true"],
 #sidebar .sidebar__item > button[data-active="true"] {
-  background: #bdf68f !important;
-  color: #173f36 !important;
+  background: #e5e7eb !important;
+  color: #1f2937 !important;
   box-shadow: none !important;
 }
 
@@ -136,7 +136,7 @@ h1, h2, h3, h4, h5, h6 {
 #sidebar .sidebar__item > button[data-active="True"] .sidebar__label,
 #sidebar .sidebar__item > a[data-active="true"] .sidebar__label,
 #sidebar .sidebar__item > button[data-active="true"] .sidebar__label {
-  color: #173f36 !important;
+  color: #1f2937 !important;
   font-weight: 600 !important;
 }
 
@@ -150,7 +150,7 @@ h1, h2, h3, h4, h5, h6 {
 #sidebar .sidebar__item > button[data-active="True"] svg,
 #sidebar .sidebar__item > a[data-active="true"] svg,
 #sidebar .sidebar__item > button[data-active="true"] svg {
-  color: #173f36 !important;
+  color: #1f2937 !important;
 }
 
 #sidebar .sidebar__label {
@@ -181,13 +181,13 @@ h1, h2, h3, h4, h5, h6 {
 
 #sidebar [data-visible="onClick"] ul a:hover {
   background: #f3f7f3 !important;
-  color: #173f36 !important;
+  color: #1f2937 !important;
 }
 
 #sidebar [data-visible="onClick"] ul a.bg-emerald-200,
 #sidebar [data-visible="onClick"] ul a.dark\:bg-emerald-800 {
-  background: rgba(189, 246, 143, 0.78) !important;
-  color: #173f36 !important;
+  background: rgba(229, 231, 235, 0.95) !important;
+  color: #1f2937 !important;
 }
 
 .dark #sidebar .sidebar__item > a,
@@ -207,8 +207,8 @@ h1, h2, h3, h4, h5, h6 {
 .dark #sidebar .sidebar__item > button[data-active="True"],
 .dark #sidebar .sidebar__item > a[data-active="true"],
 .dark #sidebar .sidebar__item > button[data-active="true"] {
-  background: rgba(189, 246, 143, 0.22) !important;
-  color: #c8fb8d !important;
+  background: rgba(75, 85, 99, 0.45) !important;
+  color: #f3f4f6 !important;
 }
 
 .login-screen {

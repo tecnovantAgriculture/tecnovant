@@ -23,6 +23,7 @@ from app.extensions import db
 class StorageLocation(str, Enum):
     S3 = "s3"
     LOCAL = "local"
+    GCS = "gcs"
 
 
 class AssetType(str, Enum):

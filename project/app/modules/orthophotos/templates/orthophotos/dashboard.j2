@@ -187,6 +187,22 @@
     min-width: 210px;
   }
 
+  .orth-upload-form {
+    display: inline-flex;
+  }
+
+  .orth-file-input {
+    display: none;
+  }
+
+  .orth-card-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 10px;
+  }
+
   .orth-btn {
     display: inline-flex;
     align-items: center;
@@ -330,10 +346,19 @@
         <h2>Misiones</h2>
         <p>Seguimiento operativo de vuelos y ortofotos generadas.</p>
       </div>
-      <span class="orth-chip">
-        <i class="fas fa-layer-group"></i>
-        {{ missions|length }} registradas
-      </span>
+      <div class="orth-card-actions">
+        <form class="orth-upload-form" data-create-mission="true">
+          <input class="orth-file-input" type="file" name="files" accept=".jpg,.jpeg,.png,.tif,.tiff,image/jpeg,image/png,image/tiff" multiple>
+          <button class="orth-btn orth-btn-primary" type="button">
+            <i class="fas fa-upload"></i>
+            Subir imagenes
+          </button>
+        </form>
+        <span class="orth-chip">
+          <i class="fas fa-layer-group"></i>
+          {{ missions|length }} registradas
+        </span>
+      </div>
     </div>
 
     <div class="orth-table-wrap">
@@ -405,6 +430,7 @@
             </td>
             <td>
               <div class="orth-actions">
+
                 {% if mission.status not in ['completed', 'starting_webodm', 'submitting', 'uploading_to_webodm', 'queued', 'running', 'downloading_asset'] %}
                   <form class="process-orthophoto-form" method="post" action="{{ url_for('orthophotos.process_mission', mission_id=mission.id) }}">
                     <input type="hidden" name="profile" value="max_2d">
@@ -440,10 +466,100 @@
 {% block extra_js %}
 <script>
 document.addEventListener('DOMContentLoaded', () => {
+  const uploadEndpoint = {{ url_for('orthophotos_api.upload_photos')|tojson }};
   const activeProcessing = {{ missions | selectattr('status', 'in', ['starting_webodm', 'submitting', 'uploading_to_webodm', 'queued', 'running']) | list | length }};
   if (activeProcessing > 0) {
     window.setTimeout(() => window.location.reload(), 30000);
   }
+
+  document.querySelectorAll('.orth-upload-form').forEach((uploadForm) => {
+    const input = uploadForm.querySelector('.orth-file-input');
+    const button = uploadForm.querySelector('button');
+    const missionId = uploadForm.dataset.missionId;
+    const createsMission = uploadForm.dataset.createMission === 'true';
+    if (!input || !button) {
+      return;
+    }
+
+    button.addEventListener('click', () => input.click());
+    input.addEventListener('change', async () => {
+      const files = Array.from(input.files || []);
+      if (!files.length) {
+        return;
+      }
+
+      const originalContent = button.innerHTML;
+      const defaultName = `Mision ${new Date().toLocaleString('es-CO')}`;
+      const missionName = createsMission
+        ? window.prompt('Nombre para la nueva mision:', defaultName)
+        : '';
+      if (createsMission && missionName === null) {
+        input.value = '';
+        return;
+      }
+      if (!createsMission && !missionId) {
+        alert('No se encontro la mision para subir imagenes.');
+        input.value = '';
+        return;
+      }
+
+      const uploadSessionId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      let uploadedCount = 0;
+      const errors = [];
+
+      button.disabled = true;
+      button.classList.add('opacity-60', 'cursor-not-allowed');
+
+      try {
+        for (let index = 0; index < files.length; index += 1) {
+          const file = files[index];
+          const formData = new FormData();
+          formData.append('files', file);
+          if (createsMission) {
+            formData.append('mission_name', (missionName || defaultName).trim());
+            formData.append('upload_session_id', uploadSessionId);
+          } else {
+            formData.append('mission_id', missionId);
+          }
+
+          button.textContent = `Subiendo ${index + 1}/${files.length}...`;
+          let response;
+          try {
+            response = await fetch(uploadEndpoint, {
+              method: 'POST',
+              credentials: 'same-origin',
+              headers: {
+                'X-CSRF-TOKEN': typeof getCsrfToken === 'function' ? getCsrfToken() : '',
+                'X-Requested-With': 'XMLHttpRequest'
+              },
+              body: formData
+            });
+          } catch (error) {
+            errors.push(`${file.name}: la conexión se cerró antes de terminar la subida. Revisa el tamaño del archivo y los logs de Railway.`);
+            break;
+          }
+          const data = await response.json().catch(() => ({}));
+          if (response.ok && data.uploaded && data.uploaded.length) {
+            uploadedCount += data.uploaded.length;
+            continue;
+          }
+          const firstError = data.errors && data.errors.length ? data.errors[0].message : null;
+          errors.push(`${file.name}: ${firstError || data.message || 'No se pudo subir.'}`);
+        }
+
+        if (uploadedCount > 0) {
+          window.location.reload();
+          return;
+        }
+        alert(errors.join('\\n') || 'No se pudieron subir las imagenes.');
+      } finally {
+        input.value = '';
+        button.disabled = false;
+        button.innerHTML = originalContent;
+        button.classList.remove('opacity-60', 'cursor-not-allowed');
+      }
+    });
+  });
 
   document.querySelectorAll('.process-orthophoto-form').forEach((processForm) => {
     processForm.addEventListener('submit', async (event) => {
@@ -524,3 +640,4 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 </script>
 {% endblock %}
+
