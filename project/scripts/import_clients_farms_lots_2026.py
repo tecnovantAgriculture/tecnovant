@@ -18,6 +18,9 @@ DATA_PATH = Path(__file__).resolve().parents[1] / "import_data" / "clients_farms
 BASE_ORGANIZATION = "Tecnocant svc S.A.S"
 
 
+BASE_ORGANIZATION = 'Tecnovant svc S.A.S'
+
+
 def clean(value):
     return " ".join((value or "").strip().split())
 

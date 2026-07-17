@@ -41,6 +41,10 @@ REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 PACKAGE_REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
 
 
+ORGANIZATION_NAME = 'Tecnovant svc S.A.S'
+USER_NAME = 'Tecnovant svc S.A.S'
+
+
 def clean(value):
     if value is None:
         return ""

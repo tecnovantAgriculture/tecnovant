@@ -13,7 +13,7 @@ import hashlib
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 
-from flask import Response, current_app, flash, jsonify, redirect, render_template, request, session, url_for
+from flask import Response, current_app, flash, g, jsonify, redirect, render_template, request, session, url_for
 from flask_jwt_extended import (
     get_jwt,
     get_jwt_identity,
@@ -24,7 +24,7 @@ from flask_jwt_extended import (
 # from sqlalchemy.orm import joinedload
 from sqlalchemy import false, func, or_
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, selectinload
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from app.extensions import db
@@ -103,7 +103,11 @@ def _activity_log(activity, action, message=None):
     )
 
 
-def _activity_payload(activity):
+def _activity_payload(activity, farm_lookup=None, lot_lookup=None):
+    if farm_lookup is None:
+        farm_lookup = getattr(g, 'activity_farm_lookup', None)
+    if lot_lookup is None:
+        lot_lookup = getattr(g, 'activity_lot_lookup', None)
     organization_id = None
     farm_id = None
     lot_id = None
@@ -118,17 +122,27 @@ def _activity_payload(activity):
             organization = Organization.query.filter(func.lower(Organization.name) == activity.client_project.lower()).first()
             organization_id = organization.id if organization else None
         if organization_id and activity.farm_name:
-            farm = Farm.query.filter(
-                Farm.org_id == organization_id,
-                func.lower(Farm.name) == activity.farm_name.lower(),
-            ).first()
+            farm_key = (organization_id, activity.farm_name.casefold())
+            farm = (
+                farm_lookup.get(farm_key)
+                if farm_lookup is not None
+                else Farm.query.filter(
+                    Farm.org_id == organization_id,
+                    func.lower(Farm.name) == activity.farm_name.lower(),
+                ).first()
+            )
             if farm:
                 farm_id = farm.id
                 if activity.lot_code:
-                    lot = Lot.query.filter(
-                        Lot.farm_id == farm.id,
-                        func.lower(Lot.name) == activity.lot_code.lower(),
-                    ).first()
+                    lot_key = (farm.id, activity.lot_code.casefold())
+                    lot = (
+                        lot_lookup.get(lot_key)
+                        if lot_lookup is not None
+                        else Lot.query.filter(
+                            Lot.farm_id == farm.id,
+                            func.lower(Lot.name) == activity.lot_code.lower(),
+                        ).first()
+                    )
                     lot_id = lot.id if lot else None
     except Exception:
         pass
@@ -840,6 +854,7 @@ def operational_calendar():
     activities_query = OperationalActivity.query.options(
         joinedload(OperationalActivity.pilot),
         joinedload(OperationalActivity.drone),
+        joinedload(OperationalActivity.billing_record),
     ).outerjoin(OperationBillingRecord)
     if not is_platform_admin:
         activities_query = activities_query.filter(
@@ -865,6 +880,10 @@ def operational_calendar():
         lots_query = lots_query.filter(Farm.org_id.in_(client_ids) if client_ids else false())
     farms = farms_query.all()
     lots = lots_query.all()
+    farm_lookup = {(farm.org_id, farm.name.casefold()): farm for farm in farms}
+    lot_lookup = {(lot.farm_id, lot.name.casefold()): lot for lot in lots}
+    g.activity_farm_lookup = farm_lookup
+    g.activity_lot_lookup = lot_lookup
 
     context = {
         "dashboard": True,
@@ -1520,9 +1539,10 @@ def operation_executions():
     activities_query = OperationalActivity.query.options(
         joinedload(OperationalActivity.pilot),
         joinedload(OperationalActivity.drone),
-        joinedload(OperationalActivity.logs),
-        joinedload(OperationalActivity.flight_logs),
-        joinedload(OperationalActivity.pilot_reports),
+        joinedload(OperationalActivity.billing_record),
+        selectinload(OperationalActivity.logs),
+        selectinload(OperationalActivity.flight_logs),
+        selectinload(OperationalActivity.pilot_reports),
     ).outerjoin(OperationBillingRecord)
     if not is_platform_admin:
         activities_query = activities_query.filter(
