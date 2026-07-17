@@ -147,6 +147,91 @@
     line-height: 1;
   }
 
+  .ops-stat {
+    --kpi-accent: #173f36;
+    --kpi-soft: #eef8ee;
+    --kpi-progress: 0%;
+    position: relative;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    min-height: 132px;
+    overflow: hidden;
+    padding: 18px;
+    transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
+  }
+
+  .ops-stat::before {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 4px;
+    background: var(--kpi-accent);
+    content: '';
+  }
+
+  .ops-stat:hover {
+    transform: translateY(-2px);
+    border-color: color-mix(in srgb, var(--kpi-accent) 25%, #dfe8df);
+    box-shadow: 0 14px 30px rgba(15, 23, 42, .09);
+  }
+
+  .ops-stat:nth-child(2) { --kpi-accent: #0875a5; --kpi-soft: #eaf5ff; }
+  .ops-stat:nth-child(3) { --kpi-accent: #b66c06; --kpi-soft: #fff7e6; }
+  .ops-stat:nth-child(4) { --kpi-accent: #168044; --kpi-soft: #eaf9ef; }
+  .ops-stat:nth-child(5) { --kpi-accent: #d41f4b; --kpi-soft: #fff1f2; }
+
+  .ops-stat .ops-stat-icon {
+    background: var(--kpi-soft);
+    color: var(--kpi-accent);
+  }
+
+  .ops-stat > div {
+    min-width: 0;
+  }
+
+  .ops-stat strong {
+    margin-top: 5px;
+    font-size: clamp(27px, 2vw, 34px);
+    font-weight: 750;
+    letter-spacing: -.035em;
+  }
+
+  .ops-stat-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 10px;
+    color: #68766e;
+    font-size: 10px;
+    font-weight: 650;
+  }
+
+  .ops-stat-rate {
+    color: var(--kpi-accent);
+    font-size: 11px;
+    font-weight: 800;
+  }
+
+  .ops-stat-progress {
+    position: relative;
+    grid-column: 1 / -1;
+    height: 4px;
+    margin-top: 4px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: #e8eee9;
+  }
+
+  .ops-stat-progress::after {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: var(--kpi-progress);
+    border-radius: inherit;
+    background: var(--kpi-accent);
+    content: '';
+    transition: width .35s ease;
+  }
+
   .ops-shell {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
@@ -1048,6 +1133,40 @@ document.addEventListener('DOMContentLoaded', function () {
   function statusLabel(status) {
     return { scheduled: 'Pendiente', in_progress: 'En proceso', completed: 'Finalizada', cancelled: 'Cancelada' }[status] || status;
   }
+  function enhanceStats() {
+    const cards = Array.from(document.querySelectorAll('.ops-stat'));
+    const labels = [
+      'Agenda del día',
+      'Carga semanal',
+      'Por ejecutar',
+      'Tasa de cumplimiento',
+      'Tasa de cancelación'
+    ];
+    const total = activities.length;
+    cards.forEach((card, index) => {
+      const valueNode = card.querySelector('[data-stat]');
+      const value = Number(valueNode ? valueNode.textContent : 0) || 0;
+      const percentage = total ? Math.round((value / total) * 100) : 0;
+      card.style.setProperty('--kpi-progress', Math.min(percentage, 100) + '%');
+
+      let meta = card.querySelector('.ops-stat-meta');
+      if (!meta) {
+        meta = document.createElement('div');
+        meta.className = 'ops-stat-meta';
+        meta.innerHTML = '<small></small><b class=ops-stat-rate></b>';
+        card.querySelector('div').appendChild(meta);
+      }
+      meta.querySelector('small').textContent = labels[index];
+      meta.querySelector('b').textContent = percentage + '%';
+
+      if (!card.querySelector('.ops-stat-progress')) {
+        const progress = document.createElement('div');
+        progress.className = 'ops-stat-progress';
+        card.appendChild(progress);
+      }
+    });
+  }
+
   function renderStats() {
     const today = dateKey(new Date());
     const now = new Date();
@@ -1063,6 +1182,7 @@ document.addEventListener('DOMContentLoaded', function () {
     document.querySelector('[data-stat="pending"]').textContent = activities.filter(item => item.status === 'scheduled').length;
     document.querySelector('[data-stat="completed"]').textContent = activities.filter(item => item.status === 'completed').length;
     document.querySelector('[data-stat="cancelled"]').textContent = activities.filter(item => item.status === 'cancelled').length;
+    enhanceStats();
   }
   function render() {
     document.querySelectorAll('[data-calendar-view]').forEach(button => button.classList.toggle('is-active', button.dataset.calendarView === currentView));
@@ -1241,8 +1361,6 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 </script>
 {% endblock %}
-
-
 
 
 
