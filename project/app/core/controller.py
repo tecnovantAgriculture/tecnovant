@@ -622,11 +622,11 @@ class UserView(MethodView):
             full_name=data["full_name"],
             role=role,
         )
+        user.set_password(data["password"])
+        db.session.add(user)
         if "organization_id" in data:
             organization_id = data["organization_id"]
             user.assign_organization(organization_id)
-        user.set_password(data["password"])
-        db.session.add(user)
         db.session.commit()
         return jsonify(self._serialize_user(user)), 201
 

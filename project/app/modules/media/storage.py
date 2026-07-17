@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import os
 from datetime import timedelta
@@ -27,17 +28,57 @@ def _gcs_bucket_name() -> str:
     return str(bucket)
 
 
+def _load_service_account_info() -> Optional[dict]:
+    credentials_json = current_app.config.get("GOOGLE_APPLICATION_CREDENTIALS_JSON")
+    credentials_b64 = current_app.config.get("GOOGLE_APPLICATION_CREDENTIALS_JSON_B64")
+
+    raw_value = None
+    source_name = None
+    if credentials_json:
+        raw_value = str(credentials_json).strip()
+        source_name = "GOOGLE_APPLICATION_CREDENTIALS_JSON"
+    elif credentials_b64:
+        source_name = "GOOGLE_APPLICATION_CREDENTIALS_JSON_B64"
+        try:
+            raw_value = base64.b64decode(str(credentials_b64).strip()).decode("utf-8")
+        except Exception as exc:
+            raise ValueError(
+                "GOOGLE_APPLICATION_CREDENTIALS_JSON_B64 no es base64 valido."
+            ) from exc
+
+    if not raw_value:
+        return None
+
+    # Railway sometimes wraps pasted values in quotes; trim only the wrapper.
+    if (raw_value.startswith("'") and raw_value.endswith("'")) or (
+        raw_value.startswith('"') and raw_value.endswith('"')
+    ):
+        raw_value = raw_value[1:-1]
+
+    try:
+        info = json.loads(raw_value)
+    except json.JSONDecodeError as exc:
+        raise ValueError(
+            f"{source_name} no es JSON valido. En Railway pegalo como JSON de una sola linea "
+            "con los saltos de private_key como \\n, o usa GOOGLE_APPLICATION_CREDENTIALS_JSON_B64."
+        ) from exc
+
+    if not isinstance(info, dict) or info.get("type") != "service_account":
+        raise ValueError(f"{source_name} debe contener un service_account valido.")
+    return info
+
+
 def _gcs_client():
     try:
         from google.cloud import storage as gcs_storage  # type: ignore
+        from google.oauth2 import service_account  # type: ignore
     except Exception as exc:
         raise RuntimeError(
             "google-cloud-storage no esta instalado. Agrega la dependencia y reconstruye el contenedor."
         ) from exc
 
-    credentials_json = current_app.config.get("GOOGLE_APPLICATION_CREDENTIALS_JSON")
-    if credentials_json:
-        info = json.loads(str(credentials_json))
+    info = _load_service_account_info()
+    if info:
         credentials = service_account.Credentials.from_service_account_info(info)
         return gcs_storage.Client(
             credentials=credentials,

@@ -182,7 +182,7 @@ def list_assets():
 
 @api.route("/upload", methods=["POST"])
 @api_login_required
-@check_permission(required_roles=["administrator", "reseller"])
+@check_permission()
 def upload_local_api():
     """Almacenar un archivo recibido mediante la clave `file` del formulario.
 

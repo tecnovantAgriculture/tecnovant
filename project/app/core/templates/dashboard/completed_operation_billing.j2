@@ -113,7 +113,7 @@
     </form>
 
     <div class="overflow-auto" style="height: min(560px, calc(100vh - 300px)); min-height: 400px;">
-      <table class="min-w-[1500px] w-full border-collapse text-xs">
+      <table class="min-w-[1660px] w-full border-collapse text-xs">
         <thead class="sticky top-0 z-10 bg-gray-50 text-[11px] uppercase tracking-wide text-gray-600 dark:bg-gray-800 dark:text-gray-300">
           <tr>
             <th class="px-3 py-2 text-left">Item</th>
@@ -135,10 +135,10 @@
         <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
           {% for record in records %}
           <tr class="{{ 'bg-red-50 text-red-950 hover:bg-red-100 dark:bg-red-950/20 dark:text-red-100 dark:hover:bg-red-950/30' if not record.invoice_number else 'hover:bg-gray-50 dark:hover:bg-gray-800/60' }}">
-            <td class="px-3 py-2 text-gray-500">{{ record.source_item or '' }}</td>
+            <td class="px-3 py-2 text-gray-500">{{ (record.raw_payload or {}).get('display_item') or record.source_item or '' }}</td>
             <td class="px-3 py-2 whitespace-nowrap">{{ record.scheduled_date.strftime('%d/%m/%Y') if record.scheduled_date else '' }}</td>
             <td class="px-3 py-2 whitespace-nowrap">{{ record.executed_date.strftime('%d/%m/%Y') if record.executed_date else '' }}</td>
-            <td class="px-3 py-2 font-medium text-gray-900 dark:text-gray-100">{{ record.organization.name if record.organization else (record.activity.client_project if record.activity else '') }}</td>
+            <td class="px-3 py-2 font-medium text-gray-900 dark:text-gray-100">{{ (record.raw_payload or {}).get('final_client') or '' }}</td>
             <td class="px-3 py-2">{{ record.farm_name or '' }}</td>
             <td class="px-3 py-2">{{ record.paddock_name or '' }}</td>
             <td class="px-3 py-2 text-right">{{ '%.2f'|format(record.area_hectares or 0) }}</td>
@@ -147,7 +147,14 @@
             <td class="px-3 py-2">{{ record.billing_month or '' }}</td>
             <td class="px-3 py-2 text-right">$ {{ '{:,.0f}'.format(record.unit_price or 0) }}</td>
             <td class="px-3 py-2 text-right font-semibold">$ {{ '{:,.0f}'.format(record.invoice_total or 0) }}</td>
-            <td class="px-3 py-2">{% if record.invoice_number %}{{ record.invoice_number }}{% else %}<span class="inline-flex rounded-full bg-red-100 px-2 py-1 text-[11px] font-semibold text-red-700 dark:bg-red-900/50 dark:text-red-200">Pendiente</span>{% endif %}</td>
+            <td class="px-3 py-2 min-w-[230px]">
+              <form method="post" action="{{ url_for('core.completed_operation_billing_update_invoice', record_id=record.id) }}" class="billing-invoice-form flex items-center gap-1.5">
+                <input type="text" name="invoice_number" value="{{ record.invoice_number or '' }}" maxlength="80" required placeholder="Numero de factura" aria-label="Numero de factura" class="h-7 w-32 rounded-md border border-gray-200 bg-white px-2 text-[11px] text-gray-800 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-100 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100">
+                <button type="submit" class="inline-flex h-7 items-center justify-center whitespace-nowrap rounded-md bg-emerald-600 px-2.5 text-[11px] font-semibold text-white shadow-sm hover:bg-emerald-700">
+                  <i class="fas fa-save mr-1"></i>Guardar
+                </button>
+              </form>
+            </td>
             <td class="px-3 py-2 max-w-[260px] truncate" title="{{ record.observations or '' }}">{{ record.observations or '' }}</td>
           </tr>
           {% else %}
@@ -160,4 +167,33 @@
     </div>
   </section>
 </div>
+{% endblock %}
+{% block extra_js %}
+{{ super() }}
+<script>
+document.querySelectorAll('.billing-invoice-form').forEach((form) => {
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const button = form.querySelector('button[type="submit"]');
+    const originalHtml = button.innerHTML;
+    button.disabled = true;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Guardando';
+    try {
+      const csrf = typeof getCsrfToken === 'function' ? getCsrfToken() : '';
+      const response = await fetch(form.action, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: csrf ? {'X-CSRF-TOKEN': csrf, 'X-Requested-With': 'XMLHttpRequest'} : {'X-Requested-With': 'XMLHttpRequest'},
+        body: new FormData(form),
+      });
+      if (!response.ok) throw new Error('No se pudo guardar el numero de factura.');
+      window.location.reload();
+    } catch (error) {
+      button.disabled = false;
+      button.innerHTML = originalHtml;
+      window.alert(error.message);
+    }
+  });
+});
+</script>
 {% endblock %}

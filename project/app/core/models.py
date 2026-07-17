@@ -344,7 +344,6 @@ class User(db.Model):
         organization = Organization.query.get(organization_id)
         if organization:
             self.organizations.append(organization)
-            db.session.commit()
 
     def unassign_organization(self, organization_id):
         """
@@ -355,7 +354,6 @@ class User(db.Model):
         organization = Organization.query.get(organization_id)
         if organization in self.organizations:
             self.organizations.remove(organization)
-            db.session.commit()
 
     # Extended profile properties
     def _ensure_profile_data(self):
@@ -984,9 +982,6 @@ def get_clients_for_user(user_id: str):
         if reseller_package:
             return reseller_package.organizations
     # Si el usuario no es administrador ni reseller, obtener las organizaciones a las que está directamente asignado
-    return (
-        User.query.filter_by(id=user_id)
-        .options(joinedload(User.organizations))
-        .first()
-        .organizations
-    )
+    # ``User.organizations`` usa ``lazy="dynamic"`` y no admite joinedload.
+    # Ejecutar la consulta dinamica evita el error 500 al cargar el dashboard.
+    return user.organizations.all()

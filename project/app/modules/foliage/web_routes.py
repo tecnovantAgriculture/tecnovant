@@ -154,7 +154,9 @@ def amd_lots(filter_value=None):
     items = response.get_json()
     status_code = response.status_code
     filter_field = "farm_id"
-    farms = Farm.query.all()
+    user_id = get_jwt_identity()
+    organization_ids = [org.id for org in get_clients_for_user(user_id)]
+    farms = Farm.query.filter(Farm.org_id.in_(organization_ids)).all() if organization_ids else []
     filter_options = farms
     select_url = url_for("foliage.amd_lots")
     if filter_value:
@@ -236,7 +238,9 @@ def amd_lot_crops():
     # Obtener el valor del filtro desde los argumentos de la solicitud
     filter_value = request.args.get("filter_value")
     filter_field = "farm_id"
-    farms = Farm.query.all()
+    user_id = get_jwt_identity()
+    organization_ids = [org.id for org in get_clients_for_user(user_id)]
+    farms = Farm.query.filter(Farm.org_id.in_(organization_ids)).all() if organization_ids else []
     filter_options = farms
 
     # Obtener las relaciones LotCrop con filtro opcional por farm_id
@@ -556,7 +560,9 @@ def amd_common_analyses():
     lots_dic = {lot.name: lot.id for lot in lots}
 
     filter_field = "farm_id"
-    farms = Farm.query.all()
+    user_id = get_jwt_identity()
+    organization_ids = [org.id for org in get_clients_for_user(user_id)]
+    farms = Farm.query.filter(Farm.org_id.in_(organization_ids)).all() if organization_ids else []
     filter_options = farms
 
     if status_code != 200:
@@ -602,7 +608,9 @@ def amd_leaf_analyses():
         filter_by=filter_value, page=page, per_page=per_page
     )
     filter_field = "farm_id"
-    farms = Farm.query.all()
+    user_id = get_jwt_identity()
+    organization_ids = [org.id for org in get_clients_for_user(user_id)]
+    farms = Farm.query.filter(Farm.org_id.in_(organization_ids)).all() if organization_ids else []
     filter_options = farms
     data = response.get_json()
     if isinstance(data, dict) and "items" in data:
@@ -710,7 +718,9 @@ def amd_soil_analyses():
     status_code = response.status_code
 
     filter_field = "farm_id"
-    farms = Farm.query.all()
+    user_id = get_jwt_identity()
+    organization_ids = [org.id for org in get_clients_for_user(user_id)]
+    farms = Farm.query.filter(Farm.org_id.in_(organization_ids)).all() if organization_ids else []
     filter_options = farms
 
     # Get CommonAnalysisView
@@ -790,7 +800,9 @@ def amd_nutrient_applications():
     lots_dic = {lot.name: lot.id for lot in lots}
 
     filter_field = "farm_id"
-    farms = Farm.query.all()
+    user_id = get_jwt_identity()
+    organization_ids = [org.id for org in get_clients_for_user(user_id)]
+    farms = Farm.query.filter(Farm.org_id.in_(organization_ids)).all() if organization_ids else []
     filter_options = farms
 
     # Define form fields

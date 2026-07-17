@@ -11,6 +11,15 @@
     ]
 } %}
 
+{# La gestion de accesos solo esta disponible para los roles autorizados por la API. #}
+{% if rol == "administrator" or rol == "reseller" %}
+    {% set sidebar_menu = {
+        "menu": sidebar_menu.menu + [
+            {"name": "Usuarios", "url": url_for('core.amd_users'), "icon": icon_users},
+        ]
+    } %}
+{% endif %}
+
 {% set analysis_image_submenu = [
     {"name": "Indicadores", "url": url_for('agrovista.hello') },
     {"name": "Objetivos secundarios", "url": url_for('agrovista.secondary_objectives') },
@@ -60,6 +69,8 @@
     "url": "#",
     "icon": icon_calendar_month,
     "submenu": [
+        {"name": "Clientes", "url": url_for('core.amd_clients') },
+        {"name": "Lotes", "url": url_for('foliage.amd_lots') },
         {"name": "Calendario Operativo", "url": url_for('core.operational_calendar') },
         {"name": "Ejecuciones", "url": url_for('core.operation_executions') },
     ]

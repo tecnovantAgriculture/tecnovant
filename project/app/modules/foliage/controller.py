@@ -263,7 +263,7 @@ class LotView(MethodView):
 
     decorators = [jwt_required()]
 
-    @check_permission(required_roles=["administrator", "reseller"])
+    @check_permission()
     def get(self, lot_id=None, id=None):
         """
         Obtiene una lista de lotes o un lote específico.
@@ -282,7 +282,7 @@ class LotView(MethodView):
         search = request.args.get("search")
         return self._get_lot_list(filter_by=filter_by, search=search)
 
-    @check_permission(required_roles=["administrator", "reseller"])
+    @check_permission()
     def post(self):
         """
         Crea un nuevo lote.
@@ -365,7 +365,16 @@ class LotView(MethodView):
             if search:
                 lots = [l for l in lots if search.lower() in l.name.lower()]
         else:
-            raise Forbidden("Only administrators and resellers can list lots.")
+            user = User.query.get(user_id)
+            organization_ids = [org.id for org in user.organizations.all()] if user else []
+            query = Lot.query.join(Farm).filter(Farm.org_id.in_(organization_ids)) if organization_ids else Lot.query.filter(db.false())
+            if hasattr(Lot, "active"):
+                query = query.filter(Lot.active.is_(True))
+            if filter_by:
+                query = query.filter(Lot.farm_id == filter_by)
+            if search:
+                query = query.filter(Lot.name.ilike(f"%{search}%"))
+            lots = query.all()
         # Serialización y respuesta
         response_data = [self._serialize_lot(lot) for lot in lots]
         json_data = json.dumps(response_data, ensure_ascii=False, indent=4)
@@ -383,6 +392,13 @@ class LotView(MethodView):
 
     def _create_lot(self, data):
         """Crea un nuevo lote con los datos proporcionados."""
+        claims = get_jwt()
+        farm = Farm.query.get_or_404(data["farm_id"])
+        if claims.get("rol") != RoleEnum.ADMINISTRATOR.value:
+            user = User.query.get(claims.get("id"))
+            organization_ids = [org.id for org in user.organizations.all()] if user else []
+            if farm.org_id not in organization_ids:
+                raise Forbidden("You do not have access to this farm.")
         if hasattr(Lot, "active"):
             if Lot.query.filter_by(name=data["name"], active=True).first():
                 raise BadRequest("Name already exists.")
@@ -929,7 +945,7 @@ class ObjectiveView(MethodView):
 
     decorators = [jwt_required()]
 
-    @check_permission(required_roles=["administrator", "reseller"])
+    @check_permission()
     def get(self, objective_id=None, id=None):
         """
         Obtiene una lista de objetivos nutricionales o un objetivo específico.
@@ -1013,7 +1029,7 @@ class ObjectiveView(MethodView):
                 for crop in organization.crops:
                     objectives.extend(crop.objectives)
         else:
-            raise Forbidden("Only administrators and resellers can list objectives.")
+            objectives = Objective.query.all()
         response_data = [self._serialize_objective(obj) for obj in objectives]
         json_data = json.dumps(response_data, ensure_ascii=False, indent=4)
         return Response(json_data, status=200, mimetype="application/json")
@@ -1827,7 +1843,7 @@ class CommonAnalysisView(MethodView):
 
     decorators = [jwt_required()]
 
-    @check_permission(required_roles=["administrator", "reseller"])
+    @check_permission()
     def get(self, common_analysis_id=None):
         """
         Obtiene una lista de análisis comunes o un análisis común específico.
@@ -1841,7 +1857,7 @@ class CommonAnalysisView(MethodView):
             return self._get_common_analysis(common_analysis_id)
         return self._get_common_analysis_list()
 
-    @check_permission(required_roles=["administrator", "reseller"])
+    @check_permission()
     def post(self):
         """
         Crea un nuevo análisis común.
@@ -1977,7 +1993,12 @@ class CommonAnalysisView(MethodView):
                     .filter(Farm.org_id.in_(org_ids))
                 )
         else:
-            raise Forbidden("You can't list common_analyses.")
+            user = User.query.get(user_id)
+            org_ids = [org.id for org in user.organizations.all()] if user else []
+            query = CommonAnalysis.query.join(Lot).join(Farm)
+            query = query.filter(Farm.org_id.in_(org_ids)) if org_ids else query.filter(db.false())
+            if filter_by:
+                query = query.filter(Farm.id == filter_by)
 
         common_analyses = query.all()
 
@@ -2001,6 +2022,14 @@ class CommonAnalysisView(MethodView):
 
     def _create_common_analysis(self, data):
         """Crea un nuevo análisis común con los datos proporcionados."""
+        lot = Lot.query.get_or_404(data["lot_id"])
+        claims = get_jwt()
+        if claims.get("rol") not in (RoleEnum.ADMINISTRATOR.value, RoleEnum.RESELLER.value):
+            user = User.query.get(claims.get("id"))
+            org_ids = [org.id for org in user.organizations.all()] if user else []
+            if not lot.farm or lot.farm.org_id not in org_ids:
+                raise Forbidden("You do not have access to this lot.")
+
         date_str = data.get("date")
         if date_str:
             analysis_date = datetime.strptime(date_str, "%Y-%m-%d").date()
@@ -2125,7 +2154,7 @@ class LotCropView(MethodView):
 
     decorators = [jwt_required()]
 
-    @check_permission(required_roles=["administrator", "reseller"])
+    @check_permission()
     def get(self, lot_crop_id=None):
         """
         Obtiene una lista de relaciones lote-cultivo o una relación específica.
@@ -2139,7 +2168,7 @@ class LotCropView(MethodView):
             return self._get_lot_crop(lot_crop_id)
         return self._get_lot_crop_list()
 
-    @check_permission(required_roles=["administrator", "reseller"])
+    @check_permission()
     def post(self):
         """
         Crea una nueva relación lote-cultivo.

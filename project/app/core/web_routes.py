@@ -22,7 +22,7 @@ from flask_jwt_extended import (
 )
 
 # from sqlalchemy.orm import joinedload
-from sqlalchemy import func, or_
+from sqlalchemy import false, func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -147,6 +147,9 @@ def _activity_payload(activity):
         "duration_minutes": activity.duration_minutes,
         "place": activity.place,
         "organization_id": organization_id,
+        "program_start": (billing_record.scheduled_date.isoformat() if billing_record and billing_record.scheduled_date else activity.starts_at.strftime("%Y-%m-%d")),
+        "program_end": (billing_record.executed_date.isoformat() if billing_record and billing_record.executed_date else activity.ends_at.strftime("%Y-%m-%d")),
+        "final_client": ((billing_record.raw_payload or {}).get("final_client") if billing_record else "") or "",
         "farm_id": farm_id,
         "lot_id": lot_id,
         "client_project": activity.client_project or "",
@@ -545,6 +548,7 @@ def dashboard():
     user = User.query.get(user_id) if user_id else None
     organizations = get_clients_for_user(user_id) if user_id else []
     org_ids = [org.id for org in organizations] if organizations else []
+    is_platform_admin = bool(user and user.is_admin())
 
     today = date.today()
     month_start = date(today.year, today.month, 1)
@@ -606,9 +610,13 @@ def dashboard():
     # Count only GEOTIFF assets that are available in the platform
     from app.modules.media.models import Asset, AssetType
 
-    images_processed = Asset.query.filter(
-        Asset.asset_type == AssetType.GEOTIFF.value
-    ).count()
+    # Los assets aun no tienen una relacion directa con organizaciones. Para
+    # evitar exponer archivos de otros clientes, solo se agregan globalmente
+    # para el administrador de plataforma.
+    if is_platform_admin:
+        images_processed = Asset.query.filter(
+            Asset.asset_type == AssetType.GEOTIFF.value
+        ).count()
 
     last_recommendation = None
     if org_ids:
@@ -671,12 +679,14 @@ def dashboard():
     from app.modules.media.models import Asset, AssetType
 
     recent_image_analyses = []
-    recent_assets = (
-        Asset.query.filter(Asset.asset_type == AssetType.GEOTIFF.value)
-        .order_by(Asset.created_at.desc())
-        .limit(3)
-        .all()
-    )
+    recent_assets = []
+    if is_platform_admin:
+        recent_assets = (
+            Asset.query.filter(Asset.asset_type == AssetType.GEOTIFF.value)
+            .order_by(Asset.created_at.desc())
+            .limit(3)
+            .all()
+        )
     for asset in recent_assets:
         recent_image_analyses.append(
             {
@@ -718,8 +728,10 @@ def dashboard():
                 PilotFlightLog.total_hectares.isnot(None),
             )
         )
-        if org_names:
-            log_query = log_query.filter(OperationalActivity.client_project.in_(org_names))
+        if not is_platform_admin:
+            log_query = log_query.filter(
+                OperationalActivity.client_project.in_(org_names) if org_names else false()
+            )
         for log in log_query.all():
             if not log.flight_date:
                 continue
@@ -734,8 +746,10 @@ def dashboard():
             OperationBillingRecord.executed_date >= start_date,
             OperationBillingRecord.executed_date < end_date,
         )
-        if org_ids:
-            billing_query = billing_query.filter(OperationBillingRecord.organization_id.in_(org_ids))
+        if not is_platform_admin:
+            billing_query = billing_query.filter(
+                OperationBillingRecord.organization_id.in_(org_ids) if org_ids else false()
+            )
         for record in billing_query.all():
             if record.activity_id and record.activity_id in logged_activity_ids:
                 continue
@@ -817,27 +831,38 @@ def operational_calendar():
     week_start_dt = datetime.combine(week_start, time.min)
     week_end_dt = datetime.combine(week_end, time.min)
 
-    activities = (
-        OperationalActivity.query.options(
-            joinedload(OperationalActivity.pilot),
-            joinedload(OperationalActivity.drone),
+    current_user_id = get_jwt_identity()
+    current_user = User.query.get(current_user_id)
+    clients = get_clients_for_user(current_user_id)
+    client_ids = [client.id for client in clients]
+    is_platform_admin = bool(current_user and current_user.is_admin())
+
+    activities_query = OperationalActivity.query.options(
+        joinedload(OperationalActivity.pilot),
+        joinedload(OperationalActivity.drone),
+    ).outerjoin(OperationBillingRecord)
+    if not is_platform_admin:
+        activities_query = activities_query.filter(
+            OperationBillingRecord.organization_id.in_(client_ids) if client_ids else false()
         )
-        .order_by(OperationalActivity.starts_at.asc())
-        .all()
-    )
-    pilots = PilotProfile.query.order_by(PilotProfile.first_name.asc()).all()
-    drones = MaintenanceDrone.query.order_by(MaintenanceDrone.brand.asc(), MaintenanceDrone.model.asc()).all()
+    activities = activities_query.order_by(OperationalActivity.starts_at.asc()).all()
+
+    pilots_query = PilotProfile.query
+    drones_query = MaintenanceDrone.query
+    if not is_platform_admin:
+        pilot_ids = {activity.pilot_id for activity in activities}
+        drone_ids = {activity.drone_id for activity in activities}
+        pilots_query = pilots_query.filter(PilotProfile.id.in_(pilot_ids) if pilot_ids else false())
+        drones_query = drones_query.filter(MaintenanceDrone.id.in_(drone_ids) if drone_ids else false())
+    pilots = pilots_query.order_by(PilotProfile.first_name.asc()).all()
+    drones = drones_query.order_by(MaintenanceDrone.brand.asc(), MaintenanceDrone.model.asc()).all()
     from app.modules.foliage.models import Farm, Lot
 
-    clients = get_clients_for_user(get_jwt_identity())
-    if not clients:
-        clients = Organization.query.filter_by(active=True).order_by(Organization.name.asc()).all()
-    client_ids = [client.id for client in clients]
     farms_query = Farm.query.order_by(Farm.name.asc())
     lots_query = Lot.query.join(Farm).order_by(Lot.name.asc())
-    if client_ids:
-        farms_query = farms_query.filter(Farm.org_id.in_(client_ids))
-        lots_query = lots_query.filter(Farm.org_id.in_(client_ids))
+    if not is_platform_admin:
+        farms_query = farms_query.filter(Farm.org_id.in_(client_ids) if client_ids else false())
+        lots_query = lots_query.filter(Farm.org_id.in_(client_ids) if client_ids else false())
     farms = farms_query.all()
     lots = lots_query.all()
 
@@ -863,17 +888,17 @@ def operational_calendar():
         "activities": activities,
         "activities_json": [_activity_payload(activity) for activity in activities],
         "stats": {
-            "today": OperationalActivity.query.filter(
+            "today": activities_query.filter(
                 OperationalActivity.starts_at >= today_start,
                 OperationalActivity.starts_at <= today_end,
             ).count(),
-            "week": OperationalActivity.query.filter(
+            "week": activities_query.filter(
                 OperationalActivity.starts_at >= week_start_dt,
                 OperationalActivity.starts_at < week_end_dt,
             ).count(),
-            "pending": OperationalActivity.query.filter_by(status="scheduled").count(),
-            "completed": OperationalActivity.query.filter_by(status="completed").count(),
-            "cancelled": OperationalActivity.query.filter_by(status="cancelled").count(),
+            "pending": activities_query.filter(OperationalActivity.status == "scheduled").count(),
+            "completed": activities_query.filter(OperationalActivity.status == "completed").count(),
+            "cancelled": activities_query.filter(OperationalActivity.status == "cancelled").count(),
         },
     }
     return (
@@ -1468,6 +1493,11 @@ def pilot_report_issue(activity_id):
 @web.route("/dashboard/operaciones/ejecuciones")
 @login_required
 def operation_executions():
+    current_user_id = get_jwt_identity()
+    current_user = User.query.get(current_user_id)
+    organization_ids = [org.id for org in get_clients_for_user(current_user_id)]
+    is_platform_admin = bool(current_user and current_user.is_admin())
+
     today = date.today()
     year = request.args.get("year", default=today.year, type=int)
     month = request.args.get("month", default=today.month, type=int)
@@ -1487,14 +1517,19 @@ def operation_executions():
     range_end = datetime.combine(calendar_end, time.max)
     now = datetime.utcnow()
 
-    activities = (
-        OperationalActivity.query.options(
-            joinedload(OperationalActivity.pilot),
-            joinedload(OperationalActivity.drone),
-            joinedload(OperationalActivity.logs),
-            joinedload(OperationalActivity.flight_logs),
-            joinedload(OperationalActivity.pilot_reports),
+    activities_query = OperationalActivity.query.options(
+        joinedload(OperationalActivity.pilot),
+        joinedload(OperationalActivity.drone),
+        joinedload(OperationalActivity.logs),
+        joinedload(OperationalActivity.flight_logs),
+        joinedload(OperationalActivity.pilot_reports),
+    ).outerjoin(OperationBillingRecord)
+    if not is_platform_admin:
+        activities_query = activities_query.filter(
+            OperationBillingRecord.organization_id.in_(organization_ids) if organization_ids else false()
         )
+    activities = (
+        activities_query
         .filter(OperationalActivity.starts_at <= range_end, OperationalActivity.ends_at >= range_start)
         .order_by(OperationalActivity.starts_at.asc())
         .all()
@@ -1592,7 +1627,7 @@ def operation_executions():
             "title": activity.title,
             "operation_type": activity.operation_type,
             "place": activity.place,
-            "client_project": activity.client_project or "Sin proyecto",
+            "client_project": ((billing_record.raw_payload or {}).get("final_client") if billing_record else None) or "Sin cliente",
             "pilot": activity.pilot.full_name if activity.pilot else "Sin piloto",
             "drone": f"{activity.drone.brand} {activity.drone.model}" if activity.drone else "Sin dron",
             "starts_at": activity.starts_at,
@@ -1772,7 +1807,7 @@ def maintenance_drones():
         "page_title": "Drones",
         "data_menu": get_dashboard_menu(),
         "suppress_base_flashes": True,
-        "drones": drones,
+        "drones": drones,
         "total_hours": total_hours,
         "active_count": active_count,
     }
@@ -1907,15 +1942,11 @@ def paid_repairs():
 @web.route("/dashboard/operacion-realizada/facturacion")
 @login_required
 def completed_operation_billing():
-    def distinct_values(column):
-        return [
-            value
-            for value, in db.session.query(column)
-            .filter(column.isnot(None), column != "")
-            .distinct()
-            .order_by(column.asc())
-            .all()
-        ]
+    current_user_id = get_jwt_identity()
+    current_user = User.query.get(current_user_id)
+    organization_ids = [org.id for org in get_clients_for_user(current_user_id)]
+    is_platform_admin = bool(current_user and current_user.is_admin())
+
 
     filters = {
         "finca": (request.args.get("finca") or "").strip(),
@@ -1930,10 +1961,13 @@ def completed_operation_billing():
         joinedload(OperationBillingRecord.organization),
     )
 
+    if not is_platform_admin:
+        query = query.filter(
+            OperationBillingRecord.organization_id.in_(organization_ids) if organization_ids else false()
+        )
+
     if filters["finca"]:
         query = query.filter(OperationBillingRecord.farm_name == filters["finca"])
-    if filters["cliente"]:
-        query = query.filter(OperationBillingRecord.organization.has(Organization.name == filters["cliente"]))
     if filters["piloto"]:
         query = query.filter(OperationBillingRecord.pilot_name == filters["piloto"])
     if filters["mes"]:
@@ -1954,23 +1988,25 @@ def completed_operation_billing():
         query.order_by(OperationBillingRecord.executed_date.desc(), OperationBillingRecord.source_item.desc())
         .all()
     )
+    if filters["cliente"]:
+        records = [
+            record for record in records
+            if (record.raw_payload or {}).get("final_client", "") == filters["cliente"]
+        ]
+
     total_invoice = sum((record.invoice_total or Decimal("0")) for record in records)
     total_area = sum((record.area_hectares or Decimal("0")) for record in records)
     pending_records = [record for record in records if not record.invoice_number]
     invoices = {record.invoice_number for record in records if record.invoice_number}
     filter_options = {
-        "farms": distinct_values(OperationBillingRecord.farm_name),
-        "pilots": distinct_values(OperationBillingRecord.pilot_name),
-        "months": distinct_values(OperationBillingRecord.billing_month),
-        "clients": [
-            name
-            for name, in db.session.query(Organization.name)
-            .join(OperationBillingRecord, OperationBillingRecord.organization_id == Organization.id)
-            .filter(Organization.name.isnot(None), Organization.name != "")
-            .distinct()
-            .order_by(Organization.name.asc())
-            .all()
-        ],
+        "farms": sorted({record.farm_name for record in records if record.farm_name}),
+        "pilots": sorted({record.pilot_name for record in records if record.pilot_name}),
+        "months": sorted({record.billing_month for record in records if record.billing_month}),
+        "clients": sorted({
+            (record.raw_payload or {}).get("final_client")
+            for record in records
+            if (record.raw_payload or {}).get("final_client")
+        }),
     }
     context = {
         "dashboard": True,
@@ -1999,6 +2035,36 @@ def completed_operation_billing():
         ),
         200,
     )
+
+@web.route("/dashboard/operacion-realizada/facturacion/<int:record_id>/numero", methods=["POST"])
+@login_required
+def completed_operation_billing_update_invoice(record_id):
+    record = OperationBillingRecord.query.get_or_404(record_id)
+    current_user_id = get_jwt_identity()
+    current_user = User.query.get(current_user_id)
+    organization_ids = [org.id for org in get_clients_for_user(current_user_id)]
+    is_platform_admin = bool(current_user and current_user.is_admin())
+
+    if not is_platform_admin and record.organization_id not in organization_ids:
+        return jsonify({"success": False, "message": "No tienes acceso a este registro."}), 403
+
+    invoice_number = (request.form.get("invoice_number") or "").strip()
+    if not invoice_number:
+        flash("Escribe el numero de factura.", "error")
+        return redirect(url_for("core.completed_operation_billing"))
+    if len(invoice_number) > 80:
+        flash("El numero de factura no puede superar 80 caracteres.", "error")
+        return redirect(url_for("core.completed_operation_billing"))
+
+    record.invoice_number = invoice_number
+    record.raw_payload = {
+        **(record.raw_payload or {}),
+        "invoice_status": "invoiced",
+        "invoice_number_updated_by": current_user_id,
+    }
+    db.session.commit()
+    flash(f"Factura {invoice_number} guardada correctamente.", "success")
+    return redirect(url_for("core.completed_operation_billing"))
 
 @web.route("/dashboard/operacion-realizada/cronograma")
 @login_required
@@ -2266,7 +2332,8 @@ def amd_users():
     response, status_code = user_view._get_user_list()
     items = response.get_json()
     assigned_org = get_clients_for_user(user_id)
-    org_dict = {org.name: org.id for org in assigned_org}
+    org_dict = {"Seleccione un cliente": ""}
+    org_dict.update({org.name: org.id for org in assigned_org})
     # logging.error("Items obtenidos: %s, org_dict: %s", items, org_dict)
 
     if status_code != 200:
@@ -2306,17 +2373,21 @@ def amd_clients():
         return render_template("error.j2"), status_code
     items = response.get_json()
     active_clients = sum(1 for item in items if item.get("active"))
+    visible_org_ids = [item.get("id") for item in items if item.get("id") is not None]
     total_area, total_invoice, invoice_count = db.session.query(
         func.coalesce(func.sum(OperationBillingRecord.area_hectares), 0),
         func.coalesce(func.sum(OperationBillingRecord.invoice_total), 0),
         func.count(func.distinct(OperationBillingRecord.invoice_number)),
     ).filter(
+        OperationBillingRecord.organization_id.in_(visible_org_ids) if visible_org_ids else false(),
         OperationBillingRecord.invoice_number.isnot(None),
         OperationBillingRecord.invoice_number != "",
     ).one()
     clients_with_billing = db.session.query(
         func.count(func.distinct(OperationBillingRecord.organization_id))
-    ).filter(OperationBillingRecord.organization_id.isnot(None)).scalar() or 0
+    ).filter(
+        OperationBillingRecord.organization_id.in_(visible_org_ids) if visible_org_ids else false()
+    ).scalar() or 0
     crud_metric_cards = [
         {
             "label": "Clientes",
@@ -2352,6 +2423,7 @@ def amd_clients():
             "value_class": "text-emerald-600 dark:text-emerald-400",
         },
     ]
+    reseller_dict = {}
     if user_role == "administrator":
         # Obtener todos los usuarios con rol reseller
         resellers = User.query.filter_by(role=RoleEnum.RESELLER).all()

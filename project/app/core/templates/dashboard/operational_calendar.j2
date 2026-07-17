@@ -203,6 +203,51 @@
     border-left: 1px solid #edf2ed;
   }
 
+  .ops-month-week {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+  }
+
+  .ops-month-week .ops-day {
+    grid-row: 1;
+    min-width: 0;
+  }
+
+  .ops-range-event {
+    z-index: 2;
+    align-self: start;
+    margin: 0 3px;
+    min-width: 0;
+    overflow: hidden;
+    border-radius: 7px;
+    box-shadow: 0 1px 2px rgba(22, 101, 52, .12);
+  }
+
+  .ops-range-event.is-range-start {
+    margin-left: 10px;
+  }
+
+  .ops-range-event.is-range-end {
+    margin-right: 10px;
+  }
+
+  .ops-range-event:not(.is-range-start) {
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+  }
+
+  .ops-range-event:not(.is-range-end) {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+
+  .ops-range-event .ops-event__title,
+  .ops-range-event .ops-event__detail {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .ops-weekday {
     padding: 10px;
     border-right: 1px solid #edf2ed;
@@ -247,6 +292,45 @@
     cursor: pointer;
   }
 
+  .ops-event__title,
+  .ops-event__detail {
+    display: block;
+  }
+
+  .ops-event__detail {
+    margin-top: 2px;
+    font-size: 10px;
+    font-weight: 550;
+    opacity: .82;
+  }
+
+  .ops-event__timeline {
+    position: relative;
+    display: block;
+    height: 4px;
+    margin-top: 6px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(22, 101, 52, .16);
+  }
+
+  .ops-event__timeline > span {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    min-width: 4px;
+    border-radius: inherit;
+    background: currentColor;
+  }
+
+  .ops-event__time {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 3px;
+    font-size: 9px;
+    font-weight: 650;
+    opacity: .82;
+  }
   .ops-event[data-status="completed"] {
     background: #edf7ed;
     color: #267142;
@@ -487,7 +571,7 @@
 {% block content %}
 <div class="ops-calendar"
      data-create-activity-url="{{ url_for('core.operational_calendar_create_activity') }}"
-     data-create-pilot-url="{{ url_for('core.operational_calendar_create_pilot') }}">
+     data-create-pilot-url="{{ url_for('core.operational_calendar_create_pilot') }}">
     <section class="ops-top-actions">
     <div class="ops-actions">
       <button type="button" class="ops-btn" data-open-pilot>
@@ -541,7 +625,7 @@
         </div>
       </div>
       <div class="ops-calendar-body" data-calendar-body></div>
-    </article>
+    </article>
   </section>
 </div>
 
@@ -748,7 +832,7 @@ document.addEventListener('DOMContentLoaded', function () {
   const clients = {{ clients_json | tojson }};
   const farms = {{ farms_json | tojson }};
   const lots = {{ lots_json | tojson }};
-  let currentDate = new Date();
+  let currentDate = activities.length ? parseDate(activities[0].date) : new Date();
   let currentView = 'month';
   let activeActivity = null;
 
@@ -850,30 +934,95 @@ document.addEventListener('DOMContentLoaded', function () {
     return activities.filter(item => item.date === day).sort((a, b) => a.start_time.localeCompare(b.start_time));
   }
   function eventHtml(event) {
+    const lot = event.lot_code || event.paddocks || 'Sin lote/potrero';
+    const client = event.final_client || '';
     return `<div class="ops-event" data-activity-id="${event.id}" data-status="${event.status}">
-      ${event.start_time} ${event.title}
+      <span class="ops-event__title">${event.farm_name || event.title}</span>
+      <span class="ops-event__detail">${lot}${client ? ` · ${client}` : ''}</span>
+      <span class="ops-event__time"><span>${event.start_time}</span><span>${event.end_time}</span></span>
     </div>`;
   }
+
+  function addDays(date, amount) {
+    const result = new Date(date);
+    result.setDate(result.getDate() + amount);
+    return result;
+  }
+
+  function dayDistance(from, to) {
+    return Math.round((parseDate(to) - parseDate(from)) / 86400000);
+  }
+
+  function rangeEventHtml(event, weekStart, weekEnd, track) {
+    const rangeStart = event.program_start || event.start_date || event.date;
+    const rangeEnd = event.program_end || event.end_date || rangeStart;
+    const clippedStart = rangeStart < weekStart ? weekStart : rangeStart;
+    const clippedEnd = rangeEnd > weekEnd ? weekEnd : rangeEnd;
+    const startColumn = dayDistance(weekStart, clippedStart) + 1;
+    const endColumn = dayDistance(weekStart, clippedEnd) + 2;
+    const lot = event.lot_code || event.paddocks || 'Sin lote/potrero';
+    const client = event.final_client || '';
+    const startClass = rangeStart >= weekStart ? ' is-range-start' : '';
+    const endClass = rangeEnd <= weekEnd ? ' is-range-end' : '';
+    return `<div class="ops-event ops-range-event${startClass}${endClass}" data-activity-id="${event.id}" data-status="${event.status}" style="grid-column:${startColumn}/${endColumn};grid-row:1;margin-top:${34 + track * 58}px">
+      <span class="ops-event__title">${event.farm_name || event.title}</span>
+      <span class="ops-event__detail">${lot}${client ? ` · ${client}` : ''} · ${rangeStart} a ${rangeEnd}</span>
+    </div>`;
+  }
+
   function renderMonth() {
     const first = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
-    const start = new Date(first);
-    start.setDate(first.getDate() - ((first.getDay() + 6) % 7));
+    const calendarStart = new Date(first);
+    calendarStart.setDate(first.getDate() - ((first.getDay() + 6) % 7));
     calendarTitle.textContent = prettyMonth(currentDate);
     let html = '<div class="ops-month-grid">';
     ['Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab', 'Dom'].forEach(day => html += `<div class="ops-weekday">${day}</div>`);
-    for (let index = 0; index < 42; index++) {
-      const cell = new Date(start);
-      cell.setDate(start.getDate() + index);
-      const key = dateKey(cell);
-      const muted = cell.getMonth() !== currentDate.getMonth() ? ' is-muted' : '';
-      html += `<div class="ops-day${muted}" data-day="${key}" data-time="08:00">
-        <div class="ops-day-number">${cell.getDate()}</div>
-        ${eventsForDay(key).slice(0, 3).map(eventHtml).join('')}
-      </div>`;
-    }
     html += '</div>';
+
+    for (let week = 0; week < 6; week++) {
+      const weekStartDate = addDays(calendarStart, week * 7);
+      const weekEndDate = addDays(weekStartDate, 6);
+      const weekStart = dateKey(weekStartDate);
+      const weekEnd = dateKey(weekEndDate);
+      const weekEvents = activities
+        .filter(event => {
+          const rangeStart = event.program_start || event.start_date || event.date;
+          const rangeEnd = event.program_end || event.end_date || rangeStart;
+          return rangeStart <= weekEnd && rangeEnd >= weekStart;
+        })
+        .sort((a, b) => {
+          const startCompare = (a.program_start || a.start_date || a.date).localeCompare(b.program_start || b.start_date || b.date);
+          return startCompare || (a.program_end || a.end_date || a.date).localeCompare(b.program_end || b.end_date || b.date);
+        });
+      const tracks = [];
+      const positioned = weekEvents.map(event => {
+        const clippedStart = [event.program_start || event.start_date || event.date, weekStart].sort().pop();
+        const clippedEnd = [event.program_end || event.end_date || event.date, weekEnd].sort()[0];
+        let track = tracks.findIndex(occupiedUntil => occupiedUntil < clippedStart);
+        if (track < 0) {
+          track = tracks.length;
+          tracks.push(clippedEnd);
+        } else {
+          tracks[track] = clippedEnd;
+        }
+        return { event, track };
+      });
+      const weekHeight = Math.max(118, 42 + tracks.length * 58);
+      html += '<div class="ops-month-week">';
+      for (let dayIndex = 0; dayIndex < 7; dayIndex++) {
+        const cell = addDays(weekStartDate, dayIndex);
+        const key = dateKey(cell);
+        const muted = cell.getMonth() !== currentDate.getMonth() ? ' is-muted' : '';
+        html += `<div class="ops-day${muted}" data-day="${key}" data-time="08:00" style="grid-column:${dayIndex + 1};min-height:${weekHeight}px">
+          <div class="ops-day-number">${cell.getDate()}</div>
+        </div>`;
+      }
+      positioned.forEach(item => html += rangeEventHtml(item.event, weekStart, weekEnd, item.track));
+      html += '</div>';
+    }
     calendarBody.innerHTML = html;
   }
+
   function renderTimeList(days) {
     calendarTitle.textContent = days.length === 1
       ? days[0].toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })
@@ -895,7 +1044,7 @@ document.addEventListener('DOMContentLoaded', function () {
     });
     html += '</div>';
     calendarBody.innerHTML = html;
-  }
+  }
   function statusLabel(status) {
     return { scheduled: 'Pendiente', in_progress: 'En proceso', completed: 'Finalizada', cancelled: 'Cancelada' }[status] || status;
   }
@@ -1016,7 +1165,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     const target = event.target.closest('[data-day]');
     if (target) openActivityModal(target.dataset.day, target.dataset.time || '08:00');
-  });
+  });
   document.getElementById('start_date').addEventListener('change', function () {
     if (!document.getElementById('end_date').value) document.getElementById('end_date').value = this.value;
     updateDuration();
