@@ -1512,6 +1512,8 @@ def pilot_report_issue(activity_id):
 @web.route("/dashboard/operaciones/ejecuciones")
 @login_required
 def operation_executions():
+    from app.modules.foliage.models import Farm, Lot
+
     current_user_id = get_jwt_identity()
     current_user = User.query.get(current_user_id)
     organization_ids = [org.id for org in get_clients_for_user(current_user_id)]
@@ -1648,6 +1650,8 @@ def operation_executions():
             "operation_type": activity.operation_type,
             "place": activity.place,
             "client_project": ((billing_record.raw_payload or {}).get("final_client") if billing_record else None) or "Sin cliente",
+            "organization_id": billing_record.organization_id if billing_record else None,
+            "lot_id": ((billing_record.raw_payload or {}).get("lot_id") if billing_record else None),
             "pilot": activity.pilot.full_name if activity.pilot else "Sin piloto",
             "drone": f"{activity.drone.brand} {activity.drone.model}" if activity.drone else "Sin dron",
             "starts_at": activity.starts_at,
@@ -1701,6 +1705,18 @@ def operation_executions():
         "enero", "febrero", "marzo", "abril", "mayo", "junio",
         "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
     ]
+    catalog_query = Organization.query.filter(Organization.active.is_(True))
+    if not is_platform_admin:
+        catalog_query = catalog_query.filter(Organization.id.in_(organization_ids) if organization_ids else false())
+    catalog_organizations = catalog_query.order_by(Organization.name.asc()).all()
+    catalog_ids = [item.id for item in catalog_organizations]
+    catalog_farms = Farm.query.filter(Farm.org_id.in_(catalog_ids)).order_by(Farm.name.asc()).all() if catalog_ids else []
+    catalog_lots = Lot.query.join(Farm).filter(Farm.org_id.in_(catalog_ids), Lot.active.is_(True)).order_by(Farm.name.asc(), Lot.name.asc()).all() if catalog_ids else []
+    execution_catalog = {
+        "organizations": [{"id": item.id, "name": item.name} for item in catalog_organizations],
+        "farms": [{"id": item.id, "organization_id": item.org_id, "name": item.name} for item in catalog_farms],
+        "lots": [{"id": item.id, "farm_id": item.farm_id, "name": item.name} for item in catalog_lots],
+    }
     context = {
         "dashboard": True,
         "title": "Ejecuciones",
@@ -1719,6 +1735,7 @@ def operation_executions():
         "stats": stats,
         "total_real_hours": round(total_minutes / 60, 1),
         "total_hectares": float(total_hectares),
+        "execution_catalog": execution_catalog,
     }
     return (
         render_template(
@@ -1729,6 +1746,49 @@ def operation_executions():
         200,
     )
 
+
+@web.route("/dashboard/operaciones/ejecuciones/<int:activity_id>/asociacion", methods=["POST"])
+@login_required
+def operation_executions_update_association(activity_id):
+    from app.modules.foliage.models import Lot
+
+    activity = OperationalActivity.query.get_or_404(activity_id)
+    current_user_id = get_jwt_identity()
+    current_user = User.query.get(current_user_id)
+    organization_ids = [org.id for org in get_clients_for_user(current_user_id)]
+    is_platform_admin = bool(current_user and current_user.is_admin())
+    organization = Organization.query.get(request.form.get("organization_id", type=int))
+    lot = Lot.query.get(request.form.get("lot_id", type=int))
+    farm = lot.farm if lot else None
+    if not organization or not farm or not lot:
+        return jsonify({"success": False, "message": "Selecciona un cliente y un potrero validos."}), 400
+    if farm.org_id != organization.id:
+        return jsonify({"success": False, "message": "El potrero no pertenece al cliente seleccionado."}), 400
+    if not is_platform_admin and organization.id not in organization_ids:
+        return jsonify({"success": False, "message": "No tienes acceso a este cliente."}), 403
+
+    record = getattr(activity, "billing_record", None)
+    if not record:
+        record = OperationBillingRecord(activity=activity)
+        db.session.add(record)
+    unit_price = _parse_optional_decimal(str((organization.profile_data or {}).get("billing_unit_price") or ""))
+    area = record.area_hectares or activity.area_hectares
+    if area is None and lot.area is not None:
+        area = Decimal(str(lot.area))
+    record.organization_id = organization.id
+    record.farm_name = farm.name
+    record.paddock_name = lot.name
+    record.area_hectares = area
+    record.unit_price = unit_price
+    record.invoice_total = Decimal(str(area)) * unit_price if area is not None and unit_price is not None else None
+    record.raw_payload = {**(record.raw_payload or {}), "final_client": organization.name, "organization_id": organization.id, "farm_id": farm.id, "lot_id": lot.id, "association_updated_by": current_user_id}
+    activity.client_project = organization.name
+    activity.farm_name = farm.name
+    activity.lot_code = lot.name
+    if activity.area_hectares is None and area is not None:
+        activity.area_hectares = area
+    db.session.commit()
+    return jsonify({"success": True, "message": "Cliente y potrero asociados correctamente."})
 
 @web.route("/dashboard/mantenimiento/bitacoras")
 @login_required
@@ -1962,6 +2022,8 @@ def paid_repairs():
 @web.route("/dashboard/operacion-realizada/facturacion")
 @login_required
 def completed_operation_billing():
+    from app.modules.foliage.models import Farm, Lot
+
     current_user_id = get_jwt_identity()
     current_user = User.query.get(current_user_id)
     organization_ids = [org.id for org in get_clients_for_user(current_user_id)]
@@ -1973,6 +2035,7 @@ def completed_operation_billing():
         "cliente": (request.args.get("cliente") or "").strip(),
         "piloto": (request.args.get("piloto") or "").strip(),
         "mes": (request.args.get("mes") or "").strip(),
+        "factura": (request.args.get("factura") or "").strip(),
         "q": (request.args.get("q") or "").strip(),
     }
 
@@ -1992,6 +2055,10 @@ def completed_operation_billing():
         query = query.filter(OperationBillingRecord.pilot_name == filters["piloto"])
     if filters["mes"]:
         query = query.filter(OperationBillingRecord.billing_month == filters["mes"])
+    if filters["factura"] == "pendientes":
+        query = query.filter(or_(OperationBillingRecord.invoice_number.is_(None), OperationBillingRecord.invoice_number == ""))
+    elif filters["factura"] == "facturadas":
+        query = query.filter(OperationBillingRecord.invoice_number.isnot(None), OperationBillingRecord.invoice_number != "")
     if filters["q"]:
         search = f"%{filters['q']}%"
         query = query.filter(
@@ -2011,23 +2078,56 @@ def completed_operation_billing():
     if filters["cliente"]:
         records = [
             record for record in records
-            if (record.raw_payload or {}).get("final_client", "") == filters["cliente"]
+            if (
+                (record.raw_payload or {}).get("final_client", "") == filters["cliente"]
+                or (record.organization and record.organization.name == filters["cliente"])
+            )
         ]
 
     total_invoice = sum((record.invoice_total or Decimal("0")) for record in records)
     total_area = sum((record.area_hectares or Decimal("0")) for record in records)
     pending_records = [record for record in records if not record.invoice_number]
     invoices = {record.invoice_number for record in records if record.invoice_number}
+    options_query = OperationBillingRecord.query.options(joinedload(OperationBillingRecord.organization))
+    if not is_platform_admin:
+        options_query = options_query.filter(
+            OperationBillingRecord.organization_id.in_(organization_ids) if organization_ids else false()
+        )
+    if filters["factura"] == "pendientes":
+        options_query = options_query.filter(
+            or_(OperationBillingRecord.invoice_number.is_(None), OperationBillingRecord.invoice_number == "")
+        )
+    elif filters["factura"] == "facturadas":
+        options_query = options_query.filter(
+            OperationBillingRecord.invoice_number.isnot(None),
+            OperationBillingRecord.invoice_number != "",
+        )
+    option_records = options_query.all()
     filter_options = {
-        "farms": sorted({record.farm_name for record in records if record.farm_name}),
-        "pilots": sorted({record.pilot_name for record in records if record.pilot_name}),
-        "months": sorted({record.billing_month for record in records if record.billing_month}),
+        "farms": sorted({record.farm_name for record in option_records if record.farm_name}),
+        "pilots": sorted({record.pilot_name for record in option_records if record.pilot_name}),
+        "months": sorted({record.billing_month for record in option_records if record.billing_month}),
         "clients": sorted({
-            (record.raw_payload or {}).get("final_client")
-            for record in records
-            if (record.raw_payload or {}).get("final_client")
+            (record.raw_payload or {}).get("final_client") or (record.organization.name if record.organization else None)
+            for record in option_records
+            if (record.raw_payload or {}).get("final_client") or record.organization
         }),
     }
+    catalog_query = Organization.query.filter(Organization.active.is_(True))
+    if not is_platform_admin:
+        catalog_query = catalog_query.filter(Organization.id.in_(organization_ids) if organization_ids else false())
+    catalog_organizations = catalog_query.order_by(Organization.name.asc()).all()
+    catalog_ids = [item.id for item in catalog_organizations]
+    catalog_farms = Farm.query.filter(Farm.org_id.in_(catalog_ids)).order_by(Farm.name.asc()).all() if catalog_ids else []
+    catalog_lots = Lot.query.join(Farm).filter(
+        Farm.org_id.in_(catalog_ids), Lot.active.is_(True)
+    ).order_by(Farm.name.asc(), Lot.name.asc()).all() if catalog_ids else []
+    billing_catalog = {
+        "organizations": [{"id": item.id, "name": item.name} for item in catalog_organizations],
+        "farms": [{"id": item.id, "organization_id": item.org_id, "name": item.name} for item in catalog_farms],
+        "lots": [{"id": item.id, "farm_id": item.farm_id, "name": item.name} for item in catalog_lots],
+    }
+
     context = {
         "dashboard": True,
         "title": "Facturacion",
@@ -2039,6 +2139,7 @@ def completed_operation_billing():
         "records": records,
         "filters": filters,
         "filter_options": filter_options,
+        "billing_catalog": billing_catalog,
         "stats": {
             "total_records": len(records),
             "pending_records": len(pending_records),
@@ -2056,6 +2157,123 @@ def completed_operation_billing():
         200,
     )
 
+
+@web.route("/dashboard/operacion-realizada/facturacion/factura-consolidada")
+@login_required
+def completed_operation_billing_consolidated_invoice():
+    current_user_id = get_jwt_identity()
+    current_user = User.query.get(current_user_id)
+    organization_ids = [org.id for org in get_clients_for_user(current_user_id)]
+    is_platform_admin = bool(current_user and current_user.is_admin())
+    filters = {
+        "finca": (request.args.get("finca") or "").strip(),
+        "cliente": (request.args.get("cliente") or "").strip(),
+        "piloto": (request.args.get("piloto") or "").strip(),
+        "mes": (request.args.get("mes") or "").strip(),
+    }
+    if not filters["cliente"]:
+        flash("Selecciona un cliente para generar la factura consolidada.", "error")
+        return redirect(url_for("core.completed_operation_billing", factura="pendientes"))
+
+    query = OperationBillingRecord.query.options(
+        joinedload(OperationBillingRecord.organization),
+        joinedload(OperationBillingRecord.activity).joinedload(OperationalActivity.pilot),
+    ).filter(
+        or_(OperationBillingRecord.invoice_number.is_(None), OperationBillingRecord.invoice_number == "")
+    )
+    if not is_platform_admin:
+        query = query.filter(
+            OperationBillingRecord.organization_id.in_(organization_ids) if organization_ids else false()
+        )
+    if filters["finca"]:
+        query = query.filter(OperationBillingRecord.farm_name == filters["finca"])
+    if filters["piloto"]:
+        query = query.filter(OperationBillingRecord.pilot_name == filters["piloto"])
+    if filters["mes"]:
+        query = query.filter(OperationBillingRecord.billing_month == filters["mes"])
+
+    records = query.order_by(OperationBillingRecord.executed_date.asc(), OperationBillingRecord.source_item.asc()).all()
+    records = [
+        record for record in records
+        if (
+            (record.raw_payload or {}).get("final_client", "") == filters["cliente"]
+            or (record.organization and record.organization.name == filters["cliente"])
+        )
+    ]
+    if not records:
+        flash("No hay operaciones pendientes para los filtros seleccionados.", "error")
+        return redirect(url_for("core.completed_operation_billing", factura="pendientes", **filters))
+
+    total_area = sum((Decimal(str(record.area_hectares or 0)) for record in records), Decimal("0"))
+    total_value = sum((Decimal(str(record.invoice_total or 0)) for record in records), Decimal("0"))
+    pilots = {}
+    for record in records:
+        pilot_name = record.pilot_name or "Sin piloto"
+        pilot = pilots.setdefault(pilot_name, {"name": pilot_name, "operations": 0, "area": Decimal("0"), "total": Decimal("0")})
+        pilot["operations"] += 1
+        pilot["area"] += Decimal(str(record.area_hectares or 0))
+        pilot["total"] += Decimal(str(record.invoice_total or 0))
+
+    organization = next((record.organization for record in records if record.organization), None)
+    reference = f"BORRADOR-{datetime.now().strftime('%Y%m%d-%H%M')}"
+    return render_template(
+        "dashboard/consolidated_operation_invoice.j2",
+        records=records,
+        filters=filters,
+        organization=organization,
+        pilots=list(pilots.values()),
+        total_area=total_area,
+        total_value=total_value,
+        reference=reference,
+        generated_at=datetime.now(),
+    )
+
+@web.route("/dashboard/operacion-realizada/facturacion/<int:record_id>/asociacion", methods=["POST"])
+@login_required
+def completed_operation_billing_update_association(record_id):
+    from app.modules.foliage.models import Lot
+
+    record = OperationBillingRecord.query.get_or_404(record_id)
+    current_user_id = get_jwt_identity()
+    current_user = User.query.get(current_user_id)
+    organization_ids = [org.id for org in get_clients_for_user(current_user_id)]
+    is_platform_admin = bool(current_user and current_user.is_admin())
+    organization = Organization.query.get(request.form.get("organization_id", type=int))
+    lot = Lot.query.get(request.form.get("lot_id", type=int))
+    farm = lot.farm if lot else None
+    if not organization or not lot or not farm:
+        return jsonify({"success": False, "message": "Selecciona un cliente y un potrero validos."}), 400
+    if farm.org_id != organization.id:
+        return jsonify({"success": False, "message": "El potrero no pertenece al cliente seleccionado."}), 400
+    if not is_platform_admin and organization.id not in organization_ids:
+        return jsonify({"success": False, "message": "No tienes acceso a este cliente."}), 403
+    if not is_platform_admin and record.organization_id is not None and record.organization_id not in organization_ids:
+        return jsonify({"success": False, "message": "No tienes acceso a este registro."}), 403
+
+    unit_price = _parse_optional_decimal(str((organization.profile_data or {}).get("billing_unit_price") or ""))
+    area = record.area_hectares if record.area_hectares is not None else (Decimal(str(lot.area)) if lot.area is not None else None)
+    record.organization_id = organization.id
+    record.farm_name = farm.name
+    record.paddock_name = lot.name
+    record.area_hectares = area
+    record.unit_price = unit_price
+    record.invoice_total = area * unit_price if area is not None and unit_price is not None else None
+    record.raw_payload = {
+        **(record.raw_payload or {}),
+        "final_client": organization.name,
+        "organization_id": organization.id,
+        "farm_id": farm.id,
+        "lot_id": lot.id,
+        "association_updated_by": current_user_id,
+    }
+    if record.activity:
+        record.activity.client_project = organization.name
+        record.activity.farm_name = farm.name
+        record.activity.lot_code = lot.name
+        if record.activity.area_hectares is None and area is not None:
+            record.activity.area_hectares = area
+    db.session.commit()
+    return jsonify({"success": True, "message": "Cliente y potrero asociados correctamente."})
 @web.route("/dashboard/operacion-realizada/facturacion/<int:record_id>/numero", methods=["POST"])
 @login_required
 def completed_operation_billing_update_invoice(record_id):

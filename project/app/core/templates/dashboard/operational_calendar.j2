@@ -232,6 +232,74 @@
     transition: width .35s ease;
   }
 
+  /* KPI compactos, consistentes con la pantalla de Facturacion */
+  .ops-stats {
+    gap: 8px;
+  }
+
+  .ops-stat {
+    position: relative;
+    display: block;
+    min-height: 98px;
+    overflow: visible;
+    padding: 12px;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, .08);
+    transition: box-shadow .2s ease, border-color .2s ease;
+  }
+
+  .ops-stat::before,
+  .ops-stat-progress {
+    display: none;
+  }
+
+  .ops-stat:hover {
+    transform: none;
+    border-color: #d1d5db;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, .08);
+  }
+
+  .ops-stat .ops-stat-icon {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    border-radius: 12px;
+    font-size: 14px;
+  }
+
+  .ops-stat > div {
+    min-width: 0;
+    padding-right: 42px;
+  }
+
+  .ops-stat span {
+    font-size: 10px;
+    font-weight: 650;
+    letter-spacing: .04em;
+  }
+
+  .ops-stat strong {
+    margin-top: 20px;
+    font-size: 19px;
+    font-weight: 650;
+    letter-spacing: 0;
+  }
+
+  .ops-stat-meta {
+    display: block;
+    margin-top: 8px;
+    color: #6b7280;
+    font-size: 10px;
+    font-weight: 400;
+  }
+
+  .ops-stat-rate {
+    display: none;
+  }
   .ops-shell {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
@@ -628,7 +696,75 @@
   }
 
   @media (max-width: 1100px) {
-    .ops-shell {
+    /* KPI compactos, consistentes con la pantalla de Facturacion */
+  .ops-stats {
+    gap: 8px;
+  }
+
+  .ops-stat {
+    position: relative;
+    display: block;
+    min-height: 98px;
+    overflow: visible;
+    padding: 12px;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, .08);
+    transition: box-shadow .2s ease, border-color .2s ease;
+  }
+
+  .ops-stat::before,
+  .ops-stat-progress {
+    display: none;
+  }
+
+  .ops-stat:hover {
+    transform: none;
+    border-color: #d1d5db;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, .08);
+  }
+
+  .ops-stat .ops-stat-icon {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    border-radius: 12px;
+    font-size: 14px;
+  }
+
+  .ops-stat > div {
+    min-width: 0;
+    padding-right: 42px;
+  }
+
+  .ops-stat span {
+    font-size: 10px;
+    font-weight: 650;
+    letter-spacing: .04em;
+  }
+
+  .ops-stat strong {
+    margin-top: 20px;
+    font-size: 19px;
+    font-weight: 650;
+    letter-spacing: 0;
+  }
+
+  .ops-stat-meta {
+    display: block;
+    margin-top: 8px;
+    color: #6b7280;
+    font-size: 10px;
+    font-weight: 400;
+  }
+
+  .ops-stat-rate {
+    display: none;
+  }
+  .ops-shell {
       grid-template-columns: 1fr;
     }
 
@@ -1134,39 +1270,25 @@ document.addEventListener('DOMContentLoaded', function () {
     return { scheduled: 'Pendiente', in_progress: 'En proceso', completed: 'Finalizada', cancelled: 'Cancelada' }[status] || status;
   }
   function enhanceStats() {
-    const cards = Array.from(document.querySelectorAll('.ops-stat'));
-    const labels = [
+    const descriptions = [
       'Agenda del día',
       'Carga semanal',
       'Por ejecutar',
-      'Tasa de cumplimiento',
-      'Tasa de cancelación'
+      'Operaciones completadas',
+      'Operaciones canceladas'
     ];
-    const total = activities.length;
-    cards.forEach((card, index) => {
-      const valueNode = card.querySelector('[data-stat]');
-      const value = Number(valueNode ? valueNode.textContent : 0) || 0;
-      const percentage = total ? Math.round((value / total) * 100) : 0;
-      card.style.setProperty('--kpi-progress', Math.min(percentage, 100) + '%');
-
+    document.querySelectorAll('.ops-stat').forEach((card, index) => {
       let meta = card.querySelector('.ops-stat-meta');
       if (!meta) {
         meta = document.createElement('div');
         meta.className = 'ops-stat-meta';
-        meta.innerHTML = '<small></small><b class=ops-stat-rate></b>';
         card.querySelector('div').appendChild(meta);
       }
-      meta.querySelector('small').textContent = labels[index];
-      meta.querySelector('b').textContent = percentage + '%';
-
-      if (!card.querySelector('.ops-stat-progress')) {
-        const progress = document.createElement('div');
-        progress.className = 'ops-stat-progress';
-        card.appendChild(progress);
-      }
+      meta.textContent = descriptions[index] || '';
+      const progress = card.querySelector('.ops-stat-progress');
+      if (progress) progress.remove();
     });
   }
-
   function renderStats() {
     const today = dateKey(new Date());
     const now = new Date();

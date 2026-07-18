@@ -2,6 +2,13 @@
 {% set flush_content_shell = true %}
 
 {% block content %}
+<style>
+.billing-filter-detail > summary::-webkit-details-marker { display: none; }
+.billing-filter-detail > summary::marker { content: ""; }
+@media (max-width: 900px) {
+  .billing-filters { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+}
+</style>
 <div class="space-y-4">
   <section class="grid gap-2 md:grid-cols-4">
     <article class="relative min-h-[72px] rounded-xl border border-gray-200 bg-white p-3 shadow-sm dark:border-gray-700 dark:bg-gray-900">
@@ -19,9 +26,9 @@
     <article class="relative min-h-[72px] rounded-xl border border-gray-200 bg-white p-3 shadow-sm dark:border-gray-700 dark:bg-gray-900">
       <div class="flex items-start justify-between gap-3">
         <div>
-          <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Facturas</p>
-          <h2 class="mt-3 text-lg font-semibold leading-none text-gray-900 dark:text-white">{{ stats.invoice_count }}</h2>
-          <p class="mt-1 text-[10px] text-gray-500 dark:text-gray-400">Numeros FE unicos</p>
+          <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{{ 'Pendientes' if filters.factura == 'pendientes' else 'Facturas' }}</p>
+          <h2 class="mt-3 text-lg font-semibold leading-none text-gray-900 dark:text-white">{{ stats.total_records if filters.factura == 'pendientes' else stats.invoice_count }}</h2>
+          <p class="mt-1 text-[10px] text-gray-500 dark:text-gray-400">{{ 'Operaciones sin factura' if filters.factura == 'pendientes' else 'Números FE únicos' }}</p>
         </div>
         <span class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300">
           <i class="fas fa-file-invoice text-sm"></i>
@@ -31,9 +38,14 @@
     <article class="relative min-h-[72px] rounded-xl border border-gray-200 bg-white p-3 shadow-sm dark:border-gray-700 dark:bg-gray-900">
       <div class="flex items-start justify-between gap-3">
         <div>
-          <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Area</p>
+          <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{{ 'Área volada' if filters.piloto else 'Área' }}</p>
           <h2 class="mt-3 text-lg font-semibold leading-none text-gray-900 dark:text-white">{{ '%.2f'|format(stats.total_area or 0) }} ha</h2>
-          <p class="mt-1 text-[10px] text-gray-500 dark:text-gray-400">Hectareas facturables</p>
+          <p class="mt-1 text-[10px] text-gray-500 dark:text-gray-400">
+            {% if filters.piloto %}Hectáreas voladas por {{ filters.piloto }}
+            {% elif filters.cliente %}Hectáreas acumuladas para {{ filters.cliente }}
+            {% elif filters.finca %}Hectáreas acumuladas en {{ filters.finca }}
+            {% else %}Hectáreas facturables{% endif %}
+          </p>
         </div>
         <span class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300">
           <i class="fas fa-seedling text-sm"></i>
@@ -45,7 +57,13 @@
         <div>
           <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Total</p>
           <h2 class="mt-3 text-lg font-semibold leading-none text-emerald-600 dark:text-emerald-400">$ {{ '{:,.0f}'.format(stats.total_invoice or 0) }}</h2>
-          <p class="mt-1 text-[10px] text-gray-500 dark:text-gray-400">Valor acumulado</p>
+          <p class="mt-1 text-[10px] text-gray-500 dark:text-gray-400">
+            {% if filters.factura == 'pendientes' %}Valor pendiente por facturar
+            {% elif filters.cliente %}Valor acumulado de {{ filters.cliente }}
+            {% elif filters.finca %}Valor acumulado de {{ filters.finca }}
+            {% elif filters.piloto %}Valor de las operaciones de {{ filters.piloto }}
+            {% else %}Valor acumulado{% endif %}
+          </p>
         </div>
         <span class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
           <i class="fas fa-dollar-sign text-sm"></i>
@@ -60,57 +78,63 @@
         <h2 class="text-base font-semibold text-gray-900 dark:text-white">Registro de facturacion</h2>
         <p class="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">Tabla amplia para revisar cliente, finca, ejecucion y factura.</p>
       </div>
-      <span class="rounded-full border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-600 dark:border-gray-700 dark:text-gray-300">
-        Pendientes: {{ stats.pending_records }}
-      </span>
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="rounded-full border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-600 dark:border-gray-700 dark:text-gray-300">
+          Pendientes: {{ stats.pending_records }}
+        </span>
+        {% if filters.factura == 'pendientes' and filters.cliente and records %}
+        <a href="{{ url_for('core.completed_operation_billing_consolidated_invoice', finca=filters.finca, cliente=filters.cliente, piloto=filters.piloto, mes=filters.mes) }}" class="inline-flex h-8 items-center rounded-md bg-sky-600 px-3 text-xs font-semibold text-white shadow-sm hover:bg-sky-700">
+          <i class="fas fa-file-invoice-dollar mr-1.5"></i>Generar factura
+        </a>
+        {% endif %}
+      </div>
     </div>
 
-    <form method='get' class='billing-filters border-b border-gray-100 bg-gray-50/70 px-3 py-2 dark:border-gray-800 dark:bg-gray-800/40' style='display:grid;grid-template-columns:minmax(150px,1fr) minmax(170px,1.15fr) minmax(120px,.8fr) minmax(95px,.6fr) minmax(150px,1fr) auto;gap:8px;align-items:end;'>
-      <label class='grid gap-0.5 text-[9px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400'>
-        Finca
-        <select name='finca' class='h-7 min-w-0 rounded-md border border-gray-200 bg-white px-2 text-[11px] font-medium normal-case tracking-normal text-gray-800 shadow-sm outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-100 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100'>
-          <option value=''>Todas</option>
-          {% for option in filter_options.farms %}
-          <option value='{{ option }}' {% if filters.finca == option %}selected{% endif %}>{{ option }}</option>
+    <div class="billing-filters border-b border-gray-100 bg-gray-50/70 px-3 py-2 dark:border-gray-800 dark:bg-gray-800/40" style="display:grid;grid-template-columns:minmax(135px,1fr) minmax(155px,1.1fr) minmax(110px,.8fr) minmax(90px,.6fr) minmax(115px,.75fr) minmax(145px,1fr) auto;gap:8px;align-items:end;">
+      {% set filter_specs = [
+        ('Finca', 'finca', filters.finca, filter_options.farms),
+        ('Cliente', 'cliente', filters.cliente, filter_options.clients),
+        ('Piloto', 'piloto', filters.piloto, filter_options.pilots),
+        ('Mes', 'mes', filters.mes, filter_options.months)
+      ] %}
+      {% for label, key, current, options in filter_specs %}
+      <details class="billing-filter-detail relative" style="position:relative;min-width:0;">
+        <summary class="list-none cursor-pointer" style="display:block;list-style:none;">
+          <span class="block text-[9px] font-semibold uppercase tracking-wide text-gray-500">{{ label }}</span>
+          <span class="mt-0.5 flex h-7 items-center justify-between rounded-md border border-gray-200 bg-white px-2 text-[11px] font-medium text-gray-800 shadow-sm dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100">
+            {{ current or ('Todas' if key == 'finca' else 'Todos') }} <i class="fas fa-chevron-down text-[9px] text-gray-400"></i>
+          </span>
+        </summary>
+        <div class="absolute z-30 mt-1 max-h-64 w-full min-w-[180px] overflow-auto rounded-md border border-gray-200 bg-white py-1 shadow-xl dark:border-gray-700 dark:bg-gray-900">
+          <a class="block px-3 py-1.5 text-[11px] hover:bg-gray-100 dark:hover:bg-gray-800" href="{{ url_for('core.completed_operation_billing', finca='' if key == 'finca' else filters.finca, cliente='' if key == 'cliente' else filters.cliente, piloto='' if key == 'piloto' else filters.piloto, mes='' if key == 'mes' else filters.mes, factura=filters.factura, q=filters.q) }}">{{ 'Todas' if key == 'finca' else 'Todos' }}</a>
+          {% for option in options %}
+          <a class="block px-3 py-1.5 text-[11px] hover:bg-gray-100 dark:hover:bg-gray-800" href="{{ url_for('core.completed_operation_billing', finca=option if key == 'finca' else filters.finca, cliente=option if key == 'cliente' else filters.cliente, piloto=option if key == 'piloto' else filters.piloto, mes=option if key == 'mes' else filters.mes, factura=filters.factura, q=filters.q) }}">{{ option }}</a>
           {% endfor %}
-        </select>
-      </label>
-      <label class='grid gap-0.5 text-[9px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400'>
-        Cliente
-        <select name='cliente' class='h-7 min-w-0 rounded-md border border-gray-200 bg-white px-2 text-[11px] font-medium normal-case tracking-normal text-gray-800 shadow-sm outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-100 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100'>
-          <option value=''>Todos</option>
-          {% for option in filter_options.clients %}
-          <option value='{{ option }}' {% if filters.cliente == option %}selected{% endif %}>{{ option }}</option>
-          {% endfor %}
-        </select>
-      </label>
-      <label class='grid gap-0.5 text-[9px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400'>
-        Piloto
-        <select name='piloto' class='h-7 min-w-0 rounded-md border border-gray-200 bg-white px-2 text-[11px] font-medium normal-case tracking-normal text-gray-800 shadow-sm outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-100 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100'>
-          <option value=''>Todos</option>
-          {% for option in filter_options.pilots %}
-          <option value='{{ option }}' {% if filters.piloto == option %}selected{% endif %}>{{ option }}</option>
-          {% endfor %}
-        </select>
-      </label>
-      <label class='grid gap-0.5 text-[9px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400'>
-        Mes
-        <select name='mes' class='h-7 min-w-0 rounded-md border border-gray-200 bg-white px-2 text-[11px] font-medium normal-case tracking-normal text-gray-800 shadow-sm outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-100 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100'>
-          <option value=''>Todos</option>
-          {% for option in filter_options.months %}
-          <option value='{{ option }}' {% if filters.mes == option %}selected{% endif %}>{{ option }}</option>
-          {% endfor %}
-        </select>
-      </label>
-      <label class='grid gap-0.5 text-[9px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400'>
-        Buscar
-        <input name='q' value='{{ filters.q }}' placeholder='Factura, potrero...' class='h-7 min-w-0 rounded-md border border-gray-200 bg-white px-2 text-[11px] font-medium normal-case tracking-normal text-gray-800 shadow-sm outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-100 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100'>
-      </label>
-      <div class='flex items-end gap-1.5'>
-        <button type='submit' class='inline-flex h-7 items-center justify-center rounded-md bg-emerald-600 px-3 text-[11px] font-semibold text-white shadow-sm hover:bg-emerald-700'>Filtrar</button>
-        <a href='/dashboard/operacion-realizada/facturacion' class='inline-flex h-7 items-center justify-center rounded-md border border-gray-200 bg-white px-3 text-[11px] font-semibold text-gray-600 shadow-sm hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800'>Limpiar</a>
-      </div>
-    </form>
+        </div>
+      </details>
+      {% endfor %}
+      <details class="billing-filter-detail relative" style="position:relative;min-width:0;">
+        <summary class="list-none cursor-pointer" style="display:block;list-style:none;">
+          <span class="block text-[9px] font-semibold uppercase tracking-wide text-gray-500">Factura</span>
+          <span class="mt-0.5 flex h-7 items-center justify-between rounded-md border border-gray-200 bg-white px-2 text-[11px] font-medium text-gray-800 shadow-sm dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100">
+            {{ 'Sin factura' if filters.factura == 'pendientes' else ('Facturadas' if filters.factura == 'facturadas' else 'Todas') }}
+            <i class="fas fa-chevron-down text-[9px] text-gray-400"></i>
+          </span>
+        </summary>
+        <div class="absolute z-30 mt-1 w-full min-w-[150px] overflow-auto rounded-md border border-gray-200 bg-white py-1 shadow-xl dark:border-gray-700 dark:bg-gray-900">
+          <a class="block px-3 py-1.5 text-[11px] hover:bg-gray-100" href="{{ url_for('core.completed_operation_billing', finca=filters.finca, cliente=filters.cliente, piloto=filters.piloto, mes=filters.mes, factura='', q=filters.q) }}">Todas</a>
+          <a class="block px-3 py-1.5 text-[11px] hover:bg-gray-100" href="{{ url_for('core.completed_operation_billing', finca=filters.finca, cliente=filters.cliente, piloto=filters.piloto, mes=filters.mes, factura='pendientes', q=filters.q) }}">Sin factura</a>
+          <a class="block px-3 py-1.5 text-[11px] hover:bg-gray-100" href="{{ url_for('core.completed_operation_billing', finca=filters.finca, cliente=filters.cliente, piloto=filters.piloto, mes=filters.mes, factura='facturadas', q=filters.q) }}">Facturadas</a>
+        </div>
+      </details>
+      <form method="get" action="/dashboard/operacion-realizada/facturacion" class="contents" style="display:contents;">
+        <input type="hidden" name="finca" value="{{ filters.finca }}"><input type="hidden" name="cliente" value="{{ filters.cliente }}"><input type="hidden" name="piloto" value="{{ filters.piloto }}"><input type="hidden" name="mes" value="{{ filters.mes }}"><input type="hidden" name="factura" value="{{ filters.factura }}">
+        <label class="grid gap-0.5 text-[9px] font-semibold uppercase tracking-wide text-gray-500">Buscar
+          <input name="q" value="{{ filters.q }}" placeholder="Factura, potrero..." class="h-7 rounded-md border border-gray-200 bg-white px-2 text-[11px] normal-case dark:border-gray-700 dark:bg-gray-900">
+        </label>
+        <div class="flex items-end gap-1.5"><button type="submit" class="h-7 rounded-md bg-emerald-600 px-3 text-[11px] font-semibold text-white">Buscar</button><a href="{{ url_for('core.completed_operation_billing') }}" class="inline-flex h-7 items-center rounded-md border bg-white px-3 text-[11px] font-semibold">Limpiar</a></div>
+      </form>
+    </div>
 
     <div class="overflow-auto" style="height: min(560px, calc(100vh - 300px)); min-height: 400px;">
       <table class="min-w-[1660px] w-full border-collapse text-xs">
@@ -129,6 +153,7 @@
             <th class="px-3 py-2 text-right">Precio</th>
             <th class="px-3 py-2 text-right">Total</th>
             <th class="px-3 py-2 text-left">Factura</th>
+            <th class="px-3 py-2 text-left">Asociacion</th>
             <th class="px-3 py-2 text-left">Observaciones</th>
           </tr>
         </thead>
@@ -155,11 +180,12 @@
                 </button>
               </form>
             </td>
+            <td class="px-3 py-2"><button type="button" class="billing-association-open inline-flex h-7 items-center rounded-md border border-sky-200 bg-sky-50 px-2.5 text-[11px] font-semibold text-sky-700" data-action="{{ url_for('core.completed_operation_billing_update_association', record_id=record.id) }}" data-organization-id="{{ record.organization_id or '' }}" data-lot-id="{{ (record.raw_payload or {}).get('lot_id') or '' }}"><i class="fas fa-link mr-1"></i>{{ 'Editar' if record.organization_id and record.paddock_name else 'Asociar' }}</button></td>
             <td class="px-3 py-2 max-w-[260px] truncate" title="{{ record.observations or '' }}">{{ record.observations or '' }}</td>
           </tr>
           {% else %}
           <tr>
-            <td colspan="14" class="px-5 py-8 text-center text-gray-500 dark:text-gray-400">Aun no hay registros de facturacion.</td>
+            <td colspan="15" class="px-5 py-8 text-center text-gray-500 dark:text-gray-400">Aun no hay registros de facturacion.</td>
           </tr>
           {% endfor %}
         </tbody>
@@ -167,10 +193,30 @@
     </div>
   </section>
 </div>
+<div id="billing-association-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-gray-950/55 p-4" role="dialog" aria-modal="true">
+ <div class="w-full max-w-md rounded-xl bg-white p-5 shadow-2xl dark:bg-gray-900">
+  <div class="flex justify-between"><h3 class="font-semibold">Asociar cliente y potrero</h3><button type="button" class="billing-association-close"><i class="fas fa-times"></i></button></div>
+  <form id="billing-association-form" class="mt-4 grid gap-3">
+   <label class="grid gap-1 text-xs font-semibold">Cliente<select name="organization_id" required class="h-9 rounded-md border bg-white px-2 dark:bg-gray-800"></select></label>
+   <label class="grid gap-1 text-xs font-semibold">Finca<select id="billing-association-farm" required class="h-9 rounded-md border bg-white px-2 dark:bg-gray-800"></select></label>
+   <label class="grid gap-1 text-xs font-semibold">Potrero (lote)<select name="lot_id" required class="h-9 rounded-md border bg-white px-2 dark:bg-gray-800"></select></label>
+   <p id="billing-association-error" class="hidden text-xs text-red-600"></p>
+   <div class="flex justify-end gap-2"><button type="button" class="billing-association-close h-8 rounded-md border px-3 text-xs">Cancelar</button><button type="submit" class="h-8 rounded-md bg-emerald-600 px-3 text-xs font-semibold text-white">Guardar asociacion</button></div>
+  </form>
+ </div>
+</div>
 {% endblock %}
 {% block extra_js %}
 {{ super() }}
 <script>
+const billingCatalog={{ billing_catalog|tojson }}, associationModal=document.getElementById('billing-association-modal'), associationForm=document.getElementById('billing-association-form'), organizationSelect=associationForm.querySelector('[name="organization_id"]'), farmSelect=document.getElementById('billing-association-farm'), lotSelect=associationForm.querySelector('[name="lot_id"]'), associationError=document.getElementById('billing-association-error');
+const fillSelect=(select,items,label)=>{select.innerHTML='<option value="">'+label+'</option>'+items.map(item=>'<option value="'+item.id+'">'+item.name+'</option>').join('');};
+const refreshLots=(selected='')=>{fillSelect(lotSelect,billingCatalog.lots.filter(lot=>String(lot.farm_id)===farmSelect.value),'Selecciona un potrero');lotSelect.value=String(selected||'');};
+const refreshFarms=(selected='',lot='')=>{fillSelect(farmSelect,billingCatalog.farms.filter(farm=>String(farm.organization_id)===organizationSelect.value),'Selecciona una finca');farmSelect.value=String(selected||'');refreshLots(lot);};
+fillSelect(organizationSelect,billingCatalog.organizations,'Selecciona un cliente'); organizationSelect.addEventListener('change',()=>refreshFarms()); farmSelect.addEventListener('change',()=>refreshLots());
+document.querySelectorAll('.billing-association-open').forEach(button=>button.addEventListener('click',()=>{associationForm.action=button.dataset.action;organizationSelect.value=button.dataset.organizationId||'';const lot=billingCatalog.lots.find(item=>String(item.id)===button.dataset.lotId);refreshFarms(lot?lot.farm_id:'',button.dataset.lotId);associationError.classList.add('hidden');associationModal.classList.remove('hidden');associationModal.classList.add('flex');}));
+document.querySelectorAll('.billing-association-close').forEach(button=>button.addEventListener('click',()=>{associationModal.classList.add('hidden');associationModal.classList.remove('flex');}));
+associationForm.addEventListener('submit',async event=>{event.preventDefault();const submit=associationForm.querySelector('[type="submit"]');submit.disabled=true;associationError.classList.add('hidden');try{const csrf=typeof getCsrfToken==='function'?getCsrfToken():'';const response=await fetch(associationForm.action,{method:'POST',credentials:'same-origin',headers:csrf?{'X-CSRF-TOKEN':csrf,'X-Requested-With':'XMLHttpRequest'}:{'X-Requested-With':'XMLHttpRequest'},body:new FormData(associationForm)});const result=await response.json();if(!response.ok)throw new Error(result.message||'No se pudo guardar la asociacion.');window.location.reload();}catch(error){associationError.textContent=error.message;associationError.classList.remove('hidden');submit.disabled=false;}});
 document.querySelectorAll('.billing-invoice-form').forEach((form) => {
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
