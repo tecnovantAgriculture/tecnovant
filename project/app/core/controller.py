@@ -128,8 +128,32 @@ def check_permission(required_roles=None, resource_owner_check=False):
                     if user_role == RoleEnum.ADMINISTRATOR.value:
                         return f(*args, **kwargs)
 
-                    # Verificar si el usuario es el propietario del recurso o tiene permisos superiores
-                    if user_id != resource_id and not user.is_reseller():
+                    if kwargs.get("org_id"):
+                        organization = Organization.query.get(resource_id)
+                        if not organization:
+                            raise NotFound("Organization not found.")
+
+                        if user_role == RoleEnum.RESELLER.value:
+                            reseller_package = ResellerPackage.query.filter_by(
+                                reseller_id=user_id
+                            ).first()
+                            has_access = bool(
+                                reseller_package
+                                and any(
+                                    org.id == organization.id
+                                    for org in reseller_package.organizations
+                                )
+                            )
+                        else:
+                            has_access = user.organizations.filter_by(
+                                id=organization.id
+                            ).first() is not None
+
+                        if not has_access:
+                            raise Forbidden(
+                                "You can only modify organizations assigned to you."
+                            )
+                    elif user_id != resource_id and not user.is_reseller():
                         raise Forbidden("You can only modify your own resources.")
 
             return f(*args, **kwargs)
@@ -764,7 +788,9 @@ class OrgView(MethodView):
             return self._get_organization(org_id)
         return self._get_org_list()
 
-    @check_permission(required_roles=["administrator", "reseller"])
+    @check_permission(
+        required_roles=["administrator", "reseller", "org_admin", "org_editor"]
+    )
     def post(self):
         """
         Crea una nueva organización.
@@ -916,6 +942,27 @@ class OrgView(MethodView):
                     pass
             else:
                 raise Forbidden("Only administrators can change reseller assignments.")
+        claims = get_jwt()
+        creator_role = claims.get("rol")
+        creator_id = claims.get("id")
+
+        if creator_role == RoleEnum.RESELLER.value and "reseller_id" not in data:
+            reseller_package = ResellerPackage.query.filter_by(
+                reseller_id=creator_id
+            ).first()
+            if not reseller_package or not reseller_package.assign_client(org):
+                raise BadRequest(
+                    "Reseller has reached the maximum number of clients."
+                )
+        elif creator_role in (
+            RoleEnum.ORG_ADMIN.value,
+            RoleEnum.ORG_EDITOR.value,
+        ):
+            creator = User.query.get(creator_id)
+            if not creator:
+                raise NotFound("User not found.")
+            creator.organizations.append(org)
+
         db.session.add(org)
         db.session.commit()
         return jsonify(self._serialize_organization(org)), 201
