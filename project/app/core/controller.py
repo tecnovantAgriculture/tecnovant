@@ -773,7 +773,7 @@ class OrgView(MethodView):
             JSON: Detalles de la organización creada.
         """
         data = request.get_json()
-        if not data or not all(k in data for k in ("name", "reseller_id")):
+        if not data or not str(data.get("name", "")).strip():
             raise BadRequest("Missing required fields.")
 
         return self._create_organization(data)
