@@ -1093,6 +1093,23 @@ def operational_calendar_update_activity(activity_id):
     })
 
 
+@web.route("/dashboard/operaciones/calendario/actividades/<int:activity_id>/eliminar", methods=["POST"])
+@login_required
+def operational_calendar_delete_activity(activity_id):
+    activity = OperationalActivity.query.get_or_404(activity_id)
+    if activity.billing_record:
+        db.session.delete(activity.billing_record)
+    PilotFlightLog.query.filter_by(activity_id=activity.id).update(
+        {PilotFlightLog.activity_id: None}, synchronize_session=False
+    )
+    PilotOperationReport.query.filter_by(activity_id=activity.id).update(
+        {PilotOperationReport.activity_id: None}, synchronize_session=False
+    )
+    db.session.delete(activity)
+    db.session.commit()
+    return jsonify({"success": True, "message": "Actividad eliminada correctamente.", "activity_id": activity_id})
+
+
 @web.route("/dashboard/operaciones/calendario/actividades/<int:activity_id>/cancelar", methods=["POST"])
 @login_required
 def operational_calendar_cancel_activity(activity_id):
@@ -2198,7 +2215,10 @@ def completed_operation_billing():
     billing_catalog = {
         "organizations": [{"id": item.id, "name": item.name} for item in catalog_organizations],
         "farms": [{"id": item.id, "organization_id": item.org_id, "name": item.name} for item in catalog_farms],
-        "lots": [{"id": item.id, "farm_id": item.farm_id, "name": item.name} for item in catalog_lots],
+        "lots": [
+            {"id": item.id, "farm_id": item.farm_id, "name": item.name, "area": item.area}
+            for item in catalog_lots
+        ],
     }
 
     context = {
@@ -2328,27 +2348,25 @@ def completed_operation_billing_update_association(record_id):
             Farm.org_id == organization.id,
             func.lower(Farm.name) == farm_name.lower(),
         ).first()
-    if not farm and not farm_name:
-        return jsonify({"success": False, "message": "Selecciona una finca o escribe una nueva."}), 400
-    if not farm:
+    if not farm and farm_name:
         farm = Farm(name=farm_name, org_id=organization.id)
         db.session.add(farm)
         db.session.flush()
 
     lot = Lot.query.get(request.form.get("lot_id", type=int))
     lot_name = (request.form.get("lot_name") or "").strip()
-    if lot and lot.farm_id != farm.id:
+    if lot and (not farm or lot.farm_id != farm.id):
         db.session.rollback()
         return jsonify({"success": False, "message": "El potrero no pertenece a la finca seleccionada."}), 400
-    if not lot and lot_name:
+    if not lot and lot_name and not farm:
+        db.session.rollback()
+        return jsonify({"success": False, "message": "Selecciona o crea una finca para guardar el potrero nuevo."}), 400
+    if not lot and lot_name and farm:
         lot = Lot.query.filter(
             Lot.farm_id == farm.id,
             func.lower(Lot.name) == lot_name.lower(),
         ).first()
-    if not lot and not lot_name:
-        db.session.rollback()
-        return jsonify({"success": False, "message": "Selecciona un potrero o escribe uno nuevo."}), 400
-    if not lot:
+    if not lot and lot_name:
         lot_area = _parse_optional_decimal(request.form.get("lot_area"))
         if lot_area is None or lot_area < 0:
             db.session.rollback()
@@ -2360,10 +2378,14 @@ def completed_operation_billing_update_association(record_id):
     unit_price = record.unit_price
     if unit_price is None:
         unit_price = _parse_optional_decimal(str((organization.profile_data or {}).get("billing_unit_price") or ""))
-    area = record.area_hectares if record.area_hectares is not None else (Decimal(str(lot.area)) if lot.area is not None else None)
+    area = record.area_hectares
+    if area is None and lot and lot.area is not None:
+        area = Decimal(str(lot.area))
     record.organization_id = organization.id
-    record.farm_name = farm.name
-    record.paddock_name = lot.name
+    if farm:
+        record.farm_name = farm.name
+    if lot:
+        record.paddock_name = lot.name
     record.area_hectares = area
     record.unit_price = unit_price
     record.invoice_total = area * unit_price if area is not None and unit_price is not None else None
@@ -2371,18 +2393,20 @@ def completed_operation_billing_update_association(record_id):
         **(record.raw_payload or {}),
         "final_client": organization.name,
         "organization_id": organization.id,
-        "farm_id": farm.id,
-        "lot_id": lot.id,
+        "farm_id": farm.id if farm else None,
+        "lot_id": lot.id if lot else None,
         "association_updated_by": current_user_id,
     }
     if record.activity:
         record.activity.client_project = organization.name
-        record.activity.farm_name = farm.name
-        record.activity.lot_code = lot.name
+        if farm:
+            record.activity.farm_name = farm.name
+        if lot:
+            record.activity.lot_code = lot.name
         if record.activity.area_hectares is None and area is not None:
             record.activity.area_hectares = area
     db.session.commit()
-    return jsonify({"success": True, "message": "Cliente y potrero asociados correctamente."})
+    return jsonify({"success": True, "message": "Datos de facturacion asociados correctamente."})
 @web.route("/dashboard/operacion-realizada/facturacion/<int:record_id>/numero", methods=["POST"])
 @login_required
 def completed_operation_billing_update_invoice(record_id):

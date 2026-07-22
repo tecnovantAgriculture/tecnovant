@@ -1007,6 +1007,7 @@
         <textarea id="observations" name="observations" placeholder="Notas operativas, restricciones o detalles del vuelo"></textarea>
       </div>
       <div class="ops-modal-actions">
+        <button type="button" class="ops-btn ops-btn-danger hidden" data-delete-activity><i class="fas fa-trash-alt"></i> Eliminar solicitud</button>
         <button type="button" class="ops-btn ops-btn-danger hidden" data-cancel-activity>Cancelar solicitud</button>
         <button type="button" class="ops-btn hidden" data-complete-activity>Finalizar</button>
         <button type="button" class="ops-btn" data-close-modal>Cerrar</button>
@@ -1083,6 +1084,7 @@ document.addEventListener('DOMContentLoaded', function () {
   const activityAlert = document.getElementById('activity-alert');
   const pilotAlert = document.getElementById('pilot-alert');
   const cancelBtn = document.querySelector('[data-cancel-activity]');
+  const deleteBtn = document.querySelector('[data-delete-activity]');
   const completeBtn = document.querySelector('[data-complete-activity]');
   const organizationSelect = document.getElementById('organization_id');
   const farmSelect = document.getElementById('farm_id');
@@ -1386,6 +1388,7 @@ document.addEventListener('DOMContentLoaded', function () {
       document.getElementById('observations').value = event.observations;
     }
     cancelBtn.classList.toggle('hidden', !event || event.status === 'cancelled' || event.status === 'completed');
+    if (deleteBtn) deleteBtn.classList.toggle('hidden', !event);
     completeBtn.classList.toggle('hidden', !event || event.status === 'cancelled' || event.status === 'completed');
     updateDuration();
     activityModal.classList.add('is-open');
@@ -1516,6 +1519,23 @@ document.addEventListener('DOMContentLoaded', function () {
       closeActivityModal();
     } catch (error) { showAlert(activityAlert, error.message); }
   });
+  if (deleteBtn) deleteBtn.addEventListener('click', async function () {
+    if (!activeActivity) return;
+    const label = activeActivity.farm_name || activeActivity.title || 'esta solicitud';
+    const dates = `${activeActivity.start_date} a ${activeActivity.end_date}`;
+    if (!window.confirm(`¿Eliminar definitivamente "${label}" (${dates})?\n\nEsta acción también elimina su registro de facturación asociado y no se puede deshacer.`)) return;
+    deleteBtn.disabled = true;
+    try {
+      const data = await postForm(`${root.dataset.createActivityUrl}/${activeActivity.id}/eliminar`, document.createElement('form'));
+      activities = activities.filter(item => item.id !== data.activity_id);
+      render();
+      closeActivityModal();
+    } catch (error) {
+      showAlert(activityAlert, error.message);
+    } finally {
+      deleteBtn.disabled = false;
+    }
+  });
   completeBtn.addEventListener('click', async function () {
     if (!activeActivity) return;
     try {
@@ -1529,4 +1549,3 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 </script>
 {% endblock %}
-
