@@ -19,6 +19,15 @@ class OrthophotoMission(db.Model):
     )
     name: Mapped[str] = mapped_column(String(160), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
+    organization_id: Mapped[int | None] = mapped_column(
+        ForeignKey("organizations.id", ondelete="SET NULL"), index=True
+    )
+    farm_id: Mapped[int | None] = mapped_column(
+        ForeignKey("farms.id", ondelete="SET NULL"), index=True
+    )
+    lot_id: Mapped[int | None] = mapped_column(
+        ForeignKey("lots.id", ondelete="SET NULL"), index=True
+    )
     upload_token: Mapped[str] = mapped_column(
         String(80), unique=True, nullable=False, index=True, default=lambda: secrets.token_urlsafe(32)
     )
@@ -39,6 +48,15 @@ class OrthophotoMission(db.Model):
     photos = relationship(
         "OrthophotoPhoto", back_populates="mission", cascade="all, delete-orphan"
     )
+    organization = relationship("Organization")
+    farm = relationship("Farm")
+    lot = relationship("Lot")
+
+    @property
+    def folder_path(self) -> str | None:
+        if not self.organization or not self.farm or not self.lot:
+            return None
+        return f"{self.organization.name} / {self.farm.name} / {self.lot.name} / {self.name}"
 
 
 class OrthophotoPhoto(db.Model):

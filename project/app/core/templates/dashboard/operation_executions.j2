@@ -366,6 +366,32 @@
   }
   .exec-gantt-bar[data-progress-state="empty"] .exec-gantt-progress { background: #94a3b8; }
 
+  .exec-gantt-bar[data-status="scheduled"] {
+    border-color: #f59e0b;
+    background: #fef3c7;
+  }
+  .exec-gantt-bar[data-status="scheduled"] .exec-gantt-label { color: #92400e; }
+  .exec-gantt-bar[data-status="soon"] {
+    border-color: #38bdf8;
+    background: #e0f2fe;
+  }
+  .exec-gantt-bar[data-status="soon"] .exec-gantt-label { color: #075985; }
+  .exec-gantt-bar[data-status="in_progress"] {
+    border-color: #3b82f6;
+    background: #dbeafe;
+  }
+  .exec-gantt-bar[data-status="in_progress"] .exec-gantt-label { color: #1e40af; }
+  .exec-gantt-bar[data-status="reported"] {
+    border-color: #f97316;
+    background: #ffedd5;
+  }
+  .exec-gantt-bar[data-status="reported"] .exec-gantt-label { color: #9a3412; }
+  .exec-gantt-bar[data-status="cancelled"] {
+    border-color: #ef4444;
+    background: #fee2e2;
+  }
+  .exec-gantt-bar[data-status="cancelled"] .exec-gantt-label { color: #991b1b; }
+
   .exec-today-line {
     position: absolute;
     top: 4px;

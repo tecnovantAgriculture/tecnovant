@@ -375,6 +375,13 @@
         });
     }
 
+    /** Reload the view from the server after a successful write. */
+    function refreshViewFromServer() {
+        var refreshUrl = new URL(window.location.href);
+        refreshUrl.searchParams.set('_crud_refresh', String(Date.now()));
+        window.location.replace(refreshUrl.toString());
+    }
+
     /**
      * Save or update an entity.
      */
@@ -421,7 +428,7 @@
             }
 
             if (response.ok) {
-                location.reload();
+                refreshViewFromServer();
             } else {
                 alert('Error al guardar el ' + entityNameLower);
             }

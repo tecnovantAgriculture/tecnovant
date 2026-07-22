@@ -795,6 +795,10 @@
      data-create-pilot-url="{{ url_for('core.operational_calendar_create_pilot') }}">
     <section class="ops-top-actions">
     <div class="ops-actions">
+      <a class="ops-btn" href="{{ url_for('core.operation_executions') }}">
+        <i class="fas fa-tasks"></i>
+        Ejecuciones
+      </a>
       <button type="button" class="ops-btn" data-open-pilot>
         <i class="fas fa-user-plus"></i>
         Registrar piloto
@@ -919,7 +923,10 @@
       </div>
       <div class="ops-form-grid">
         <div class="ops-field">
-          <label for="farm_id">Finca</label>
+          <label for="farm_id" style="display:flex;align-items:center;justify-content:space-between;">
+            <span>Finca</span>
+            <button type="button" id="calendar-new-farm-toggle" class="ops-btn" style="min-height:26px;padding:0 8px;" title="Crear nueva finca"><i class="fas fa-pencil-alt"></i></button>
+          </label>
           <select id="farm_id" name="farm_id">
             <option value="">Seleccionar finca</option>
           </select>
@@ -927,11 +934,14 @@
           <input id="farm_name" name="farm_name" type="hidden" required>
         </div>
         <div class="ops-field">
-          <label for="lot_id">Lote</label>
+          <label for="lot_id" style="display:flex;align-items:center;justify-content:space-between;">
+            <span>Potrero (lote)</span>
+            <button type="button" id="calendar-new-lot-toggle" class="ops-btn" style="min-height:26px;padding:0 8px;" title="Crear nuevo potrero"><i class="fas fa-pencil-alt"></i></button>
+          </label>
           <select id="lot_id" name="lot_id">
             <option value="">Seleccionar lote</option>
           </select>
-          <input id="lot_code_manual" placeholder="Escribir lote">
+          <input id="lot_code_manual" placeholder="Nombre del nuevo potrero">
           <input id="lot_code" name="lot_code" type="hidden">
         </div>
       </div>
@@ -940,6 +950,12 @@
           <label for="area_hectares">Area</label>
           <input id="area_hectares" name="area_hectares" inputmode="decimal" placeholder="Ej: 9,9">
         </div>
+        <div class="ops-field">
+          <label for="unit_price">Valor por hectarea</label>
+          <input id="unit_price" name="unit_price" type="number" min="0" step="0.01" placeholder="Ej: 150000">
+        </div>
+      </div>
+      <div class="ops-form-grid">
         <div class="ops-field">
           <label for="rest_days">Dias de descanso</label>
           <input id="rest_days" name="rest_days" type="number" min="0" step="1" placeholder="Ej: 10">
@@ -1053,7 +1069,7 @@ document.addEventListener('DOMContentLoaded', function () {
   const clients = {{ clients_json | tojson }};
   const farms = {{ farms_json | tojson }};
   const lots = {{ lots_json | tojson }};
-  let currentDate = activities.length ? parseDate(activities[0].date) : new Date();
+  let currentDate = new Date();
   let currentView = 'month';
   let activeActivity = null;
 
@@ -1076,6 +1092,10 @@ document.addEventListener('DOMContentLoaded', function () {
   const farmNameManual = document.getElementById('farm_name_manual');
   const lotCodeInput = document.getElementById('lot_code');
   const lotCodeManual = document.getElementById('lot_code_manual');
+  const newFarmToggle = document.getElementById('calendar-new-farm-toggle');
+  const newLotToggle = document.getElementById('calendar-new-lot-toggle');
+  let forceNewFarm = false;
+  let forceNewLot = false;
 
   function pad(value) { return String(value).padStart(2, '0'); }
   function dateKey(date) { return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`; }
@@ -1114,9 +1134,11 @@ document.addEventListener('DOMContentLoaded', function () {
     const available = farms.filter(item => String(item.organization_id) === String(organizationId));
     farmSelect.innerHTML = '<option value="">Seleccionar finca</option>' + available.map(item => `<option value="${item.id}">${item.name}</option>`).join('');
     farmSelect.value = selectedId ? String(selectedId) : '';
-    const manualMode = available.length === 0;
+    const manualMode = forceNewFarm || available.length === 0;
     farmSelect.style.display = manualMode ? 'none' : '';
+    farmSelect.disabled = manualMode;
     farmNameManual.style.display = manualMode ? '' : 'none';
+    farmNameManual.required = manualMode;
     if (!manualMode) farmNameManual.value = '';
     farmNameInput.value = manualMode ? farmNameManual.value.trim() : optionText(farmSelect);
   }
@@ -1124,9 +1146,11 @@ document.addEventListener('DOMContentLoaded', function () {
     const available = lots.filter(item => String(item.farm_id) === String(farmId));
     lotSelect.innerHTML = '<option value="">Seleccionar lote</option>' + available.map(item => `<option value="${item.id}" data-area="${item.area || ''}">${item.name}</option>`).join('');
     lotSelect.value = selectedId ? String(selectedId) : '';
-    const manualMode = available.length === 0;
+    const manualMode = forceNewLot || available.length === 0;
     lotSelect.style.display = manualMode ? 'none' : '';
+    lotSelect.disabled = manualMode;
     lotCodeManual.style.display = manualMode ? '' : 'none';
+    lotCodeManual.required = manualMode;
     if (!manualMode) lotCodeManual.value = '';
     lotCodeInput.value = manualMode ? lotCodeManual.value.trim() : optionText(lotSelect);
   }
@@ -1324,6 +1348,8 @@ document.addEventListener('DOMContentLoaded', function () {
   function openActivityModal(date, time, event) {
     clearAlert(activityAlert);
     activityForm.reset();
+    forceNewFarm = false;
+    forceNewLot = false;
     activeActivity = event || null;
     organizationSelect.value = '';
     renderFarmOptions('', '');
@@ -1342,13 +1368,16 @@ document.addEventListener('DOMContentLoaded', function () {
       const organizationId = event.organization_id || findClientId(event.client_project);
       organizationSelect.value = organizationId ? String(organizationId) : '';
       const farmId = event.farm_id || findFarmId(event.farm_name || '', organizationSelect.value);
+      forceNewFarm = !farmId && Boolean(event.farm_name);
       renderFarmOptions(organizationSelect.value, farmId);
       if (!farmId) farmNameManual.value = event.farm_name || '';
       const lotId = event.lot_id || findLotId(event.lot_code || '', farmSelect.value);
+      forceNewLot = !lotId && Boolean(event.lot_code);
       renderLotOptions(farmSelect.value, lotId);
       if (!lotId) lotCodeManual.value = event.lot_code || '';
       syncCatalogFields();
       document.getElementById('area_hectares').value = event.area_hectares || '';
+      document.getElementById('unit_price').value = event.unit_price || '';
       document.getElementById('rest_days').value = event.rest_days || '';
       document.getElementById('paddocks').value = event.paddocks || '';
       document.getElementById('pilot_id').value = event.pilot_id;
@@ -1416,11 +1445,16 @@ document.addEventListener('DOMContentLoaded', function () {
   document.getElementById('start_time').addEventListener('change', updateDuration);
   document.getElementById('end_time').addEventListener('change', updateDuration);
   organizationSelect.addEventListener('change', function () {
+    forceNewFarm = false;
+    forceNewLot = false;
     renderFarmOptions(this.value, '');
     renderLotOptions('', '');
     syncCatalogFields();
+    const client = clients.find(item => String(item.id) === String(this.value));
+    document.getElementById('unit_price').value = client ? (client.unit_price || '') : '';
   });
   farmSelect.addEventListener('change', function () {
+    forceNewLot = false;
     renderLotOptions(this.value, '');
     syncCatalogFields();
     if (!document.getElementById('place').value) document.getElementById('place').value = farmNameInput.value;
@@ -1432,6 +1466,18 @@ document.addEventListener('DOMContentLoaded', function () {
   });
   farmNameManual.addEventListener('input', syncCatalogFields);
   lotCodeManual.addEventListener('input', syncCatalogFields);
+  newFarmToggle.addEventListener('click', function () {
+    forceNewFarm = !forceNewFarm;
+    forceNewLot = forceNewFarm;
+    renderFarmOptions(organizationSelect.value, '');
+    renderLotOptions('', '');
+    syncCatalogFields();
+  });
+  newLotToggle.addEventListener('click', function () {
+    forceNewLot = !forceNewLot;
+    renderLotOptions(farmSelect.value, '');
+    syncCatalogFields();
+  });
 
   activityForm.addEventListener('submit', async function (event) {
     event.preventDefault();
@@ -1483,10 +1529,4 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 </script>
 {% endblock %}
-
-
-
-
-
-
 

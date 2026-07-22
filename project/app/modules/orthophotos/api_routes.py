@@ -3,6 +3,7 @@ from __future__ import annotations
 from flask import current_app, jsonify, request
 
 from app.extensions import db
+from app.modules.foliage.models import Farm, Lot
 from app.modules.media.controller import MediaController
 
 from . import orthophotos_api as api
@@ -14,6 +15,20 @@ def upload_photos():
     mission_id = request.form.get("mission_id", type=int)
     mission_name = (request.form.get("mission_name") or "").strip()
     upload_session_id = (request.form.get("upload_session_id") or "").strip()
+    organization_id = request.form.get("organization_id", type=int)
+    farm_id = request.form.get("farm_id", type=int)
+    lot_id = request.form.get("lot_id", type=int)
+    has_location = any((organization_id, farm_id, lot_id))
+    farm = Farm.query.get(farm_id) if farm_id else None
+    lot = Lot.query.get(lot_id) if lot_id else None
+    if has_location and (
+        not organization_id
+        or not farm
+        or farm.org_id != organization_id
+        or not lot
+        or lot.farm_id != farm.id
+    ):
+        return jsonify({"success": False, "message": "La ruta cliente, finca y lote no es valida."}), 400
     mission = OrthophotoMission.query.get(mission_id) if mission_id else None
     if mission is None:
         if upload_session_id:
@@ -36,6 +51,9 @@ def upload_photos():
         mission = OrthophotoMission(
             name=mission_name or "Carga de piloto",
             description="Mision creada desde el portal publico de pilotos.",
+            organization_id=organization_id if has_location else None,
+            farm_id=farm.id if has_location else None,
+            lot_id=lot.id if has_location else None,
         )
         if upload_session_id:
             mission.upload_token = upload_session_id
@@ -87,6 +105,13 @@ def upload_photos():
             "uploaded": uploaded,
             "errors": errors,
             "photo_count": len(mission.photos),
-            "mission": {"id": mission.id, "name": mission.name},
+            "mission": {
+                "id": mission.id,
+                "name": mission.name,
+                "organization_id": mission.organization_id,
+                "farm_id": mission.farm_id,
+                "lot_id": mission.lot_id,
+                "folder_path": mission.folder_path,
+            },
         }
     ), 200 if uploaded else 400

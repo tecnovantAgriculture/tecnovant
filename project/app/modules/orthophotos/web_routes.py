@@ -20,13 +20,17 @@ from flask import (
 )
 from urllib.parse import urljoin
 
+from flask_jwt_extended import get_jwt_identity
+
 from app.core.controller import login_required
+from app.core.models import get_clients_for_user
 from app.extensions import db
 from app.helpers.dashboard_helpers import get_dashboard_menu
 from app.modules.media.controller import MediaController
 from app.modules.media.helpers import _media_root
 from app.modules.media.models import StorageLocation
 from app.modules.media.storage import ensure_local_file
+from app.modules.foliage.models import Farm, Lot
 
 from . import orthophotos as web
 from .gcp_compute_client import GCPComputeClient, env_flag
@@ -395,13 +399,33 @@ def _refresh_processing_status(mission: OrthophotoMission) -> None:
 @web.route("/dashboard/orthophotos", methods=["GET", "POST"])
 @login_required
 def dashboard():
+    user_id = get_jwt_identity()
+    clients = get_clients_for_user(user_id)
+    client_ids = {client.id for client in clients}
     if request.method == "POST":
         name = (request.form.get("name") or "").strip()
         description = (request.form.get("description") or "").strip() or None
+        organization_id = request.form.get("organization_id", type=int)
+        farm_id = request.form.get("farm_id", type=int)
+        lot_id = request.form.get("lot_id", type=int)
+        farm = Farm.query.get(farm_id) if farm_id else None
+        lot = Lot.query.get(lot_id) if lot_id else None
         if not name:
             flash("Escribe un nombre para la mision.", "error")
+        elif organization_id not in client_ids:
+            flash("Selecciona un cliente valido.", "error")
+        elif not farm or farm.org_id != organization_id:
+            flash("Selecciona una finca del cliente.", "error")
+        elif not lot or lot.farm_id != farm.id:
+            flash("Selecciona un lote de la finca.", "error")
         else:
-            mission = OrthophotoMission(name=name, description=description)
+            mission = OrthophotoMission(
+                name=name,
+                description=description,
+                organization_id=organization_id,
+                farm_id=farm.id,
+                lot_id=lot.id,
+            )
             db.session.add(mission)
             db.session.commit()
             redirect_url = url_for("orthophotos.dashboard", created=mission.id)
@@ -426,6 +450,24 @@ def dashboard():
     created_id = request.args.get("created", type=int)
     created_mission = OrthophotoMission.query.get(created_id) if created_id else None
     active_processing_count = sum(1 for mission in missions if mission.status in ACTIVE_STATUSES)
+    location_options = [
+        {
+            "id": client.id,
+            "name": client.name,
+            "farms": [
+                {
+                    "id": farm.id,
+                    "name": farm.name,
+                    "lots": [
+                        {"id": lot.id, "name": lot.name}
+                        for lot in farm.lots.filter_by(active=True).order_by(Lot.name).all()
+                    ],
+                }
+                for farm in Farm.query.filter_by(org_id=client.id).order_by(Farm.name).all()
+            ],
+        }
+        for client in sorted(clients, key=lambda item: item.name.lower())
+    ]
     webodm_vm_status = {
         "status": "loading",
         "label": "Consultando procesamiento",
@@ -438,6 +480,7 @@ def dashboard():
         created_mission=created_mission,
         webodm_vm_status=webodm_vm_status,
         active_processing_count=active_processing_count,
+        location_options=location_options,
         pilot_upload_url=lambda mission_id: _public_url_for(
             "orthophotos.pilot_upload",
             mission_id=mission_id,

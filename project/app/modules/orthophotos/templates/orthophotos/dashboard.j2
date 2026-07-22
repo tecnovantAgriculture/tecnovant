@@ -192,8 +192,33 @@
   }
 
   .orth-file-input {
-    display: none;
+    display: block;
+    width: 100%;
   }
+
+  .orth-dialog {
+    width: min(560px, calc(100vw - 32px));
+    padding: 0;
+    border: 0;
+    border-radius: 16px;
+    box-shadow: 0 24px 70px rgba(23, 63, 54, 0.24);
+  }
+
+  .orth-dialog::backdrop { background: rgba(15, 23, 42, 0.48); }
+  .orth-dialog-form { display: grid; gap: 16px; padding: 24px; }
+  .orth-dialog-title { margin: 0; color: #17221e; font-size: 18px; font-weight: 600; }
+  .orth-field { display: grid; gap: 6px; }
+  .orth-field label { color: #35443d; font-size: 12px; font-weight: 700; }
+  .orth-field input, .orth-field select {
+    width: 100%;
+    min-height: 42px;
+    padding: 8px 10px;
+    border: 1px solid #dbe6dd;
+    border-radius: 10px;
+    background: #fff;
+    color: #17221e;
+  }
+  .orth-dialog-actions { display: flex; justify-content: flex-end; gap: 10px; }
 
   .orth-card-actions {
     display: flex;
@@ -347,19 +372,49 @@
         <p>Seguimiento operativo de vuelos y ortofotos generadas.</p>
       </div>
       <div class="orth-card-actions">
-        <form class="orth-upload-form" data-create-mission="true">
-          <input class="orth-file-input" type="file" name="files" accept=".jpg,.jpeg,.png,.tif,.tiff,image/jpeg,image/png,image/tiff" multiple>
-          <button class="orth-btn orth-btn-primary" type="button">
-            <i class="fas fa-upload"></i>
-            Subir imagenes
-          </button>
-        </form>
+        <button id="open-orth-upload" class="orth-btn orth-btn-primary" type="button">
+          <i class="fas fa-upload"></i>
+          Subir imagenes
+        </button>
         <span class="orth-chip">
           <i class="fas fa-layer-group"></i>
           {{ missions|length }} registradas
         </span>
       </div>
     </div>
+
+    <dialog id="orth-upload-dialog" class="orth-dialog">
+      <form id="orth-upload-form" class="orth-dialog-form">
+        <div>
+          <h3 class="orth-dialog-title">Nueva mision de fotogrametria</h3>
+          <p class="orth-muted">Selecciona la carpeta de destino antes de cargar las imagenes.</p>
+        </div>
+        <div class="orth-field">
+          <label for="orth-client">Cliente</label>
+          <select id="orth-client" required><option value="">Selecciona un cliente</option></select>
+        </div>
+        <div class="orth-field">
+          <label for="orth-farm">Finca</label>
+          <select id="orth-farm" required disabled><option value="">Selecciona una finca</option></select>
+        </div>
+        <div class="orth-field">
+          <label for="orth-lot">Lote</label>
+          <select id="orth-lot" required disabled><option value="">Selecciona un lote</option></select>
+        </div>
+        <div class="orth-field">
+          <label for="orth-mission-name">Nombre de la mision</label>
+          <input id="orth-mission-name" maxlength="160" required placeholder="Ej: Vuelo lote norte julio 2026">
+        </div>
+        <div class="orth-field">
+          <label for="orth-files">Imagenes</label>
+          <input id="orth-files" class="orth-file-input" type="file" name="files" accept=".jpg,.jpeg,.png,.tif,.tiff,image/jpeg,image/png,image/tiff" multiple required>
+        </div>
+        <div class="orth-dialog-actions">
+          <button id="cancel-orth-upload" class="orth-btn" type="button">Cancelar</button>
+          <button class="orth-btn orth-btn-primary" type="submit"><i class="fas fa-upload"></i> Crear y subir</button>
+        </div>
+      </form>
+    </dialog>
 
     <div class="orth-table-wrap">
       <table class="orth-table">
@@ -377,6 +432,7 @@
           <tr>
             <td>
               <div class="orth-mission-name">{{ mission.name }}</div>
+              {% if mission.folder_path %}<div class="orth-muted"><i class="fas fa-folder"></i> {{ mission.folder_path }}</div>{% endif %}
               {% if mission.description %}<div class="orth-muted">{{ mission.description }}</div>{% endif %}
             </td>
             <td>{{ mission.photos|length }}</td>
@@ -472,7 +528,96 @@ document.addEventListener('DOMContentLoaded', () => {
     window.setTimeout(() => window.location.reload(), 30000);
   }
 
-  document.querySelectorAll('.orth-upload-form').forEach((uploadForm) => {
+  const locations = {{ location_options|tojson }};
+  const uploadDialog = document.getElementById('orth-upload-dialog');
+  const uploadForm = document.getElementById('orth-upload-form');
+  const openUpload = document.getElementById('open-orth-upload');
+  const cancelUpload = document.getElementById('cancel-orth-upload');
+  const clientSelect = document.getElementById('orth-client');
+  const farmSelect = document.getElementById('orth-farm');
+  const lotSelect = document.getElementById('orth-lot');
+  const missionNameInput = document.getElementById('orth-mission-name');
+  const filesInput = document.getElementById('orth-files');
+
+  const fillSelect = (select, items, placeholder) => {
+    select.innerHTML = `<option value="">${placeholder}</option>`;
+    items.forEach((item) => select.add(new Option(item.name, String(item.id))));
+    select.disabled = items.length === 0;
+  };
+
+  fillSelect(clientSelect, locations, 'Selecciona un cliente');
+  openUpload.addEventListener('click', () => {
+    missionNameInput.value = `Mision ${new Date().toLocaleString('es-CO')}`;
+    uploadDialog.showModal();
+  });
+  cancelUpload.addEventListener('click', () => uploadDialog.close());
+  clientSelect.addEventListener('change', () => {
+    const client = locations.find((item) => String(item.id) === clientSelect.value);
+    fillSelect(farmSelect, client ? client.farms : [], 'Selecciona una finca');
+    fillSelect(lotSelect, [], 'Selecciona un lote');
+  });
+  farmSelect.addEventListener('change', () => {
+    const client = locations.find((item) => String(item.id) === clientSelect.value);
+    const farm = client && client.farms.find((item) => String(item.id) === farmSelect.value);
+    fillSelect(lotSelect, farm ? farm.lots : [], 'Selecciona un lote');
+  });
+
+  uploadForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const files = Array.from(filesInput.files || []);
+    if (!uploadForm.reportValidity() || !files.length) return;
+    const button = uploadForm.querySelector('button[type="submit"]');
+    const originalContent = button.innerHTML;
+    const uploadSessionId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    let uploadedCount = 0;
+    const errors = [];
+    button.disabled = true;
+
+    try {
+      for (let index = 0; index < files.length; index += 1) {
+        const file = files[index];
+        const formData = new FormData();
+        formData.append('files', file);
+        formData.append('mission_name', missionNameInput.value.trim());
+        formData.append('upload_session_id', uploadSessionId);
+        formData.append('organization_id', clientSelect.value);
+        formData.append('farm_id', farmSelect.value);
+        formData.append('lot_id', lotSelect.value);
+        button.textContent = `Subiendo ${index + 1}/${files.length}...`;
+        try {
+          const response = await fetch(uploadEndpoint, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+              'X-CSRF-TOKEN': typeof getCsrfToken === 'function' ? getCsrfToken() : '',
+              'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: formData
+          });
+          const data = await response.json().catch(() => ({}));
+          if (response.ok && data.uploaded && data.uploaded.length) {
+            uploadedCount += data.uploaded.length;
+          } else {
+            const firstError = data.errors && data.errors.length ? data.errors[0].message : null;
+            errors.push(`${file.name}: ${firstError || data.message || 'No se pudo subir.'}`);
+          }
+        } catch (error) {
+          errors.push(`${file.name}: se perdio la conexion durante la subida.`);
+          break;
+        }
+      }
+      if (uploadedCount > 0) {
+        window.location.reload();
+        return;
+      }
+      alert(errors.join('\n') || 'No se pudieron subir las imagenes.');
+    } finally {
+      button.disabled = false;
+      button.innerHTML = originalContent;
+    }
+  });
+
+  document.querySelectorAll('.legacy-orth-upload-form').forEach((uploadForm) => {
     const input = uploadForm.querySelector('.orth-file-input');
     const button = uploadForm.querySelector('button');
     const missionId = uploadForm.dataset.missionId;

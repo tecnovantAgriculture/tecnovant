@@ -170,6 +170,7 @@ def _activity_payload(activity, farm_lookup=None, lot_lookup=None):
         "farm_name": activity.farm_name or "",
         "paddocks": activity.paddocks or "",
         "area_hectares": str(activity.area_hectares) if activity.area_hectares is not None else "",
+        "unit_price": str(billing_record.unit_price) if billing_record and billing_record.unit_price is not None else "",
         "rest_days": activity.rest_days if activity.rest_days is not None else "",
         "lot_code": activity.lot_code or "",
         "pilot_id": activity.pilot_id,
@@ -190,25 +191,74 @@ def _month_name_es(value):
     return names[value.month - 1]
 
 
-def _resolve_activity_catalog_selection():
+def _resolve_activity_catalog_selection(create_missing=False):
     from app.modules.foliage.models import Farm, Lot
 
-    organization = Organization.query.get(request.form.get("organization_id", type=int))
-    farm = Farm.query.get(request.form.get("farm_id", type=int))
-    lot = Lot.query.get(request.form.get("lot_id", type=int))
+    g.activity_catalog_error = None
+    organization_id = request.form.get("organization_id", type=int)
+    farm_id = request.form.get("farm_id", type=int)
+    lot_id = request.form.get("lot_id", type=int)
+    organization = Organization.query.get(organization_id) if organization_id else None
+    farm = Farm.query.get(farm_id) if farm_id else None
+    lot = Lot.query.get(lot_id) if lot_id else None
 
     if lot:
         farm = lot.farm
-    if farm and (not organization or organization.id != farm.org_id):
-        organization = farm.organization
+    if farm and organization and organization.id != farm.org_id:
+        g.activity_catalog_error = "La finca no pertenece al cliente seleccionado."
+        return organization, None, None
+
+    if create_missing and organization:
+        farm_name = (request.form.get("farm_name") or "").strip()
+        if not farm and farm_name:
+            farm = Farm.query.filter(
+                Farm.org_id == organization.id,
+                func.lower(Farm.name) == farm_name.lower(),
+            ).first()
+            if not farm:
+                farm = Farm(name=farm_name, org_id=organization.id)
+                db.session.add(farm)
+                db.session.flush()
+
+        lot_name = (request.form.get("lot_code") or "").strip()
+        if farm and not lot and lot_name:
+            lot = Lot.query.filter(
+                Lot.farm_id == farm.id,
+                func.lower(Lot.name) == lot_name.lower(),
+            ).first()
+            if not lot:
+                lot_area = _parse_optional_decimal(request.form.get("area_hectares"))
+                if lot_area is None or lot_area <= 0:
+                    g.activity_catalog_error = "Escribe el area del nuevo potrero en hectareas."
+                else:
+                    lot = Lot(name=lot_name, area=float(lot_area), farm_id=farm.id, active=True)
+                    db.session.add(lot)
+                    db.session.flush()
+
+    if lot and farm and lot.farm_id != farm.id:
+        g.activity_catalog_error = "El potrero no pertenece a la finca seleccionada."
+        return organization, farm, None
 
     return organization, farm, lot
 
 
-def _sync_activity_billing(activity):
+def _sync_activity_billing(activity, requested_unit_price=None):
+    from app.modules.foliage.models import Farm, Lot
+
     organization, farm, lot = _resolve_activity_catalog_selection()
     if not organization and activity.client_project:
         organization = Organization.query.filter(func.lower(Organization.name) == activity.client_project.lower()).first()
+
+    if organization and not farm and activity.farm_name:
+        farm = Farm.query.filter(
+            Farm.org_id == organization.id,
+            func.lower(Farm.name) == activity.farm_name.lower(),
+        ).first()
+    if farm and not lot and activity.lot_code:
+        lot = Lot.query.filter(
+            Lot.farm_id == farm.id,
+            func.lower(Lot.name) == activity.lot_code.lower(),
+        ).first()
 
     if not organization and not farm:
         return
@@ -219,7 +269,11 @@ def _sync_activity_billing(activity):
         db.session.add(record)
 
     profile_data = organization.profile_data or {} if organization else {}
-    unit_price = _parse_optional_decimal(str(profile_data.get("billing_unit_price") or ""))
+    unit_price = requested_unit_price
+    if unit_price is None:
+        unit_price = record.unit_price
+    if unit_price is None:
+        unit_price = _parse_optional_decimal(str(profile_data.get("billing_unit_price") or ""))
     area = activity.area_hectares or (Decimal(str(lot.area)) if lot and lot.area is not None else None)
     hours = Decimal(activity.duration_minutes or 0) / Decimal(60) if activity.duration_minutes else None
 
@@ -237,10 +291,15 @@ def _sync_activity_billing(activity):
     record.hectares_per_hour = (area / hours) if area is not None and hours and hours > 0 else None
     record.observations = activity.observations
     record.raw_payload = {
+        **(record.raw_payload or {}),
         "source": "operational_calendar",
         "activity_id": activity.id,
         "activity_status": activity.status,
         "invoice_status": "pending" if not record.invoice_number else "invoiced",
+        "final_client": organization.name if organization else activity.client_project,
+        "organization_id": organization.id if organization else None,
+        "farm_id": farm.id if farm else None,
+        "lot_id": lot.id if lot else None,
     }
 
 def _has_activity_conflict(pilot_id, drone_id, starts_at, ends_at, activity_id=None):
@@ -265,7 +324,7 @@ def _activity_form_payload():
     starts_at = _parse_datetime_fields(start_day, start_time)
     ends_at = _parse_datetime_fields(end_day, end_time)
     duration_minutes = int((ends_at - starts_at).total_seconds() // 60) if starts_at and ends_at else 0
-    organization, farm, lot = _resolve_activity_catalog_selection()
+    organization, farm, lot = _resolve_activity_catalog_selection(create_missing=True)
     client_project = organization.name if organization else (request.form.get("client_project") or "").strip()
     farm_name = farm.name if farm else (request.form.get("farm_name") or "").strip()
     lot_code = lot.name if lot else (request.form.get("lot_code") or "").strip()
@@ -284,6 +343,7 @@ def _activity_form_payload():
         "farm_name": farm_name or None,
         "paddocks": (request.form.get("paddocks") or "").strip() or None,
         "area_hectares": area_hectares,
+        "unit_price": _parse_optional_decimal(request.form.get("unit_price")),
         "rest_days": request.form.get("rest_days", type=int),
         "lot_code": lot_code or None,
         "pilot_id": request.form.get("pilot_id", type=int),
@@ -293,13 +353,17 @@ def _activity_form_payload():
     }
 
 def _validate_activity_payload(payload, activity_id=None):
-    required = ["title", "operation_type", "starts_at", "ends_at", "place", "client_project", "farm_name", "pilot_id", "drone_id"]
+    if getattr(g, "activity_catalog_error", None):
+        return g.activity_catalog_error
+    required = ["title", "operation_type", "starts_at", "ends_at", "place", "client_project", "farm_name", "lot_code", "pilot_id", "drone_id"]
     if any(not payload.get(key) for key in required):
-        return "Completa los campos obligatorios, cliente y finca."
+        return "Completa los campos obligatorios, cliente, finca y potrero."
     if payload["duration_minutes"] <= 0:
         return "La hora fin debe ser posterior a la hora inicio."
-    if payload.get("area_hectares") is not None and payload["area_hectares"] < 0:
-        return "El area no puede ser negativa."
+    if payload.get("area_hectares") is None or payload["area_hectares"] <= 0:
+        return "El area debe ser mayor que cero."
+    if payload.get("unit_price") is None or payload["unit_price"] < 0:
+        return "Escribe un valor por hectarea valido."
     if payload.get("rest_days") is not None and payload["rest_days"] < 0:
         return "Los dias de descanso no pueden ser negativos."
 
@@ -987,6 +1051,7 @@ def operational_calendar_create_activity():
     if error:
         return jsonify({"success": False, "message": error}), 400
 
+    unit_price = payload.pop("unit_price", None)
     activity = OperationalActivity(
         **payload,
         created_by_id=get_jwt_identity(),
@@ -994,7 +1059,7 @@ def operational_calendar_create_activity():
     db.session.add(activity)
     db.session.flush()
     _activity_log(activity, "created", "Actividad creada.")
-    _sync_activity_billing(activity)
+    _sync_activity_billing(activity, unit_price)
     db.session.commit()
     return jsonify({
         "success": True,
@@ -1015,10 +1080,11 @@ def operational_calendar_update_activity(activity_id):
     if error:
         return jsonify({"success": False, "message": error}), 400
 
+    unit_price = payload.pop("unit_price", None)
     for key, value in payload.items():
         setattr(activity, key, value)
     _activity_log(activity, "updated", "Actividad actualizada.")
-    _sync_activity_billing(activity)
+    _sync_activity_billing(activity, unit_price)
     db.session.commit()
     return jsonify({
         "success": True,
@@ -1254,9 +1320,9 @@ def pilot_flight_log():
         )
         db.session.add(flight_log)
         drone.flight_hours = (drone.flight_hours or Decimal("0")) + (Decimal(minutes) / Decimal(60))
-        if activity and activity.status != "cancelled":
-            activity.status = "completed"
-            activity.completed_at = datetime.utcnow()
+        if activity and activity.status not in {"cancelled", "completed"}:
+            activity.status = "in_progress"
+            activity.completed_at = None
             _activity_log(activity, "pilot_log_saved", "El piloto registro bitacora manual.")
         db.session.commit()
         flash("Bitacora registrada correctamente.", "success")
@@ -1430,6 +1496,7 @@ def pilot_finish_activity(activity_id):
         activity.status = "completed"
         activity.completed_at = datetime.utcnow()
         _activity_log(activity, "pilot_completed", "El piloto marco la operacion como finalizada.")
+        _sync_activity_billing(activity)
         db.session.commit()
         flash("Operacion finalizada.", "success")
     return redirect(url_for("core.pilot_activity_detail", activity_id=activity.id))
@@ -1476,8 +1543,9 @@ def pilot_save_flight_log(activity_id):
 
     delta_hours = Decimal(minutes - previous_minutes) / Decimal(60)
     activity.drone.flight_hours = (activity.drone.flight_hours or Decimal("0")) + delta_hours
-    activity.status = "completed"
-    activity.completed_at = datetime.utcnow()
+    if activity.status not in {"cancelled", "completed"}:
+        activity.status = "in_progress"
+        activity.completed_at = None
     _activity_log(activity, "pilot_log_saved", "El piloto registro bitacora de vuelo.")
     db.session.commit()
     flash("Bitacora guardada correctamente.", "success")
@@ -1562,9 +1630,11 @@ def operation_executions():
             return 0
         if activity.status == "completed" or activity.completed_at:
             return 100
+        if activity.status != "in_progress":
+            return 0
         total_seconds = max((activity.ends_at - activity.starts_at).total_seconds(), 1)
         elapsed = (now - activity.starts_at).total_seconds()
-        return max(0, min(100, int(round((elapsed / total_seconds) * 100))))
+        return max(1, min(99, int(round((elapsed / total_seconds) * 100))))
 
     def execution_status(activity, progress):
         has_report = any(getattr(report, "status", "open") == "open" for report in getattr(activity, "pilot_reports", []))
@@ -1572,13 +1642,13 @@ def operation_executions():
             return "cancelled", "Cancelada"
         if has_report and activity.status != "completed":
             return "reported", "Con novedad"
-        if activity.status == "completed" or progress >= 100:
+        if activity.status == "completed":
             return "completed", "Finalizada"
-        if activity.status == "in_progress" or (activity.starts_at <= now <= activity.ends_at):
-            return "in_progress", "En ejecución"
+        if activity.status == "in_progress":
+            return "in_progress", "En proceso"
         if activity.starts_at > now and activity.starts_at <= now + timedelta(hours=24):
             return "soon", "Por iniciar"
-        return "scheduled", "Programada"
+        return "scheduled", "Pendiente"
 
     def fmt_dt(value):
         return value.strftime("%d/%m/%Y %I:%M %p")
@@ -1615,7 +1685,8 @@ def operation_executions():
             value = getattr(log, "total_hectares", None)
             if value is not None:
                 hectares += Decimal(str(value))
-        if hectares == 0 and billing_record and billing_record.area_hectares is not None:
+        billing_source = ((billing_record.raw_payload or {}).get("source") if billing_record else "") or ""
+        if hectares == 0 and billing_record and billing_record.area_hectares is not None and billing_source != "operational_calendar":
             hectares = Decimal(str(billing_record.area_hectares))
         planned_hectares = Decimal(str(activity.area_hectares)) if activity.area_hectares is not None else Decimal("0")
         progress_hectares = hectares
@@ -1771,7 +1842,9 @@ def operation_executions_update_association(activity_id):
     if not record:
         record = OperationBillingRecord(activity=activity)
         db.session.add(record)
-    unit_price = _parse_optional_decimal(str((organization.profile_data or {}).get("billing_unit_price") or ""))
+    unit_price = record.unit_price
+    if unit_price is None:
+        unit_price = _parse_optional_decimal(str((organization.profile_data or {}).get("billing_unit_price") or ""))
     area = record.area_hectares or activity.area_hectares
     if area is None and lot.area is not None:
         area = Decimal(str(lot.area))
@@ -2231,7 +2304,7 @@ def completed_operation_billing_consolidated_invoice():
 @web.route("/dashboard/operacion-realizada/facturacion/<int:record_id>/asociacion", methods=["POST"])
 @login_required
 def completed_operation_billing_update_association(record_id):
-    from app.modules.foliage.models import Lot
+    from app.modules.foliage.models import Farm, Lot
 
     record = OperationBillingRecord.query.get_or_404(record_id)
     current_user_id = get_jwt_identity()
@@ -2239,18 +2312,54 @@ def completed_operation_billing_update_association(record_id):
     organization_ids = [org.id for org in get_clients_for_user(current_user_id)]
     is_platform_admin = bool(current_user and current_user.is_admin())
     organization = Organization.query.get(request.form.get("organization_id", type=int))
-    lot = Lot.query.get(request.form.get("lot_id", type=int))
-    farm = lot.farm if lot else None
-    if not organization or not lot or not farm:
-        return jsonify({"success": False, "message": "Selecciona un cliente y un potrero validos."}), 400
-    if farm.org_id != organization.id:
-        return jsonify({"success": False, "message": "El potrero no pertenece al cliente seleccionado."}), 400
+    if not organization:
+        return jsonify({"success": False, "message": "Selecciona un cliente valido."}), 400
     if not is_platform_admin and organization.id not in organization_ids:
         return jsonify({"success": False, "message": "No tienes acceso a este cliente."}), 403
     if not is_platform_admin and record.organization_id is not None and record.organization_id not in organization_ids:
         return jsonify({"success": False, "message": "No tienes acceso a este registro."}), 403
 
-    unit_price = _parse_optional_decimal(str((organization.profile_data or {}).get("billing_unit_price") or ""))
+    farm = Farm.query.get(request.form.get("farm_id", type=int))
+    farm_name = (request.form.get("farm_name") or "").strip()
+    if farm and farm.org_id != organization.id:
+        return jsonify({"success": False, "message": "La finca no pertenece al cliente seleccionado."}), 400
+    if not farm and farm_name:
+        farm = Farm.query.filter(
+            Farm.org_id == organization.id,
+            func.lower(Farm.name) == farm_name.lower(),
+        ).first()
+    if not farm and not farm_name:
+        return jsonify({"success": False, "message": "Selecciona una finca o escribe una nueva."}), 400
+    if not farm:
+        farm = Farm(name=farm_name, org_id=organization.id)
+        db.session.add(farm)
+        db.session.flush()
+
+    lot = Lot.query.get(request.form.get("lot_id", type=int))
+    lot_name = (request.form.get("lot_name") or "").strip()
+    if lot and lot.farm_id != farm.id:
+        db.session.rollback()
+        return jsonify({"success": False, "message": "El potrero no pertenece a la finca seleccionada."}), 400
+    if not lot and lot_name:
+        lot = Lot.query.filter(
+            Lot.farm_id == farm.id,
+            func.lower(Lot.name) == lot_name.lower(),
+        ).first()
+    if not lot and not lot_name:
+        db.session.rollback()
+        return jsonify({"success": False, "message": "Selecciona un potrero o escribe uno nuevo."}), 400
+    if not lot:
+        lot_area = _parse_optional_decimal(request.form.get("lot_area"))
+        if lot_area is None or lot_area < 0:
+            db.session.rollback()
+            return jsonify({"success": False, "message": "Escribe el area en hectareas del nuevo potrero."}), 400
+        lot = Lot(name=lot_name, area=float(lot_area), farm_id=farm.id, active=True)
+        db.session.add(lot)
+        db.session.flush()
+
+    unit_price = record.unit_price
+    if unit_price is None:
+        unit_price = _parse_optional_decimal(str((organization.profile_data or {}).get("billing_unit_price") or ""))
     area = record.area_hectares if record.area_hectares is not None else (Decimal(str(lot.area)) if lot.area is not None else None)
     record.organization_id = organization.id
     record.farm_name = farm.name
