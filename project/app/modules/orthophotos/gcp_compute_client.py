@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import time
 from dataclasses import dataclass
@@ -24,6 +25,7 @@ class GCPComputeConfig:
     zone: str
     instance: str
     service_account_file: str
+    service_account_json: str = ""
     operation_timeout_seconds: int = 600
 
     @classmethod
@@ -33,6 +35,7 @@ class GCPComputeConfig:
             zone=os.getenv("GCP_ZONE", "").strip(),
             instance=os.getenv("GCP_WEBODM_INSTANCE", "").strip(),
             service_account_file=os.getenv("GCP_SERVICE_ACCOUNT_FILE", "").strip(),
+            service_account_json=os.getenv("GCP_SERVICE_ACCOUNT_JSON", "").strip(),
             operation_timeout_seconds=int(
                 os.getenv("GCP_OPERATION_TIMEOUT_SECONDS", "600")
             ),
@@ -45,18 +48,31 @@ class GCPComputeConfig:
                 "GCP_PROJECT_ID": self.project_id,
                 "GCP_ZONE": self.zone,
                 "GCP_WEBODM_INSTANCE": self.instance,
-                "GCP_SERVICE_ACCOUNT_FILE": self.service_account_file,
             }.items()
             if not value
         ]
+        if not self.service_account_file and not self.service_account_json:
+            missing.append("GCP_SERVICE_ACCOUNT_JSON o GCP_SERVICE_ACCOUNT_FILE")
         if missing:
             raise GCPComputeError(
                 "Faltan variables para controlar la VM: " + ", ".join(missing)
             )
-        if not os.path.isfile(self.service_account_file):
+        if self.service_account_file and not os.path.isfile(self.service_account_file):
             raise GCPComputeError(
                 f"No existe GCP_SERVICE_ACCOUNT_FILE: {self.service_account_file}"
             )
+        if self.service_account_json:
+            try:
+                info = json.loads(self.service_account_json)
+            except json.JSONDecodeError as exc:
+                raise GCPComputeError(
+                    "GCP_SERVICE_ACCOUNT_JSON no contiene un JSON valido."
+                ) from exc
+            required = {"client_email", "private_key", "token_uri"}
+            if not required.issubset(info):
+                raise GCPComputeError(
+                    "GCP_SERVICE_ACCOUNT_JSON no contiene una cuenta de servicio valida."
+                )
 
 
 class GCPComputeClient:
@@ -78,10 +94,23 @@ class GCPComputeClient:
                 "Falta instalar google-auth. Ejecuta pip install google-auth."
             ) from exc
 
-        credentials = service_account.Credentials.from_service_account_file(
-            self.config.service_account_file,
-            scopes=["https://www.googleapis.com/auth/cloud-platform"],
-        )
+        scopes = ["https://www.googleapis.com/auth/cloud-platform"]
+        if self.config.service_account_json:
+            try:
+                info = json.loads(self.config.service_account_json)
+                credentials = service_account.Credentials.from_service_account_info(
+                    info,
+                    scopes=scopes,
+                )
+            except (ValueError, TypeError, json.JSONDecodeError) as exc:
+                raise GCPComputeError(
+                    "No fue posible cargar GCP_SERVICE_ACCOUNT_JSON."
+                ) from exc
+        else:
+            credentials = service_account.Credentials.from_service_account_file(
+                self.config.service_account_file,
+                scopes=scopes,
+            )
         return AuthorizedSession(credentials)
 
     def instance(self) -> dict:
