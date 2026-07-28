@@ -1351,10 +1351,15 @@ def pilot_flight_log():
         )
         db.session.add(flight_log)
         drone.flight_hours = (drone.flight_hours or Decimal("0")) + (Decimal(minutes) / Decimal(60))
-        if activity and activity.status not in {"cancelled", "completed"}:
-            activity.status = "in_progress"
-            activity.completed_at = None
-            _activity_log(activity, "pilot_log_saved", "El piloto registro bitacora manual.")
+        if activity and activity.status != "cancelled":
+            activity.status = "completed"
+            activity.completed_at = datetime.utcnow()
+            _activity_log(
+                activity,
+                "pilot_log_saved",
+                "El piloto registro bitacora manual y finalizo la operacion.",
+            )
+            _sync_activity_billing(activity)
         db.session.commit()
         flash("Bitacora registrada correctamente.", "success")
         return redirect(url_for("core.pilot_flight_log"))
@@ -1574,10 +1579,15 @@ def pilot_save_flight_log(activity_id):
 
     delta_hours = Decimal(minutes - previous_minutes) / Decimal(60)
     activity.drone.flight_hours = (activity.drone.flight_hours or Decimal("0")) + delta_hours
-    if activity.status not in {"cancelled", "completed"}:
-        activity.status = "in_progress"
-        activity.completed_at = None
-    _activity_log(activity, "pilot_log_saved", "El piloto registro bitacora de vuelo.")
+    if activity.status != "cancelled":
+        activity.status = "completed"
+        activity.completed_at = datetime.utcnow()
+        _sync_activity_billing(activity)
+    _activity_log(
+        activity,
+        "pilot_log_saved",
+        "El piloto registro bitacora de vuelo y finalizo la operacion.",
+    )
     db.session.commit()
     flash("Bitacora guardada correctamente.", "success")
     return redirect(url_for("core.pilot_activity_detail", activity_id=activity.id))
