@@ -1197,12 +1197,25 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function dayDistance(from, to) {
-    return Math.round((parseDate(to) - parseDate(from)) / 86400000);
+    const [fromYear, fromMonth, fromDay] = from.split("-").map(Number);
+    const [toYear, toMonth, toDay] = to.split("-").map(Number);
+    return Math.round((
+      Date.UTC(toYear, toMonth - 1, toDay) -
+      Date.UTC(fromYear, fromMonth - 1, fromDay)
+    ) / 86400000);
+  }
+
+  function activityRange(event) {
+    const start = event.start_date || event.date;
+    const candidateEnd = event.end_date || start;
+    return {
+      start,
+      end: candidateEnd < start ? start : candidateEnd,
+    };
   }
 
   function rangeEventHtml(event, weekStart, weekEnd, track) {
-    const rangeStart = event.program_start || event.start_date || event.date;
-    const rangeEnd = event.program_end || event.end_date || rangeStart;
+    const { start: rangeStart, end: rangeEnd } = activityRange(event);
     const clippedStart = rangeStart < weekStart ? weekStart : rangeStart;
     const clippedEnd = rangeEnd > weekEnd ? weekEnd : rangeEnd;
     const startColumn = dayDistance(weekStart, clippedStart) + 1;
@@ -1233,18 +1246,20 @@ document.addEventListener('DOMContentLoaded', function () {
       const weekEnd = dateKey(weekEndDate);
       const weekEvents = activities
         .filter(event => {
-          const rangeStart = event.program_start || event.start_date || event.date;
-          const rangeEnd = event.program_end || event.end_date || rangeStart;
+          const { start: rangeStart, end: rangeEnd } = activityRange(event);
           return rangeStart <= weekEnd && rangeEnd >= weekStart;
         })
         .sort((a, b) => {
-          const startCompare = (a.program_start || a.start_date || a.date).localeCompare(b.program_start || b.start_date || b.date);
-          return startCompare || (a.program_end || a.end_date || a.date).localeCompare(b.program_end || b.end_date || b.date);
+          const rangeA = activityRange(a);
+          const rangeB = activityRange(b);
+          const startCompare = rangeA.start.localeCompare(rangeB.start);
+          return startCompare || rangeA.end.localeCompare(rangeB.end);
         });
       const tracks = [];
       const positioned = weekEvents.map(event => {
-        const clippedStart = [event.program_start || event.start_date || event.date, weekStart].sort().pop();
-        const clippedEnd = [event.program_end || event.end_date || event.date, weekEnd].sort()[0];
+        const { start: rangeStart, end: rangeEnd } = activityRange(event);
+        const clippedStart = [rangeStart, weekStart].sort().pop();
+        const clippedEnd = [rangeEnd, weekEnd].sort()[0];
         let track = tracks.findIndex(occupiedUntil => occupiedUntil < clippedStart);
         if (track < 0) {
           track = tracks.length;
