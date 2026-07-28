@@ -1064,6 +1064,7 @@
 
 {% block extra_js %}
 {{ super() }}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
   let activities = {{ activities_json | tojson }};
@@ -1115,6 +1116,34 @@ document.addEventListener('DOMContentLoaded', function () {
   function clearAlert(element) {
     element.textContent = '';
     element.classList.remove('is-open');
+  }
+  function missionStatusLabel(status) {
+    const labels = {
+      scheduled: 'Programada',
+      in_progress: 'En proceso',
+      completed: 'Finalizada',
+      cancelled: 'Cancelada'
+    };
+    return labels[status] || status || 'Sin estado';
+  }
+  function escapeHtml(value) {
+    const element = document.createElement('div');
+    element.textContent = value == null ? '' : String(value);
+    return element.innerHTML;
+  }
+  async function showMissionAlert(options) {
+    if (window.Swal) {
+      return Swal.fire({
+        confirmButtonColor: '#0b4f8a',
+        cancelButtonColor: '#0b4f8a',
+        ...options
+      });
+    }
+    if (options.showCancelButton) {
+      return { isConfirmed: window.confirm(options.fallbackText || options.title || '') };
+    }
+    window.alert(options.text || options.title || '');
+    return { isConfirmed: true };
   }
   function optionText(select) {
     const option = select.options[select.selectedIndex];
@@ -1502,13 +1531,26 @@ document.addEventListener('DOMContentLoaded', function () {
     clearAlert(activityAlert);
     syncCatalogFields();
     const id = document.getElementById('activity_id').value;
+    const isEditing = Boolean(id);
     const url = id ? `${root.dataset.createActivityUrl}/${id}` : root.dataset.createActivityUrl;
     try {
       const data = await postForm(url, activityForm);
       upsertActivity(data.activity);
       closeActivityModal();
+      await showMissionAlert({
+        icon: 'success',
+        title: isEditing ? 'Actualizado' : 'Guardado',
+        text: isEditing ? 'Misión actualizada correctamente.' : 'Misión guardada correctamente.',
+        confirmButtonText: 'OK'
+      });
     } catch (error) {
       showAlert(activityAlert, error.message);
+      await showMissionAlert({
+        icon: 'error',
+        title: 'No se pudo guardar',
+        text: error.message,
+        confirmButtonText: 'OK'
+      });
     }
   });
   pilotForm.addEventListener('submit', async function (event) {
@@ -1538,15 +1580,38 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!activeActivity) return;
     const label = activeActivity.farm_name || activeActivity.title || 'esta solicitud';
     const dates = `${activeActivity.start_date} a ${activeActivity.end_date}`;
-    if (!window.confirm(`¿Eliminar definitivamente "${label}" (${dates})?\n\nEsta acción también elimina su registro de facturación asociado y no se puede deshacer.`)) return;
+    const status = missionStatusLabel(activeActivity.status);
+    const confirmation = await showMissionAlert({
+      icon: 'warning',
+      title: '¿Eliminar misión?',
+      html: `<div style="text-align:left"><strong>Título:</strong> ${escapeHtml(label)}<br><strong>Estado:</strong> ${escapeHtml(status)}<br><strong>Fechas:</strong> ${escapeHtml(dates)}</div>`,
+      showCancelButton: true,
+      confirmButtonText: 'Sí, eliminar',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#ef4444',
+      fallbackText: `¿Eliminar definitivamente "${label}" (${dates})?`
+    });
+    if (!confirmation.isConfirmed) return;
     deleteBtn.disabled = true;
     try {
       const data = await postForm(`${root.dataset.createActivityUrl}/${activeActivity.id}/eliminar`, document.createElement('form'));
       activities = activities.filter(item => item.id !== data.activity_id);
       render();
       closeActivityModal();
+      await showMissionAlert({
+        icon: 'success',
+        title: 'Eliminada',
+        text: 'Misión eliminada correctamente.',
+        confirmButtonText: 'OK'
+      });
     } catch (error) {
       showAlert(activityAlert, error.message);
+      await showMissionAlert({
+        icon: 'error',
+        title: 'No se pudo eliminar',
+        text: error.message,
+        confirmButtonText: 'OK'
+      });
     } finally {
       deleteBtn.disabled = false;
     }
