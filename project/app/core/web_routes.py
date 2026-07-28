@@ -2806,8 +2806,8 @@ def amd_clients():
     response, status_code = org_view._get_org_list()
     if status_code != 200:
         return render_template("error.j2"), status_code
-    items = response.get_json()
-    active_clients = sum(1 for item in items if item.get("active"))
+    items = [item for item in response.get_json() if item.get("active") is True]
+    active_clients = len(items)
     visible_org_ids = [item.get("id") for item in items if item.get("id") is not None]
     total_area, total_invoice, invoice_count = db.session.query(
         func.coalesce(func.sum(OperationBillingRecord.area_hectares), 0),
