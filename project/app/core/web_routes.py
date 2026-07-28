@@ -1106,8 +1106,8 @@ def operational_calendar_create_activity():
 @login_required
 def operational_calendar_update_activity(activity_id):
     activity = OperationalActivity.query.get_or_404(activity_id)
-    if activity.status in {"cancelled", "completed"}:
-        return jsonify({"success": False, "message": "No puedes editar una actividad cerrada."}), 400
+    if activity.status == "cancelled":
+        return jsonify({"success": False, "message": "No puedes editar una actividad cancelada."}), 400
 
     payload = _activity_form_payload()
     error = _validate_activity_payload(payload, activity_id=activity.id)

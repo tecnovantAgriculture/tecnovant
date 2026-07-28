@@ -1,5 +1,6 @@
-﻿# Python standard library imports
+# Python standard library imports
 import hashlib
+import re
 import time
 from decimal import Decimal, InvalidOperation
 from functools import wraps
@@ -871,6 +872,32 @@ class OrgView(MethodView):
 
     CLIENT_BILLING_FIELDS = ("billing_unit_price", "planned_hectares")
 
+    @staticmethod
+    def _normalize_client_name(value):
+        return " ".join(str(value or "").casefold().split())
+
+    @staticmethod
+    def _normalize_client_nit(value):
+        return re.sub(r"\D", "", str(value or ""))
+
+    def _validate_unique_client(self, name, nit=None, exclude_org_id=None):
+        normalized_name = self._normalize_client_name(name)
+        normalized_nit = self._normalize_client_nit(nit)
+        query = Organization.query.filter(Organization.active.is_(True))
+        if exclude_org_id is not None:
+            query = query.filter(Organization.id != exclude_org_id)
+
+        for existing in query.all():
+            existing_nit = self._normalize_client_nit(existing.nit)
+            if normalized_nit and existing_nit == normalized_nit:
+                raise BadRequest(
+                    f"Ya existe un cliente activo con el NIT {nit}: {existing.name} (ID {existing.id})."
+                )
+            if normalized_name and self._normalize_client_name(existing.name) == normalized_name:
+                raise BadRequest(
+                    f"Ya existe un cliente activo con el nombre {name} (ID {existing.id})."
+                )
+
     def _decimal_or_none(self, value, field_name):
         if value in (None, ""):
             return None
@@ -904,6 +931,7 @@ class OrgView(MethodView):
 
     def _create_organization(self, data):
         """Crea una nueva organización con los datos proporcionados."""
+        self._validate_unique_client(data["name"], data.get("nit"))
         org = Organization(
             name=data["name"],
             description=data.get("description", ""),
@@ -970,6 +998,11 @@ class OrgView(MethodView):
     def _update_organization(self, org_id, data):
         """Actualiza los datos de una organización existente."""
         org = Organization.query.get_or_404(org_id)
+        self._validate_unique_client(
+            data.get("name") or org.name,
+            data.get("nit") if "nit" in data else org.nit,
+            exclude_org_id=org.id,
+        )
         if "name" in data and data["name"]:
             org.name = data["name"]
         if "description" in data and data["description"] is not None:
