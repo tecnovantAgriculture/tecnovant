@@ -225,6 +225,10 @@
     height: 40px;
   }
 
+  .exec-gantt-row[hidden] {
+    display: none !important;
+  }
+
   .exec-gantt-title,
   .exec-gantt-company {
     position: sticky;
@@ -530,7 +534,7 @@
                 <span class="exec-today-line" style="left: {{ item.gantt_left }}%;"></span>
               {% endif %}
               <span class="exec-gantt-bar" data-status="{{ item.status }}" data-progress-state="{{ item.hectares_progress_state }}" title="{{ item.starts_label }} - {{ item.ends_label }} - {{ item.hectares_progress_label }}" style="left: {{ item.gantt_left }}%; width: max({{ item.gantt_width }}%, 82px);">
-                <span class="exec-gantt-progress" style="width: {{ item.hectares_progress }}%;"></span>
+                <span class="exec-gantt-progress" style="width: {{ item.hectares_progress }}%; background-color: hsl({{ (item.hectares_progress * 1.2)|round(0) }}, 72%, 42%);"></span>
                 <span class="exec-gantt-label">{{ item.hectares_progress_label }} - {{ item.status_label }}</span>
               </span>
             </div>

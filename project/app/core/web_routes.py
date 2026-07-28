@@ -117,6 +117,26 @@ def _activity_log(activity, action, message=None):
     )
 
 
+def _update_activity_progress(activity):
+    if not activity or activity.status == "cancelled":
+        return False
+
+    db.session.flush()
+    reported_hectares = (
+        db.session.query(func.coalesce(func.sum(PilotFlightLog.total_hectares), 0))
+        .filter(PilotFlightLog.activity_id == activity.id)
+        .scalar()
+    )
+    reported_hectares = Decimal(str(reported_hectares or 0))
+    planned_hectares = Decimal(str(activity.area_hectares or 0))
+    is_completed = planned_hectares > 0 and reported_hectares >= planned_hectares
+
+    activity.status = "completed" if is_completed else "in_progress"
+    activity.completed_at = datetime.utcnow() if is_completed else None
+    _sync_activity_billing(activity)
+    return is_completed
+
+
 def _activity_payload(activity, farm_lookup=None, lot_lookup=None):
     if farm_lookup is None:
         farm_lookup = getattr(g, 'activity_farm_lookup', None)
@@ -1351,17 +1371,23 @@ def pilot_flight_log():
         )
         db.session.add(flight_log)
         drone.flight_hours = (drone.flight_hours or Decimal("0")) + (Decimal(minutes) / Decimal(60))
+        is_completed = False
         if activity and activity.status != "cancelled":
-            activity.status = "completed"
-            activity.completed_at = datetime.utcnow()
+            is_completed = _update_activity_progress(activity)
             _activity_log(
                 activity,
                 "pilot_log_saved",
-                "El piloto registro bitacora manual y finalizo la operacion.",
+                "El piloto completo las hectareas programadas y finalizo la operacion."
+                if is_completed
+                else "El piloto registro un avance de hectareas.",
             )
-            _sync_activity_billing(activity)
         db.session.commit()
-        flash("Bitacora registrada correctamente.", "success")
+        flash(
+            "Bitacora registrada. Operacion finalizada."
+            if is_completed
+            else "Avance guardado. La operacion continua en proceso.",
+            "success",
+        )
         return redirect(url_for("core.pilot_flight_log"))
 
     today_start = datetime.combine(date.today(), time.min)
@@ -1579,17 +1605,21 @@ def pilot_save_flight_log(activity_id):
 
     delta_hours = Decimal(minutes - previous_minutes) / Decimal(60)
     activity.drone.flight_hours = (activity.drone.flight_hours or Decimal("0")) + delta_hours
-    if activity.status != "cancelled":
-        activity.status = "completed"
-        activity.completed_at = datetime.utcnow()
-        _sync_activity_billing(activity)
+    is_completed = _update_activity_progress(activity)
     _activity_log(
         activity,
         "pilot_log_saved",
-        "El piloto registro bitacora de vuelo y finalizo la operacion.",
+        "El piloto completo las hectareas programadas y finalizo la operacion."
+        if is_completed
+        else "El piloto registro un avance de hectareas.",
     )
     db.session.commit()
-    flash("Bitacora guardada correctamente.", "success")
+    flash(
+        "Bitacora guardada. Operacion finalizada."
+        if is_completed
+        else "Avance guardado. La operacion continua en proceso.",
+        "success",
+    )
     return redirect(url_for("core.pilot_activity_detail", activity_id=activity.id))
 
 
