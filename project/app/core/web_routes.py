@@ -1839,6 +1839,7 @@ def operation_executions():
         "data_menu": get_dashboard_menu(),
         "month_title": f"{month_names[month_anchor.month - 1].capitalize()} {month_anchor.year}",
         "today_date": today,
+        "filter_date": today if (today.year, today.month) == (month_anchor.year, month_anchor.month) else month_anchor,
         "previous_month": previous_month,
         "next_month": next_month,
         "calendar_days": days,

@@ -163,6 +163,38 @@
     text-align: center;
   }
 
+  .exec-view-filter {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 10px 14px;
+    border-bottom: 1px solid #e3ece5;
+    background: #fff;
+  }
+
+  .exec-view-filter .exec-btn.is-active {
+    border-color: #16866f;
+    background: #16866f;
+    color: #fff;
+  }
+
+  .exec-view-date {
+    height: 34px;
+    margin-left: 8px;
+    padding: 0 10px;
+    border: 1px solid #d6e1da;
+    border-radius: 9px;
+    color: #18372f;
+    background: #fff;
+  }
+
+  .exec-view-summary {
+    min-width: 190px;
+    color: #5f6b66;
+    font-size: 12px;
+  }
+
   .exec-gantt-wrap {
     max-height: min(470px, calc(100vh - 350px));
     min-height: 238px;
@@ -471,6 +503,13 @@
       <div class="exec-period">{{ month_title }}</div>
       <a class="exec-btn" href="{{ url_for('core.operation_executions', year=next_month.year, month=next_month.month) }}">Mes siguiente <i class="fas fa-chevron-right"></i></a>
     </div>
+    <div class="exec-view-filter" aria-label="Cambiar rango de visualización">
+      <button class="exec-btn" type="button" data-exec-view="day">Día</button>
+      <button class="exec-btn" type="button" data-exec-view="week">Semana</button>
+      <button class="exec-btn is-active" type="button" data-exec-view="month">Mes</button>
+      <input class="exec-view-date" type="date" value="{{ filter_date.isoformat() }}" aria-label="Fecha de referencia">
+      <span class="exec-view-summary" aria-live="polite"></span>
+    </div>
     <div class="exec-gantt-wrap">
       <div class="exec-gantt">
         <div class="exec-gantt-head">
@@ -483,7 +522,7 @@
           </div>
         </div>
         {% for item in executions %}
-          <div class="exec-gantt-row">
+          <div class="exec-gantt-row" data-start-date="{{ item.starts_at.date().isoformat() }}" data-end-date="{{ item.ends_at.date().isoformat() }}">
             <div class="exec-gantt-task"><span>{{ item.title }}</span></div>
             <div class="exec-gantt-company-cell"><span>{{ item.client_project }} · {{ item.pilot }}</span></div>
             <div class="exec-gantt-lane">
@@ -503,4 +542,59 @@
     </div>
   </article>
 </div>
+<script>
+(() => {
+  const controls = [...document.querySelectorAll('[data-exec-view]')];
+  const dateInput = document.querySelector('.exec-view-date');
+  const summary = document.querySelector('.exec-view-summary');
+  const rows = [...document.querySelectorAll('.exec-gantt-row[data-start-date]')];
+  if (!controls.length || !dateInput) return;
+
+  let view = 'month';
+  const parseDate = value => new Date(`${value}T12:00:00`);
+  const isoDate = value => {
+    const year = value.getFullYear();
+    const month = String(value.getMonth() + 1).padStart(2, '0');
+    const day = String(value.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+  const formatDate = value => value.toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' });
+
+  function selectedRange() {
+    const anchor = parseDate(dateInput.value);
+    const start = new Date(anchor);
+    const end = new Date(anchor);
+    if (view === 'week') {
+      const mondayOffset = (anchor.getDay() + 6) % 7;
+      start.setDate(anchor.getDate() - mondayOffset);
+      end.setDate(start.getDate() + 6);
+    } else if (view === 'month') {
+      start.setDate(1);
+      end.setMonth(start.getMonth() + 1, 0);
+    }
+    return { start, end };
+  }
+
+  function applyView() {
+    const { start, end } = selectedRange();
+    let visible = 0;
+    rows.forEach(row => {
+      const rowStart = parseDate(row.dataset.startDate);
+      const rowEnd = parseDate(row.dataset.endDate);
+      const show = rowStart <= end && rowEnd >= start;
+      row.hidden = !show;
+      if (show) visible += 1;
+    });
+    controls.forEach(button => button.classList.toggle('is-active', button.dataset.execView === view));
+    summary.textContent = `${formatDate(start)}${isoDate(start) === isoDate(end) ? '' : ` — ${formatDate(end)}`} · ${visible} operaciones`;
+  }
+
+  controls.forEach(button => button.addEventListener('click', () => {
+    view = button.dataset.execView;
+    applyView();
+  }));
+  dateInput.addEventListener('change', applyView);
+  applyView();
+})();
+</script>
 {% endblock %}
