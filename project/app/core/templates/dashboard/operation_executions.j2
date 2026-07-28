@@ -256,7 +256,7 @@
     top: 0;
     z-index: 21;
     display: grid;
-    grid-template-columns: repeat({{ gantt_weeks|length }}, minmax(110px, 1fr));
+    grid-template-columns: repeat(var(--exec-period-count, {{ gantt_weeks|length }}), minmax(110px, 1fr));
     border-bottom: 1px solid #dce5df;
     background: #f9fbfa;
   }
@@ -324,9 +324,9 @@
     background-image: repeating-linear-gradient(
       to right,
       transparent,
-      transparent calc((100% / {{ gantt_weeks|length }}) - 1px),
-      #e0e7e2 calc((100% / {{ gantt_weeks|length }}) - 1px),
-      #e0e7e2 calc(100% / {{ gantt_weeks|length }})
+      transparent calc((100% / var(--exec-period-count, {{ gantt_weeks|length }})) - 1px),
+      #e0e7e2 calc((100% / var(--exec-period-count, {{ gantt_weeks|length }})) - 1px),
+      #e0e7e2 calc(100% / var(--exec-period-count, {{ gantt_weeks|length }}))
     );
   }
 
@@ -511,7 +511,7 @@
       <button class="exec-btn" type="button" data-exec-view="day">Día</button>
       <button class="exec-btn" type="button" data-exec-view="week">Semana</button>
       <button class="exec-btn is-active" type="button" data-exec-view="month">Mes</button>
-      <input class="exec-view-date" type="date" value="{{ filter_date.isoformat() }}" aria-label="Fecha de referencia">
+      <input class="exec-view-date" type="date" value="{{ filter_date.isoformat() }}" data-loaded-month="{{ filter_date.strftime('%Y-%m') }}" aria-label="Fecha de referencia">
       <span class="exec-view-summary" aria-live="polite"></span>
     </div>
     <div class="exec-gantt-wrap">
@@ -519,7 +519,7 @@
         <div class="exec-gantt-head">
           <div class="exec-gantt-title">Misión</div>
           <div class="exec-gantt-company">Cliente / Piloto</div>
-          <div class="exec-gantt-weeks">
+          <div class="exec-gantt-weeks" data-exec-periods>
             {% for week in gantt_weeks %}
               <div class="exec-gantt-week {{ 'is-current' if week.is_current else '' }}"><strong>{{ week.label }}</strong>{{ week.range }}</div>
             {% endfor %}
@@ -551,11 +551,20 @@
   const controls = [...document.querySelectorAll('[data-exec-view]')];
   const dateInput = document.querySelector('.exec-view-date');
   const summary = document.querySelector('.exec-view-summary');
+  const gantt = document.querySelector('.exec-gantt');
+  const periodsContainer = document.querySelector('[data-exec-periods]');
   const rows = [...document.querySelectorAll('.exec-gantt-row[data-start-date]')];
-  if (!controls.length || !dateInput) return;
+  if (!controls.length || !dateInput || !gantt || !periodsContainer) return;
 
   let view = 'month';
+  const DAY_MS = 86400000;
   const parseDate = value => new Date(`${value}T12:00:00`);
+  const copyDate = value => new Date(value.getFullYear(), value.getMonth(), value.getDate(), 12);
+  const addDays = (value, days) => {
+    const result = copyDate(value);
+    result.setDate(result.getDate() + days);
+    return result;
+  };
   const isoDate = value => {
     const year = value.getFullYear();
     const month = String(value.getMonth() + 1).padStart(2, '0');
@@ -563,41 +572,115 @@
     return `${year}-${month}-${day}`;
   };
   const formatDate = value => value.toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' });
+  const shortDay = value => value.toLocaleDateString('es-CO', { weekday: 'short' }).replace('.', '');
+  const dayCount = (start, end) => Math.round((copyDate(end) - copyDate(start)) / DAY_MS) + 1;
 
-  function selectedRange() {
+  function viewConfig() {
     const anchor = parseDate(dateInput.value);
-    const start = new Date(anchor);
-    const end = new Date(anchor);
+    if (view === 'day') {
+      return {
+        filterStart: anchor,
+        filterEnd: anchor,
+        displayStart: anchor,
+        displayEnd: anchor,
+        periods: [{ label: shortDay(anchor), range: formatDate(anchor), current: isoDate(anchor) === isoDate(new Date()) }],
+      };
+    }
     if (view === 'week') {
       const mondayOffset = (anchor.getDay() + 6) % 7;
-      start.setDate(anchor.getDate() - mondayOffset);
-      end.setDate(start.getDate() + 6);
-    } else if (view === 'month') {
-      start.setDate(1);
-      end.setMonth(start.getMonth() + 1, 0);
+      const start = addDays(anchor, -mondayOffset);
+      const end = addDays(start, 6);
+      const periods = Array.from({ length: 7 }, (_, index) => {
+        const day = addDays(start, index);
+        return {
+          label: shortDay(day),
+          range: day.toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit' }),
+          current: isoDate(day) === isoDate(new Date()),
+        };
+      });
+      return { filterStart: start, filterEnd: end, displayStart: start, displayEnd: end, periods };
     }
-    return { start, end };
+
+    const monthStart = new Date(anchor.getFullYear(), anchor.getMonth(), 1, 12);
+    const monthEnd = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0, 12);
+    const daysInMonth = monthEnd.getDate();
+    const periods = Array.from({ length: daysInMonth }, (_, index) => {
+      const day = addDays(monthStart, index);
+      return {
+        label: String(day.getDate()),
+        range: shortDay(day),
+        current: isoDate(day) === isoDate(new Date()),
+      };
+    });
+    return {
+      filterStart: monthStart,
+      filterEnd: monthEnd,
+      displayStart: monthStart,
+      displayEnd: monthEnd,
+      periods,
+    };
   }
 
   function applyView() {
-    const { start, end } = selectedRange();
+    const config = viewConfig();
+    const totalDays = dayCount(config.displayStart, config.displayEnd);
     let visible = 0;
+
+    periodsContainer.innerHTML = config.periods.map(period =>
+      `<div class="exec-gantt-week ${period.current ? 'is-current' : ''}"><strong>${period.label}</strong>${period.range}</div>`
+    ).join('');
+    gantt.style.setProperty('--exec-period-count', config.periods.length);
+
     rows.forEach(row => {
       const rowStart = parseDate(row.dataset.startDate);
       const rowEnd = parseDate(row.dataset.endDate);
-      const show = rowStart <= end && rowEnd >= start;
+      const show = rowStart <= config.filterEnd && rowEnd >= config.filterStart;
       row.hidden = !show;
-      if (show) visible += 1;
+      if (!show) return;
+
+      visible += 1;
+      const clipStart = rowStart < config.displayStart ? config.displayStart : rowStart;
+      const clipEnd = rowEnd > config.displayEnd ? config.displayEnd : rowEnd;
+      const leftDays = Math.max(0, dayCount(config.displayStart, clipStart) - 1);
+      const widthDays = Math.max(1, dayCount(clipStart, clipEnd));
+      const bar = row.querySelector('.exec-gantt-bar');
+      if (bar) {
+        bar.style.left = `${(leftDays / totalDays) * 100}%`;
+        bar.style.width = `max(${(widthDays / totalDays) * 100}%, 82px)`;
+      }
+      const todayLine = row.querySelector('.exec-today-line');
+      if (todayLine) {
+        const today = copyDate(new Date());
+        const showToday = today >= config.displayStart && today <= config.displayEnd;
+        todayLine.hidden = !showToday;
+        if (showToday) todayLine.style.left = `${((dayCount(config.displayStart, today) - 0.5) / totalDays) * 100}%`;
+      }
     });
+
     controls.forEach(button => button.classList.toggle('is-active', button.dataset.execView === view));
-    summary.textContent = `${formatDate(start)}${isoDate(start) === isoDate(end) ? '' : ` — ${formatDate(end)}`} · ${visible} operaciones`;
+    summary.textContent = `${formatDate(config.filterStart)}${isoDate(config.filterStart) === isoDate(config.filterEnd) ? '' : ` — ${formatDate(config.filterEnd)}`} · ${visible} operaciones`;
   }
 
   controls.forEach(button => button.addEventListener('click', () => {
     view = button.dataset.execView;
     applyView();
   }));
-  dateInput.addEventListener('change', applyView);
+  dateInput.addEventListener('change', () => {
+    const selectedMonth = dateInput.value.slice(0, 7);
+    if (selectedMonth !== dateInput.dataset.loadedMonth) {
+      const selected = parseDate(dateInput.value);
+      const target = new URL(window.location.href);
+      target.searchParams.set('year', selected.getFullYear());
+      target.searchParams.set('month', selected.getMonth() + 1);
+      target.searchParams.set('view', view);
+      target.searchParams.set('date', dateInput.value);
+      window.location.href = target.toString();
+      return;
+    }
+    applyView();
+  });
+  const requestedView = new URLSearchParams(window.location.search).get('view');
+  if (['day', 'week', 'month'].includes(requestedView)) view = requestedView;
   applyView();
 })();
 </script>

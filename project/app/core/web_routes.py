@@ -1669,6 +1669,15 @@ def operation_executions():
         year += 1
 
     month_anchor = date(year, month, 1)
+    filter_date = today if (today.year, today.month) == (month_anchor.year, month_anchor.month) else month_anchor
+    requested_filter_date = request.args.get("date")
+    if requested_filter_date:
+        try:
+            parsed_filter_date = _parse_date(requested_filter_date)
+            if (parsed_filter_date.year, parsed_filter_date.month) == (month_anchor.year, month_anchor.month):
+                filter_date = parsed_filter_date
+        except ValueError:
+            pass
     previous_month = (month_anchor.replace(day=1) - timedelta(days=1)).replace(day=1)
     next_month = (month_anchor.replace(day=28) + timedelta(days=4)).replace(day=1)
     calendar_start = month_anchor - timedelta(days=month_anchor.weekday())
@@ -1869,7 +1878,7 @@ def operation_executions():
         "data_menu": get_dashboard_menu(),
         "month_title": f"{month_names[month_anchor.month - 1].capitalize()} {month_anchor.year}",
         "today_date": today,
-        "filter_date": today if (today.year, today.month) == (month_anchor.year, month_anchor.month) else month_anchor,
+        "filter_date": filter_date,
         "previous_month": previous_month,
         "next_month": next_month,
         "calendar_days": days,
