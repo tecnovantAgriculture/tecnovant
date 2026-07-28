@@ -248,7 +248,40 @@
   }
 
   .exec-gantt-title {
+    left: 0;
     border-top-left-radius: 10px;
+  }
+
+  .exec-gantt-company {
+    left: 230px;
+  }
+
+  .exec-gantt-task {
+    position: sticky;
+    left: 0;
+    z-index: 8;
+  }
+
+  .exec-gantt-company-cell {
+    position: sticky;
+    left: 230px;
+    z-index: 8;
+  }
+
+  .exec-gantt[data-view="month"] .exec-today-line {
+    display: none !important;
+  }
+
+  .exec-gantt-label-compact {
+    display: none;
+  }
+
+  .exec-gantt[data-view="month"] .exec-gantt-label-full {
+    display: none;
+  }
+
+  .exec-gantt[data-view="month"] .exec-gantt-label-compact {
+    display: inline;
   }
 
   .exec-gantt-weeks {
@@ -535,7 +568,10 @@
               {% endif %}
               <span class="exec-gantt-bar" data-status="{{ item.status }}" data-progress-state="{{ item.hectares_progress_state }}" title="{{ item.starts_label }} - {{ item.ends_label }} - {{ item.hectares_progress_label }}" style="left: {{ item.gantt_left }}%; width: max({{ item.gantt_width }}%, 82px);">
                 <span class="exec-gantt-progress" style="width: {{ item.hectares_progress }}%; background-color: hsl({{ (item.hectares_progress * 1.2)|round(0) }}, 72%, 42%);"></span>
-                <span class="exec-gantt-label">{{ item.hectares_progress_label }} - {{ item.status_label }}</span>
+                <span class="exec-gantt-label">
+                  <span class="exec-gantt-label-full">{{ item.hectares_progress_label }} - {{ item.status_label }}</span>
+                  <span class="exec-gantt-label-compact">{{ item.hectares_progress|round(0) }}% · {{ 'Fin.' if item.status == 'completed' else 'Proc.' if item.status == 'in_progress' else item.status_label }}</span>
+                </span>
               </span>
             </div>
           </div>
@@ -623,6 +659,7 @@
 
   function applyView() {
     const config = viewConfig();
+    gantt.dataset.view = view;
     const totalDays = dayCount(config.displayStart, config.displayEnd);
     let visible = 0;
 
@@ -630,6 +667,7 @@
       `<div class="exec-gantt-week ${period.current ? 'is-current' : ''}"><strong>${period.label}</strong>${period.range}</div>`
     ).join('');
     gantt.style.setProperty('--exec-period-count', config.periods.length);
+    gantt.style.minWidth = `${460 + Math.max(660, config.periods.length * 110)}px`;
 
     rows.forEach(row => {
       const rowStart = parseDate(row.dataset.startDate);
