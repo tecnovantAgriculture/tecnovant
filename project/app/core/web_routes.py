@@ -93,10 +93,24 @@ def _parse_optional_decimal(value):
 
 
 def _activity_log(activity, action, message=None):
+    user_id = None
+    try:
+        user_id = get_jwt_identity()
+    except RuntimeError:
+        # Pilot portal authentication is session-based, so no JWT is
+        # available when a pilot starts, completes or reports an activity.
+        pass
+
+    pilot_id = session.get("pilot_id")
+    if pilot_id:
+        pilot = PilotProfile.query.get(pilot_id)
+        pilot_label = pilot.full_name if pilot else f"ID {pilot_id}"
+        message = f"{message or action} Piloto: {pilot_label}."
+
     db.session.add(
         OperationalActivityLog(
             activity=activity,
-            user_id=get_jwt_identity(),
+            user_id=user_id,
             action=action,
             message=message,
         )
