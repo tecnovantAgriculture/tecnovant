@@ -137,6 +137,26 @@ def _update_activity_progress(activity):
     return is_completed
 
 
+def _execution_hectares(activity, billing_record=None):
+    """Return the same executed-area value used by the Executions dashboard."""
+    if not activity:
+        return Decimal("0")
+
+    hectares = sum(
+        (
+            Decimal(str(log.total_hectares))
+            for log in (activity.flight_logs or [])
+            if log.total_hectares is not None
+        ),
+        Decimal("0"),
+    )
+    record = billing_record or getattr(activity, "billing_record", None)
+    source = ((record.raw_payload or {}).get("source") if record else "") or ""
+    if hectares == 0 and record and record.area_hectares is not None and source != "operational_calendar":
+        hectares = Decimal(str(record.area_hectares))
+    return hectares
+
+
 def _activity_payload(activity, farm_lookup=None, lot_lookup=None):
     if farm_lookup is None:
         farm_lookup = getattr(g, 'activity_farm_lookup', None)
@@ -1353,6 +1373,12 @@ def pilot_flight_log():
             flash("Completa dron, fecha y horas reales de vuelo.", "error")
             return redirect(url_for("core.pilot_flight_log"))
 
+        total_hectares_raw = (request.form.get("total_hectares") or "").strip()
+        total_hectares = _parse_optional_decimal(total_hectares_raw)
+        if total_hectares_raw and (total_hectares is None or total_hectares < 0):
+            flash("Escribe las hectareas con un formato valido, por ejemplo 33,70.", "error")
+            return redirect(url_for("core.pilot_flight_log", activity_id=activity_id))
+
         minutes = int((ended_at - started_at).total_seconds() // 60)
         flight_log = PilotFlightLog(
             pilot=pilot,
@@ -1366,7 +1392,7 @@ def pilot_flight_log():
             landing_location=(request.form.get("landing_location") or "").strip() or (activity.place if activity else None),
             weather=(request.form.get("weather") or "").strip() or None,
             battery_cycles=request.form.get("battery_cycles", type=int),
-            total_hectares=_parse_optional_decimal(request.form.get("total_hectares")),
+            total_hectares=total_hectares,
             notes=(request.form.get("notes") or "").strip() or None,
         )
         db.session.add(flight_log)
@@ -1578,6 +1604,12 @@ def pilot_save_flight_log(activity_id):
         flash("Revisa la fecha y las horas reales de vuelo.", "error")
         return redirect(url_for("core.pilot_activity_detail", activity_id=activity.id))
 
+    total_hectares_raw = (request.form.get("total_hectares") or "").strip()
+    total_hectares = _parse_optional_decimal(total_hectares_raw)
+    if total_hectares_raw and (total_hectares is None or total_hectares < 0):
+        flash("Escribe las hectareas con un formato valido, por ejemplo 33,70.", "error")
+        return redirect(url_for("core.pilot_activity_detail", activity_id=activity.id))
+
     minutes = int((ended_at - started_at).total_seconds() // 60)
     flight_log = PilotFlightLog.query.filter_by(pilot_id=pilot.id, activity_id=activity.id).first()
     previous_minutes = flight_log.flight_minutes if flight_log else 0
@@ -1593,7 +1625,7 @@ def pilot_save_flight_log(activity_id):
         "landing_location": (request.form.get("landing_location") or "").strip() or activity.place,
         "weather": (request.form.get("weather") or "").strip() or None,
         "battery_cycles": request.form.get("battery_cycles", type=int),
-        "total_hectares": _parse_optional_decimal(request.form.get("total_hectares")),
+        "total_hectares": total_hectares,
         "notes": (request.form.get("notes") or "").strip() or None,
     }
     if flight_log:
@@ -1760,14 +1792,7 @@ def operation_executions():
         minutes = sum((log.flight_minutes or 0) for log in flight_logs)
         if not minutes and billing_record and billing_record.operation_hours is not None:
             minutes = int(Decimal(str(billing_record.operation_hours)) * Decimal(60))
-        hectares = Decimal("0")
-        for log in flight_logs:
-            value = getattr(log, "total_hectares", None)
-            if value is not None:
-                hectares += Decimal(str(value))
-        billing_source = ((billing_record.raw_payload or {}).get("source") if billing_record else "") or ""
-        if hectares == 0 and billing_record and billing_record.area_hectares is not None and billing_source != "operational_calendar":
-            hectares = Decimal(str(billing_record.area_hectares))
+        hectares = _execution_hectares(activity, billing_record)
         planned_hectares = Decimal(str(activity.area_hectares)) if activity.area_hectares is not None else Decimal("0")
         progress_hectares = hectares
         if planned_hectares > 0:
@@ -2195,6 +2220,7 @@ def completed_operation_billing():
 
     query = OperationBillingRecord.query.options(
         joinedload(OperationBillingRecord.activity).joinedload(OperationalActivity.pilot),
+        joinedload(OperationBillingRecord.activity).selectinload(OperationalActivity.flight_logs),
         joinedload(OperationBillingRecord.organization),
     )
 
@@ -2238,8 +2264,20 @@ def completed_operation_billing():
             )
         ]
 
-    total_invoice = sum((record.invoice_total or Decimal("0")) for record in records)
-    total_area = sum((record.area_hectares or Decimal("0")) for record in records)
+    billable_records = 0
+    for record in records:
+        if not record.invoice_number and record.activity:
+            display_area = _execution_hectares(record.activity, record)
+            display_total = display_area * Decimal(str(record.unit_price or 0))
+        else:
+            display_area = Decimal(str(record.area_hectares or 0))
+            display_total = Decimal(str(record.invoice_total or 0))
+        record.display_area = display_area
+        record.display_total = display_total
+        if display_area > 0:
+            billable_records += 1
+    total_invoice = sum((record.display_total for record in records), Decimal("0"))
+    total_area = sum((record.display_area for record in records), Decimal("0"))
     pending_records = [record for record in records if not record.invoice_number]
     invoices = {record.invoice_number for record in records if record.invoice_number}
     options_query = OperationBillingRecord.query.options(joinedload(OperationBillingRecord.organization))
@@ -2290,7 +2328,7 @@ def completed_operation_billing():
         "title": "Facturacion",
         "description": "Consulta y gestiona la facturacion de operaciones realizadas.",
         "author": "TecnoAgro",
-        "site_title": "Operacion realizada",
+        "site_title": "Administración",
         "page_title": "Facturacion",
         "data_menu": get_dashboard_menu(),
         "records": records,
@@ -2303,6 +2341,7 @@ def completed_operation_billing():
             "invoice_count": len(invoices),
             "total_invoice": total_invoice,
             "total_area": total_area,
+            "billable_records": billable_records,
         },
     }
     return (
@@ -2335,6 +2374,7 @@ def completed_operation_billing_consolidated_invoice():
     query = OperationBillingRecord.query.options(
         joinedload(OperationBillingRecord.organization),
         joinedload(OperationBillingRecord.activity).joinedload(OperationalActivity.pilot),
+        joinedload(OperationBillingRecord.activity).selectinload(OperationalActivity.flight_logs),
     ).filter(
         or_(OperationBillingRecord.invoice_number.is_(None), OperationBillingRecord.invoice_number == "")
     )
@@ -2361,15 +2401,34 @@ def completed_operation_billing_consolidated_invoice():
         flash("No hay operaciones pendientes para los filtros seleccionados.", "error")
         return redirect(url_for("core.completed_operation_billing", factura="pendientes", **filters))
 
-    total_area = sum((Decimal(str(record.area_hectares or 0)) for record in records), Decimal("0"))
-    total_value = sum((Decimal(str(record.invoice_total or 0)) for record in records), Decimal("0"))
+    billable_records = []
+    for record in records:
+        executed_area = _execution_hectares(record.activity, record)
+        if executed_area <= 0:
+            continue
+        unit_price = Decimal(str(record.unit_price or 0))
+        record.executed_area = executed_area
+        record.executed_total = executed_area * unit_price
+        record.execution_status_label = (
+            "Ejecutada"
+            if record.activity and record.activity.status == "completed"
+            else "En avance"
+        )
+        billable_records.append(record)
+    records = billable_records
+    if not records:
+        flash("No hay operaciones ejecutadas ni con avance para los filtros seleccionados.", "error")
+        return redirect(url_for("core.completed_operation_billing", factura="pendientes", **filters))
+
+    total_area = sum((record.executed_area for record in records), Decimal("0"))
+    total_value = sum((record.executed_total for record in records), Decimal("0"))
     pilots = {}
     for record in records:
         pilot_name = record.pilot_name or "Sin piloto"
         pilot = pilots.setdefault(pilot_name, {"name": pilot_name, "operations": 0, "area": Decimal("0"), "total": Decimal("0")})
         pilot["operations"] += 1
-        pilot["area"] += Decimal(str(record.area_hectares or 0))
-        pilot["total"] += Decimal(str(record.invoice_total or 0))
+        pilot["area"] += record.executed_area
+        pilot["total"] += record.executed_total
 
     organization = next((record.organization for record in records if record.organization), None)
     reference = f"BORRADOR-{datetime.now().strftime('%Y%m%d-%H%M')}"
@@ -2509,7 +2568,7 @@ def completed_operation_schedule():
         "title": "Cronograma",
         "description": "Consulta el cronograma de operaciones realizadas.",
         "author": "TecnoAgro",
-        "site_title": "Operación realizada",
+        "site_title": "Administración",
         "page_title": "Cronograma",
         "data_menu": get_dashboard_menu(),
     }
@@ -2531,7 +2590,7 @@ def completed_operation_invoices():
         "title": "Facturas",
         "description": "Consulta y gestiona facturas de operaciones realizadas.",
         "author": "TecnoAgro",
-        "site_title": "Operación realizada",
+        "site_title": "Administración",
         "page_title": "Facturas",
         "data_menu": get_dashboard_menu(),
     }

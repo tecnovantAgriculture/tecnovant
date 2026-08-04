@@ -248,23 +248,23 @@
   }
 
   .exec-gantt-title {
+    left: 230px;
+  }
+
+  .exec-gantt-company {
     left: 0;
     border-top-left-radius: 10px;
   }
 
-  .exec-gantt-company {
-    left: 230px;
-  }
-
   .exec-gantt-task {
     position: sticky;
-    left: 0;
+    left: 230px;
     z-index: 8;
   }
 
   .exec-gantt-company-cell {
     position: sticky;
-    left: 230px;
+    left: 0;
     z-index: 8;
   }
 
@@ -513,6 +513,8 @@
     .exec-stats { grid-template-columns: 1fr; }
     .exec-gantt-head,
     .exec-gantt-row { grid-template-columns: 180px 180px minmax(640px, 1fr); }
+    .exec-gantt-title,
+    .exec-gantt-task { left: 180px; }
   }
 </style>
 {% endblock %}
@@ -550,8 +552,8 @@
     <div class="exec-gantt-wrap">
       <div class="exec-gantt">
         <div class="exec-gantt-head">
-          <div class="exec-gantt-title">Misión</div>
           <div class="exec-gantt-company">Cliente / Piloto</div>
+          <div class="exec-gantt-title">Misión</div>
           <div class="exec-gantt-weeks" data-exec-periods>
             {% for week in gantt_weeks %}
               <div class="exec-gantt-week {{ 'is-current' if week.is_current else '' }}"><strong>{{ week.label }}</strong>{{ week.range }}</div>
@@ -560,8 +562,8 @@
         </div>
         {% for item in executions %}
           <div class="exec-gantt-row" data-start-date="{{ item.starts_at.date().isoformat() }}" data-end-date="{{ item.ends_at.date().isoformat() }}">
-            <div class="exec-gantt-task"><span>{{ item.title }}</span></div>
             <div class="exec-gantt-company-cell"><span>{{ item.client_project }} · {{ item.pilot }}</span></div>
+            <div class="exec-gantt-task"><span>{{ item.title }}</span></div>
             <div class="exec-gantt-lane">
               {% if item.status in ['in_progress', 'soon', 'reported'] %}
                 <span class="exec-today-line" style="left: {{ item.gantt_left }}%;"></span>

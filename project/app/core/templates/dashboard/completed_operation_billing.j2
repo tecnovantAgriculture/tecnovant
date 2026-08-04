@@ -2,6 +2,7 @@
 {% set flush_content_shell = true %}
 
 {% block content %}
+{% set consolidated_mode = filters.factura == 'pendientes' and filters.cliente %}
 <style>
 .billing-filter-detail > summary::-webkit-details-marker { display: none; }
 .billing-filter-detail > summary::marker { content: ""; }
@@ -136,7 +137,31 @@
       </form>
     </div>
 
-    <div class="overflow-auto" style="height: min(560px, calc(100vh - 300px)); min-height: 400px;">
+    {% if consolidated_mode %}
+    <div class="border-b border-gray-100 bg-gray-50/60 px-5 py-6 dark:border-gray-800 dark:bg-gray-950/30" data-billing-summary>
+      <div class="mx-auto max-w-5xl overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
+        <div class="flex items-center gap-2 border-b border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800">
+          <span class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700"><i class="fas fa-file-invoice-dollar"></i></span>
+          <div><h3 class="text-sm font-semibold text-gray-900 dark:text-white">Resumen consolidado pendiente</h3><p class="text-[10px] text-gray-500">Valores calculados con hectáreas reales ejecutadas</p></div>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full min-w-[640px] border-collapse text-sm">
+            <thead class="bg-white text-[10px] uppercase tracking-wide text-gray-500 dark:bg-gray-900">
+              <tr><th class="px-4 py-2 text-left">Cliente</th><th class="px-4 py-2 text-center">Operaciones</th><th class="px-4 py-2 text-right">Hectáreas ejecutadas</th><th class="px-4 py-2 text-right">Total pendiente</th></tr>
+            </thead>
+            <tbody><tr class="border-t border-gray-100 dark:border-gray-800"><td class="px-4 py-4 font-semibold text-gray-900 dark:text-white">{{ filters.cliente }}</td><td class="px-4 py-4 text-center font-semibold">{{ stats.billable_records }}</td><td class="px-4 py-4 text-right font-semibold">{{ '%.2f'|format(stats.total_area or 0) }} ha</td><td class="px-4 py-4 text-right text-xl font-bold text-emerald-600">$ {{ '{:,.0f}'.format(stats.total_invoice or 0) }}</td></tr></tbody>
+          </table>
+        </div>
+        <div class="flex justify-end border-t border-gray-200 bg-gray-50 px-5 py-4 dark:border-gray-700 dark:bg-gray-800/70">
+          <button type="button" class="inline-flex h-10 min-w-[220px] items-center justify-center gap-2 whitespace-nowrap rounded-lg bg-sky-600 px-6 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-700" data-billing-toggle>
+            <i class="fas fa-list-ul"></i><span>Discriminar operaciones</span>
+          </button>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="overflow-auto {{ 'hidden' if consolidated_mode else '' }}" data-billing-details style="height: min(560px, calc(100vh - 300px)); min-height: 400px;">
       <table class="min-w-[1660px] w-full border-collapse text-xs">
         <thead class="sticky top-0 z-10 bg-gray-50 text-[11px] uppercase tracking-wide text-gray-600 dark:bg-gray-800 dark:text-gray-300">
           <tr>
@@ -166,12 +191,12 @@
             <td class="px-3 py-2 font-medium text-gray-900 dark:text-gray-100">{{ (record.raw_payload or {}).get('final_client') or '' }}</td>
             <td class="px-3 py-2">{{ record.farm_name or '' }}</td>
             <td class="px-3 py-2">{{ record.paddock_name or '' }}</td>
-            <td class="px-3 py-2 text-right">{{ '%.2f'|format(record.area_hectares or 0) }}</td>
+            <td class="px-3 py-2 text-right">{{ '%.2f'|format(record.display_area) }}</td>
             <td class="px-3 py-2">{{ record.pilot_name or '' }}</td>
             <td class="px-3 py-2">{{ record.billing_cut or '' }}</td>
             <td class="px-3 py-2">{{ record.billing_month or '' }}</td>
             <td class="px-3 py-2 text-right">$ {{ '{:,.0f}'.format(record.unit_price or 0) }}</td>
-            <td class="px-3 py-2 text-right font-semibold">$ {{ '{:,.0f}'.format(record.invoice_total or 0) }}</td>
+            <td class="px-3 py-2 text-right font-semibold">$ {{ '{:,.0f}'.format(record.display_total) }}</td>
             <td class="px-3 py-2 min-w-[230px]">
               <form method="post" action="{{ url_for('core.completed_operation_billing_update_invoice', record_id=record.id) }}" class="billing-invoice-form flex items-center gap-1.5">
                 <input type="text" name="invoice_number" value="{{ record.invoice_number or '' }}" maxlength="80" required placeholder="Numero de factura" aria-label="Numero de factura" class="h-7 w-32 rounded-md border border-gray-200 bg-white px-2 text-[11px] text-gray-800 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-100 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100">
@@ -221,6 +246,8 @@
 <script>
 const billingCatalog={{ billing_catalog|tojson }}, associationModal=document.getElementById('billing-association-modal'), associationForm=document.getElementById('billing-association-form'), organizationSelect=associationForm.querySelector('[name="organization_id"]'), farmSelect=document.getElementById('billing-association-farm'), lotSelect=associationForm.querySelector('[name="lot_id"]'), associationError=document.getElementById('billing-association-error');
 const newFarmInput=document.getElementById('billing-new-farm'),newLotInput=document.getElementById('billing-new-lot'),newLotArea=document.getElementById('billing-new-lot-area'),newFarmToggle=document.getElementById('billing-new-farm-toggle'),newLotToggle=document.getElementById('billing-new-lot-toggle');
+const billingDetails=document.querySelector('[data-billing-details]'),billingToggle=document.querySelector('[data-billing-toggle]');
+if(billingToggle&&billingDetails){billingToggle.addEventListener('click',()=>{const opening=billingDetails.classList.contains('hidden');billingDetails.classList.toggle('hidden');billingToggle.innerHTML=opening?'<i class="fas fa-compress-alt mr-1.5"></i>Ver solo total':'<i class="fas fa-list-ul mr-1.5"></i>Discriminar operaciones';if(opening)billingDetails.scrollIntoView({behavior:'smooth',block:'start'});});}
 let associationRecordArea='';
 const fillSelect=(select,items,label)=>{select.innerHTML='<option value="">'+label+'</option>'+items.map(item=>'<option value="'+item.id+'">'+item.name+'</option>').join('');};
 const setLotManual=enabled=>{newLotInput.classList.toggle('hidden',!enabled);newLotArea.classList.toggle('hidden',!enabled);newLotInput.disabled=!enabled;newLotArea.disabled=!enabled;newLotInput.required=false;newLotArea.required=false;lotSelect.disabled=enabled;lotSelect.required=false;if(enabled){lotSelect.value='';if(!newLotArea.value)newLotArea.value=associationRecordArea;}};

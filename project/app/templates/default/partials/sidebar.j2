@@ -78,6 +78,19 @@
 {% set sidebar_menu = {
     "menu": sidebar_menu.menu + [operaciones_menu]
 } %}
+{% set operacion_realizada_menu = {
+    "name": "Administración",
+    "url": "#",
+    "icon": icon_file_chart_bar,
+    "submenu": [
+        {"name": "Facturación", "url": url_for('core.completed_operation_billing') },
+        {"name": "Cronograma", "url": url_for('core.completed_operation_schedule') },
+        {"name": "Facturas", "url": url_for('core.completed_operation_invoices') },
+    ]
+} %}
+{% set sidebar_menu = {
+    "menu": sidebar_menu.menu + [operacion_realizada_menu]
+} %}
 
 {% set mantenimiento_menu = {
     "name": "Mantenimiento",
@@ -107,19 +120,6 @@
     "menu": sidebar_menu.menu + [logistica_menu]
 } %}
 
-{% set operacion_realizada_menu = {
-    "name": "Operación realizada",
-    "url": "#",
-    "icon": icon_file_chart_bar,
-    "submenu": [
-        {"name": "Facturación", "url": url_for('core.completed_operation_billing') },
-        {"name": "Cronograma", "url": url_for('core.completed_operation_schedule') },
-        {"name": "Facturas", "url": url_for('core.completed_operation_invoices') },
-    ]
-} %}
-{% set sidebar_menu = {
-    "menu": sidebar_menu.menu + [operacion_realizada_menu]
-} %}
 
 {% set marketing_menu = {
     "name": "Marketing",

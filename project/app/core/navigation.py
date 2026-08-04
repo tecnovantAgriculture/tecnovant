@@ -70,17 +70,17 @@ BREADCRUMB_HIERARCHY = {
     ],
     "core.completed_operation_billing": [
         {"name": "Inicio", "url": "core.dashboard"},
-        {"name": "Operación realizada", "url": None},
+        {"name": "Administración", "url": None},
         {"name": "Facturación", "url": None},
     ],
     "core.completed_operation_schedule": [
         {"name": "Inicio", "url": "core.dashboard"},
-        {"name": "Operación realizada", "url": None},
+        {"name": "Administración", "url": None},
         {"name": "Cronograma", "url": None},
     ],
     "core.completed_operation_invoices": [
         {"name": "Inicio", "url": "core.dashboard"},
-        {"name": "Operación realizada", "url": None},
+        {"name": "Administración", "url": None},
         {"name": "Facturas", "url": None},
     ],
     "core.marketing_demo_schedule": [

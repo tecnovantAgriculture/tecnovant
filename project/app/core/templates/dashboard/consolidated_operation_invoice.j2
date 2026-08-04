@@ -88,18 +88,19 @@
       <article><small>Valor consolidado</small><strong>$ {{ '{:,.0f}'.format(total_value) }}</strong></article>
     </section>
 
-    <h2>Detalle de operaciones pendientes</h2>
+    <h2>Detalle de operaciones ejecutadas y en avance</h2>
     <table>
-      <thead><tr><th>Fecha</th><th>Finca / Potrero</th><th>Piloto</th><th class="num">Hectáreas</th><th class="num">Precio/ha</th><th class="num">Subtotal</th></tr></thead>
+      <thead><tr><th>Fecha</th><th>Finca / Potrero</th><th>Piloto</th><th>Estado</th><th class="num">Hectáreas ejecutadas</th><th class="num">Precio/ha</th><th class="num">Subtotal</th></tr></thead>
       <tbody>
         {% for record in records %}
         <tr>
           <td>{{ record.executed_date.strftime('%d/%m/%Y') if record.executed_date else '' }}</td>
           <td><strong>{{ record.farm_name or 'Sin finca' }}</strong>{% if record.paddock_name %}<br><span class="muted">{{ record.paddock_name }}</span>{% endif %}</td>
           <td>{{ record.pilot_name or 'Sin piloto' }}</td>
-          <td class="num">{{ '%.2f'|format(record.area_hectares or 0) }}</td>
+          <td>{{ record.execution_status_label }}</td>
+          <td class="num">{{ '%.2f'|format(record.executed_area) }}</td>
           <td class="num">$ {{ '{:,.0f}'.format(record.unit_price or 0) }}</td>
-          <td class="num"><strong>$ {{ '{:,.0f}'.format(record.invoice_total or 0) }}</strong></td>
+          <td class="num"><strong>$ {{ '{:,.0f}'.format(record.executed_total) }}</strong></td>
         </tr>
         {% endfor %}
       </tbody>
