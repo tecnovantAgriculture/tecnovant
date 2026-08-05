@@ -207,7 +207,7 @@ def check_resource_access(resource, claims):
         RoleEnum.ORG_EDITOR.value,
         RoleEnum.ORG_VIEWER.value,
     ):
-        user_id = claims.get("user_id")
+        user_id = claims.get("user_id") or claims.get("id")
         if not user_id:
             return False
         user = User.query.get(user_id)
