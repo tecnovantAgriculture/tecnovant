@@ -217,11 +217,32 @@
               <select id="polygonComparisonObjective" class="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 py-1.5 px-3 text-sm shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500">
                 <option value="">Selecciona un objetivo</option>
               </select>
+              <button id="openLotComparisonBtn" type="button" disabled class="mt-2 w-full items-center justify-center gap-2 rounded-md px-3 py-2 text-xs font-semibold text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:cursor-not-allowed" style="display:flex;background-color:#047857;color:#ffffff;">
+                <i class="fas fa-columns" aria-hidden="true"></i>
+                <span>Comparar lotes (mínimo 2)</span>
+              </button>
+              <p id="lotComparisonAvailability" class="mt-1 text-[11px] text-gray-500 dark:text-gray-400">Calcula dos lotes y selecciona un objetivo para compararlos.</p>
             </div>
           </div>
           <div id="polygonComparisonHint" class="rounded-xl bg-gray-50 dark:bg-gray-700 px-3 py-2 text-xs text-gray-500 dark:text-gray-400">Dibuja un polígono para ver aquí la comparación previa.</div>
           <div id="polygonComparisonCards" class="mt-3 space-y-3 overflow-y-auto pr-2" style="max-height: 760px;"></div>
         </section>
+
+        <div id="lotComparisonModal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="lotComparisonTitle" style="position:fixed;inset:0;width:100vw;height:100vh;z-index:2147483000;background:rgba(17,24,39,.72);padding:24px;box-sizing:border-box;">
+          <div data-close-lot-comparison style="position:absolute;inset:0;z-index:0;"></div>
+          <div class="flex flex-col overflow-hidden rounded-lg bg-white shadow-2xl dark:bg-gray-900" style="position:absolute;z-index:1;left:50%;top:50%;transform:translate(-50%,-50%);width:min(1400px,calc(100vw - 48px));height:min(860px,calc(100vh - 48px));margin:0;background:#fff;">
+            <header class="flex shrink-0 items-center justify-between gap-4 border-b border-gray-200 px-4 py-3 dark:border-gray-700 sm:px-6">
+              <div>
+                <h2 id="lotComparisonTitle" class="text-base font-semibold text-gray-900 dark:text-gray-100">Comparación de lotes</h2>
+                <p id="lotComparisonSubtitle" class="mt-0.5 text-xs text-gray-500 dark:text-gray-400"></p>
+              </div>
+              <button id="closeLotComparisonBtn" type="button" class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:hover:bg-gray-800 dark:hover:text-gray-100" title="Cerrar comparación" aria-label="Cerrar comparación">
+                <i class="fas fa-times" aria-hidden="true"></i>
+              </button>
+            </header>
+            <div id="lotComparisonContent" class="min-h-0 flex-1 overflow-auto p-4 sm:p-6"></div>
+          </div>
+        </div>
       </div>
 
       <aside class="space-y-4 lg:col-span-4 xl:col-span-3">
@@ -277,6 +298,7 @@
               <span id="lotsCount">0</span> lotes
             </span>
           </div>
+
           <ul id="lotsList" class="space-y-2 text-sm">
             <li class="text-xs italic text-gray-400 dark:text-gray-500">
               Dibuja un polígono en el mapa para registrar el primer lote.
@@ -3805,6 +3827,14 @@
     const select = document.getElementById("polygonComparisonObjective");
     const hint = document.getElementById("polygonComparisonHint");
     const cards = document.getElementById("polygonComparisonCards");
+    const comparisonButton = document.getElementById("openLotComparisonBtn");
+    const comparisonModal = document.getElementById("lotComparisonModal");
+    const comparisonContent = document.getElementById("lotComparisonContent");
+    const comparisonSubtitle = document.getElementById("lotComparisonSubtitle");
+    const comparisonClose = document.getElementById("closeLotComparisonBtn");
+    if(comparisonModal && comparisonModal.parentElement !== document.body){
+      document.body.appendChild(comparisonModal);
+    }
     let lastSignature = "";
     const balanceCache = new Map();
     const MACRO_SYMBOLS = new Set(["N", "P", "K", "Ca", "Mg", "S"]);
@@ -4014,8 +4044,7 @@
         + '<p class="mt-3 text-[11px] text-gray-600">Objetivo se expresa en kg/ha con el aforo objetivo y Actual con el aforo actual. La Diferencia solo refleja déficits y Nano es la cantidad estimada del producto a aplicar según su concentración.</p></div>';
     }
     function renderEntry(entry, rows, label){
-      const macro = rows.filter(row => row.type === 'Macronutriente');
-      const micro = rows.filter(row => row.type === 'Micronutriente');
+
       const id = String(entry.id).replace(/[^a-zA-Z0-9_-]/g, '');
       return '<details open class="group rounded-2xl border border-gray-200 bg-white shadow-sm">'
         + '<summary class="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 px-4 py-3">'
@@ -4026,8 +4055,7 @@
         + '<span class="hidden rounded-full border border-gray-200 px-2.5 py-1 text-[11px] font-semibold text-gray-500 group-open:inline-flex">Cerrar</span></div>'
         + '</summary>'
         + '<div class="space-y-4 border-t border-gray-100 p-4">'
-        + '<div class="grid gap-4 lg:grid-cols-2">' + chart('Macronutrientes', macro) + chart('Micronutrientes', micro) + '</div>'
-        + '<div><h4 class="mb-2 text-sm font-semibold text-emerald-800">Valores Detallados</h4>' + detailedTable(rows) + '</div>'
+
         + '<div id="previewBalance-' + id + '" class="rounded-2xl border border-gray-200 bg-white p-4 text-xs text-gray-500 shadow-sm">Calculando balance mineral...</div>'
         + '</div></details>';
     }
@@ -4040,12 +4068,106 @@
         catch(err){ node.textContent = 'No se pudo calcular el balance mineral para este polígono.'; }
       }
     }
+    function closeLotComparison(){
+      if(!comparisonModal){ return; }
+      comparisonModal.classList.add("hidden");
+      document.body.classList.remove("overflow-hidden");
+      if(comparisonButton){ comparisonButton.focus(); }
+    }
+    function balanceEntryMap(balance){
+      const map = new Map();
+      const entries = balance && Array.isArray(balance.entries) ? balance.entries : [];
+      entries.forEach(item => map.set(normalizeName(item.name), item));
+      return map;
+    }
+    function comparisonMetric(value, suffix){
+      const number = Number(value);
+      return Number.isFinite(number) ? formatNutrientValue(number) + (suffix || "") : "--";
+    }
+    async function openLotComparison(){
+      const entries = getPreviewEntries().slice(0, 4);
+      const objective = getSelectedObjective();
+      if(!comparisonModal || !comparisonContent || entries.length < 2 || !objective){ return; }
+      const objectiveLabel = select && select.selectedIndex >= 0 ? (select.options[select.selectedIndex].textContent || "").trim() : "Objetivo seleccionado";
+      comparisonSubtitle.textContent = entries.length + " lotes · " + objectiveLabel;
+      comparisonContent.innerHTML = '<div class="flex min-h-[240px] items-center justify-center text-sm text-gray-500"><i class="fas fa-spinner fa-spin mr-2"></i>Calculando comparación...</div>';
+      comparisonModal.classList.remove("hidden");
+      document.body.classList.add("overflow-hidden");
+      comparisonClose && comparisonClose.focus();
+      try{
+        const balances = await Promise.all(entries.map(entry => getBalance(entry, buildRows(entry.areaStats || {}, objective), objective)));
+        const maps = balances.map(balanceEntryMap);
+        const nutrientNames = [];
+        const nutrientLabels = new Map();
+        balances.forEach(balance => {
+          (balance && Array.isArray(balance.entries) ? balance.entries : []).forEach(item => {
+            const key = normalizeName(item.name);
+            if(key && !nutrientLabels.has(key)){
+              nutrientNames.push(key);
+              nutrientLabels.set(key, item.name);
+            }
+          });
+        });
+        const summary = entries.map((entry, index) => {
+          const balance = balances[index] || {};
+          const balanceRows = Array.isArray(balance.entries) ? balance.entries : [];
+          const actualTotal = balanceRows.reduce((sum, item) => sum + (Number(item.actual_kg) || 0), 0);
+          const differenceTotal = balanceRows.reduce((sum, item) => sum + (Number(item.difference_kg) || 0), 0);
+          return '<article class="border-l-4 border-emerald-600 bg-gray-50 px-4 py-3 dark:bg-gray-800"><h3 class="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">' + escapeHtml(entry.name || ('Lote ' + (index + 1))) + '</h3><dl class="mt-2 grid grid-cols-3 gap-3 text-xs"><div><dt class="text-gray-500">Actual</dt><dd class="mt-1 font-semibold text-gray-900 dark:text-gray-100">' + comparisonMetric(actualTotal, ' kg/ha') + '</dd></div><div><dt class="text-gray-500">Déficit</dt><dd class="mt-1 font-semibold text-red-600">' + comparisonMetric(differenceTotal, ' kg/ha') + '</dd></div><div><dt class="text-gray-500">Nano</dt><dd class="mt-1 font-semibold text-emerald-700">' + comparisonMetric(balance.total_kg_ha, ' kg/ha') + '</dd></div></dl></article>';
+        }).join('');
+        const header = entries.map(entry => '<th colspan="3" class="border-l border-gray-200 px-3 py-2 text-center text-xs font-semibold text-gray-900 dark:border-gray-700 dark:text-gray-100">' + escapeHtml(entry.name || 'Lote') + '</th>').join('');
+        const subheader = entries.map(() => '<th class="border-l border-gray-200 px-2 py-2 text-right text-[11px] font-medium text-gray-500 dark:border-gray-700">Actual</th><th class="px-2 py-2 text-right text-[11px] font-medium text-gray-500">Diferencia</th><th class="px-2 py-2 text-right text-[11px] font-medium text-gray-500">Nano</th>').join('');
+        const rows = nutrientNames.map(key => '<tr class="border-t border-gray-100 dark:border-gray-800"><th class="sticky left-0 z-10 bg-white px-3 py-2 text-left text-xs font-semibold text-gray-700 dark:bg-gray-900 dark:text-gray-200">' + escapeHtml(nutrientLabels.get(key)) + '</th>' + maps.map(map => { const item = map.get(key) || {}; return '<td class="border-l border-gray-100 px-2 py-2 text-right text-xs dark:border-gray-800">' + comparisonMetric(item.actual_kg) + '</td><td class="px-2 py-2 text-right text-xs text-red-600">' + comparisonMetric(item.difference_kg) + '</td><td class="px-2 py-2 text-right text-xs font-semibold text-emerald-700">' + comparisonMetric(item.nano_kg) + '</td>'; }).join('') + '</tr>').join('');
+        comparisonContent.innerHTML = '';
+        const detailPanels = entries.map((entry, index) => {
+          const stats = entry.areaStats || {};
+          const vars = getVariablesSource(stats);
+          const primary = getPrimaryStatsFromData(stats);
+          const broma = stats.bromatologia || {};
+          const layer = drawnItems ? drawnItems.getLayer(entry.id) : null;
+          const areaHa = layer ? computeAreaHaForLayer(layer) : null;
+          const fmt = (number, decimals, suffix) => Number.isFinite(Number(number)) ? Number(number).toFixed(decimals) + (suffix || '') : '--';
+          const nutrients = (Array.isArray(stats.nutrients) ? stats.nutrients : []).map(item => '<div class="flex justify-between gap-3 border-b border-gray-100 py-1.5 last:border-0"><span>' + escapeHtml(item.nutrient_name || item.nutrient_symbol || 'Nutriente') + (item.nutrient_symbol ? ' (' + escapeHtml(item.nutrient_symbol) + ')' : '') + '</span><strong class="whitespace-nowrap text-emerald-700">' + comparisonMetric(item.target_value, item.nutrient_unit ? ' ' + item.nutrient_unit : '') + '</strong></div>').join('');
+          const analysis = '<section class="border border-gray-200 bg-white p-4 shadow-sm">'
+            + '<div class="mb-3 flex items-center justify-between"><h3 class="text-sm font-semibold text-gray-900">Resumen del análisis</h3><span class="text-xs font-medium text-gray-500">' + escapeHtml(entry.name || 'Lote') + '</span></div>'
+            + '<div class="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">'
+            + '<div class="bg-gray-50 p-2 text-center text-xs"><span class="block text-gray-500">NDVI</span><strong class="mt-1 block text-sm">' + fmt(primary.ndvi,2) + '</strong></div>'
+            + '<div class="bg-gray-50 p-2 text-center text-xs"><span class="block text-gray-500">VARI</span><strong class="mt-1 block text-sm">' + fmt(primary.vari,2) + '</strong></div>'
+            + '<div class="bg-gray-50 p-2 text-center text-xs"><span class="block text-gray-500">NBI</span><strong class="mt-1 block text-sm">' + fmt(primary.nbi,2) + '</strong></div>'
+            + '<div class="bg-gray-50 p-2 text-center text-xs"><span class="block text-gray-500">Área</span><strong class="mt-1 block text-sm">' + fmt(areaHa,4,' ha') + '</strong></div>'
+            + '<div class="bg-gray-50 p-2 text-center text-xs"><span class="block text-gray-500">Proteína</span><strong class="mt-1 block text-sm">' + fmt(stats.protein != null ? stats.protein : stats.protein_average,2,'%') + '</strong></div>'
+            + '<div class="bg-gray-50 p-2 text-center text-xs"><span class="block text-gray-500">Nitrógeno</span><strong class="mt-1 block text-sm">' + fmt(stats.nitrogen,2,'%') + '</strong></div></div>'
+            + '<div class="mt-3 grid gap-3 lg:grid-cols-2"><div class="border border-gray-200 p-3 text-xs"><h4 class="mb-2 font-semibold">Perfil bromatológico</h4><div class="grid grid-cols-2 gap-x-4 gap-y-1"><span>FDA: <strong>' + fmt(broma.fda_pct,2,'%') + '</strong></span><span>FDN: <strong>' + fmt(broma.fdn_pct,2,'%') + '</strong></span><span>Energía: <strong>' + fmt(broma.energia_mcal,2,' Mcal/kg') + '</strong></span><span>Energía: <strong>' + fmt(broma.energia_mj,2,' MJ/kg') + '</strong></span><span>Energía2: <strong>' + fmt(broma.energia2_mcal,2,' Mcal/kg') + '</strong></span><span>AFORO: <strong>' + fmt(broma.aforo_ua_ha,2,' UA/ha') + '</strong></span></div></div>'
+            + '<div class="border border-gray-200 p-3 text-xs"><h4 class="mb-2 font-semibold">Variables avanzadas</h4><div class="grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-3"><span>VI: <strong>' + fmt(vars.vi,3) + '</strong></span><span>VARI: <strong>' + fmt(vars.vari,3) + '</strong></span><span>GLI: <strong>' + fmt(vars.gli,3) + '</strong></span><span>NGRDI: <strong>' + fmt(vars.ngrdi,3) + '</strong></span><span>ExG: <strong>' + fmt(vars.exg,3) + '</strong></span></div></div></div>'
+            + '<details class="mt-3 border border-gray-200"><summary class="cursor-pointer px-3 py-2 text-xs font-semibold">Nutrientes estimados (' + (Array.isArray(stats.nutrients) ? stats.nutrients.length : 0) + ')</summary><div class="grid gap-x-6 px-3 pb-3 text-xs sm:grid-cols-2 lg:grid-cols-3">' + (nutrients || 'Sin nutrientes calculados.') + '</div></details></section>';
+          return '<section class="border-t-4 border-emerald-600 pt-4 first:border-t-0 first:pt-0"><h2 class="mb-4 text-base font-semibold text-emerald-800">' + escapeHtml(entry.name || ('Lote ' + (index + 1))) + '</h2><div class="space-y-5">' + analysis + '<div class="min-w-0"><h3 class="mb-3 text-sm font-semibold text-gray-900">Balance de Minerales</h3>' + balanceTable(balances[index], entry, objective) + '</div></div></section>';
+        }).join('');
+        comparisonContent.insertAdjacentHTML('beforeend', '<div><h2 class="text-base font-semibold">Lotes seleccionados</h2><p class="mt-1 text-xs text-gray-500">Se muestran todos los lotes seleccionados con su análisis y balance mineral.</p><div class="mt-5 space-y-10">' + detailPanels + '</div></div>');
+      }catch(error){
+        console.error('Error preparando comparación de lotes', error);
+        comparisonContent.innerHTML = '<div class="border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">No se pudo calcular la comparación de los lotes seleccionados.</div>';
+      }
+    }
+    if(comparisonButton){ comparisonButton.addEventListener("click", openLotComparison); }
+    if(comparisonClose){ comparisonClose.addEventListener("click", closeLotComparison); }
+    if(comparisonModal){ comparisonModal.querySelectorAll("[data-close-lot-comparison]").forEach(node => node.addEventListener("click", closeLotComparison)); }
+    document.addEventListener("keydown", event => { if(event.key === "Escape" && comparisonModal && !comparisonModal.classList.contains("hidden")){ closeLotComparison(); } });
+
     function renderPreview(){
       if(!section || !hint || !cards){ return; }
       syncObjectiveOptions();
       const entries = getPreviewEntries();
       const objective = getSelectedObjective();
-      const label = select && select.selectedIndex >= 0 ? (select.options[select.selectedIndex].textContent || '').trim() : '';
+      if(comparisonButton){
+        const comparableCount = Math.min(entries.length, 4);
+        const canCompare = comparableCount >= 2 && !!objective;
+        comparisonButton.disabled = !canCompare;
+        comparisonButton.title = canCompare ? "Abrir comparación de lotes" : "Se necesitan al menos dos lotes calculados y un objetivo";
+        const labelNode = comparisonButton.querySelector("span");
+        if(labelNode){ labelNode.textContent = comparableCount >= 2 ? "Comparar " + comparableCount + " lotes" : "Comparar lotes (mínimo 2)"; }
+        const availability = document.getElementById("lotComparisonAvailability");
+        if(availability){ availability.textContent = canCompare ? "Comparación disponible con el objetivo seleccionado." : (comparableCount < 2 ? "Calcula al menos dos lotes para compararlos." : "Selecciona un objetivo en Vista previa nutricional."); }
+      }      const label = select && select.selectedIndex >= 0 ? (select.options[select.selectedIndex].textContent || '').trim() : '';
       const signature = entries.map(entry => [entry.id, entry.name, !!entry.areaStats].join(':')).join('|') + '::' + (select ? select.value : '');
       if(signature === lastSignature){ return; }
       lastSignature = signature;

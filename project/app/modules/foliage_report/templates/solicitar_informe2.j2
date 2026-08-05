@@ -97,31 +97,6 @@
     </div>
 </div>
 
-{% if DEBUG %}
-<div class="my-4 p-4 bg-gray-100 dark:bg-gray-900 rounded-lg shadow">
-     <h2 class="text-xl font-semibold mb-3 text-gray-900 dark:text-gray-100">Datos de Depuración (JSON)</h2>
-    
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-            <h3 class="font-medium mb-1 text-gray-900 dark:text-gray-100">Fincas:</h3>
-            <pre id="debug-farms-data" class="w-full max-w-xl p-3 bg-gray-800 text-gray-200 rounded-lg shadow font-mono text-xs leading-relaxed whitespace-pre-wrap break-words border border-gray-700 h-64 overflow-y-auto">No hay datos de fincas cargados aún.</pre>
-        </div>
-        <div>
-            <h3 class="font-medium mb-1 text-gray-900 dark:text-gray-100">Lotes:</h3>
-            <pre id="debug-lots-data" class="w-full max-w-xl p-3 bg-gray-800 text-gray-200 rounded-lg shadow font-mono text-xs leading-relaxed whitespace-pre-wrap break-words border border-gray-700 h-64 overflow-y-auto">Seleccione una finca para cargar lotes.</pre>
-        </div>
-        <div>
-            <h3 class="font-medium mb-1 text-gray-900 dark:text-gray-100">Análisis:</h3>
-            <pre id="debug-analyses-data" class="w-full max-w-xl p-3 bg-gray-800 text-gray-200 rounded-lg shadow font-mono text-xs leading-relaxed whitespace-pre-wrap break-words border border-gray-700 h-64 overflow-y-auto">Seleccione un lote para cargar análisis.</pre>
-        </div>
-        <div>
-            <h3 class="font-medium mb-1 text-gray-900 dark:text-gray-100">Objetivos:</h3>
-            <pre id="debug-objectives-data" class="w-full max-w-xl p-3 bg-gray-800 text-gray-200 rounded-lg shadow font-mono text-xs leading-relaxed whitespace-pre-wrap break-words border border-gray-700 h-64 overflow-y-auto">Seleccione un cultivo (asociado a un lote) para cargar objetivos.</pre>
-        </div>
-    </div>
-</div>
-{% endif %}
-
 {% endblock %}
 
 {% block extra_js %}
@@ -528,9 +503,6 @@ function updateCropInfo(cropId) {
                         const option = new Option(farm.name, farm.id);
                         farmSelect.add(option);
                     });
-                    if (document.getElementById('debug-farms-data')) {
-                        document.getElementById('debug-farms-data').textContent = JSON.stringify(farms, null, 2);
-                    }
                 })
                 .catch(error => {
                      console.error(error);
@@ -567,9 +539,6 @@ function updateCropInfo(cropId) {
                         option.dataset.cropId = lot.crop_id != null ? lot.crop_id : '';
                         lotSelect.add(option);
                     });
-                    if (document.getElementById('debug-lots-data')) {
-                        document.getElementById('debug-lots-data').textContent = JSON.stringify(lots, null, 2);
-                    }
                     lotSelect.disabled = false;
                 })
                 .catch(error => {
@@ -643,9 +612,6 @@ function updateCropInfo(cropId) {
                         }
                     }
                     updateAnalysisInfo();
-                    if (document.getElementById('debug-analyses-data')) {
-                        document.getElementById('debug-analyses-data').textContent = JSON.stringify(analyses, null, 2);
-                    }
                 })
                 .catch(error => {
                     console.error(error);
@@ -675,9 +641,6 @@ function updateCropInfo(cropId) {
                         objectiveSelect.add(option);
                     });
                     loadSecondaryObjectives();
-                    if (document.getElementById('debug-objectives-data')) {
-                        document.getElementById('debug-objectives-data').textContent = JSON.stringify(objectives, null, 2);
-                    }
                     objectiveSelect.disabled = false;
                 })
                 .catch(error => {

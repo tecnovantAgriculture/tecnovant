@@ -216,7 +216,14 @@ def check_resource_access(resource, claims):
         resource_org_id = getattr(resource, "org_id", None)
         if resource_org_id is None:
             return False
-        return any(org.id == resource_org_id for org in user.organizations)
+        organization_ids = [org.id for org in user.organizations]
+
+        # Query builders pass a model class, while authorization checks pass
+        # a loaded model instance. Return the appropriate result for each.
+        if isinstance(resource, type):
+            return resource_org_id.in_(organization_ids)
+
+        return resource_org_id in organization_ids
 
     return False
 
