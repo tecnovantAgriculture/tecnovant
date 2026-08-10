@@ -55,7 +55,7 @@ class FarmView(MethodView):
 
     decorators = [jwt_required()]
 
-    @check_permission(required_roles=["administrator", "reseller"])
+    @check_permission()
     def get(self, farm_id=None):
         """
         Obtiene una lista de fincas o una finca específica.
@@ -142,7 +142,7 @@ class FarmView(MethodView):
         if farms and not accessible_farms:
             raise Forbidden("You do not have access to any farms.")
 
-        response_data = [self._serialize_farm(farm) for farm in farms]
+        response_data = [self._serialize_farm(farm) for farm in accessible_farms]
         json_data = json.dumps(response_data, ensure_ascii=False, indent=4)
         return Response(json_data, status=200, mimetype="application/json")
 
