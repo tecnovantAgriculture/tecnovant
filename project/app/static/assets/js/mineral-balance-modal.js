@@ -28,7 +28,7 @@
     const key = String(value || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     return NUTRIENT_SYMBOLS[key] || null;
   }
-  const state = { loaded: false, objectives: [], common: [], leaf: [], selectedObjective: null, selectedLeaf: null, balance: null, showGrade: false, showNano: false };
+  const state = { loaded: false, loadingObjectives: false, loadingLeaf: false, objectives: [], common: [], leaf: [], selectedObjective: null, selectedLeaf: null, balance: null, showGrade: false, showNano: false };
 
   function esc(value) {
     const node = document.createElement("div");
@@ -190,6 +190,8 @@
 
   async function load() {
     if (state.loaded) return renderAll();
+    state.loadingObjectives = true;
+    state.loadingLeaf = true;
     setStatus("Cargando objetivos y análisis foliares…");
     const resources = [
       { key: "objectives", label: "Objetivos", url: ENDPOINTS.objectives },
@@ -205,9 +207,11 @@
           throw new Error(`${resource.label}: ${detail}`);
         }
         state[resource.key] = Array.isArray(body) ? body : (Array.isArray(body?.items) ? body.items : []);
+        state[resource.key === "objectives" ? "loadingObjectives" : "loadingLeaf"] = false;
         renderAll();
         setStatus(resource.key === "objectives" ? "Objetivos cargados; cargando análisis foliares…" : "Análisis foliares cargados; cargando objetivos…");
       } catch (error) {
+        state[resource.key === "objectives" ? "loadingObjectives" : "loadingLeaf"] = false;
         errors.push(error?.message || `${resource.label}: error de consulta`);
       }
     }));
@@ -224,7 +228,7 @@
     document.getElementById("mineral-objective-body").innerHTML = rows.length ? rows.map(item => {
       const values = nutrientInfo(item), selected = Number(state.selectedObjective?.id) === Number(item.id);
       return `<tr data-objective-id="${item.id}" class="cursor-pointer hover:bg-emerald-50 ${selected ? "bg-emerald-100 ring-1 ring-inset ring-emerald-500" : ""}"><td class="px-2 py-1.5 text-center">${item.id}</td><td class="px-2 py-1.5 font-medium">${esc(item.crop_name)}</td>${nutrients.map(n => `<td class="px-2 py-1.5 text-center">${fmt(values.get(String(n.id))?.value, 3)}</td>`).join("")}<td class="px-2 py-1.5 text-center">${fmt(item.target_value, 3)}</td><td class="px-2 py-1.5 text-center">${fmt(item.rest, 0)}</td></tr>`;
-    }).join("") : `<tr><td colspan="${nutrients.length + 4}" class="p-5 text-center text-gray-500">No hay objetivos para mostrar.</td></tr>`;
+    }).join("") : `<tr><td colspan="${nutrients.length + 4}" class="p-5 text-center text-gray-500">${state.loadingObjectives ? "Cargando objetivos…" : "No hay objetivos para mostrar."}</td></tr>`;
   }
   function renderFoliar() {
     const nutrients = allNutrients();
@@ -233,7 +237,7 @@
     document.getElementById("mineral-foliar-body").innerHTML = rows.length ? rows.map(item => {
       const common = commonFor(item), selected = Number(state.selectedLeaf?.id) === Number(item.id);
       return `<tr data-leaf-id="${item.id}" class="cursor-pointer hover:bg-sky-50 ${selected ? "bg-sky-100 ring-1 ring-inset ring-sky-500" : ""}"><td class="px-2 py-1.5 text-center">${item.id}</td><td class="px-2 py-1.5 text-center">${esc(common.date || item.common_analysis_date || "")}</td><td class="px-2 py-1.5">${esc(common.farm_name || item.farm_name || "")}</td><td class="px-2 py-1.5">${esc(common.lot_name || item.lot_name || "")}</td>${nutrients.map(n => `<td class="px-2 py-1.5 text-center">${fmt(item[`nutrient_${n.id}`], 3)}</td>`).join("")}</tr>`;
-    }).join("") : `<tr><td colspan="${nutrients.length + 4}" class="p-5 text-center text-gray-500">No hay análisis foliares para este filtro.</td></tr>`;
+    }).join("") : `<tr><td colspan="${nutrients.length + 4}" class="p-5 text-center text-gray-500">${state.loadingLeaf ? "Cargando análisis foliares…" : "No hay análisis foliares para este filtro."}</td></tr>`;
   }
 
   function buildPayload() {

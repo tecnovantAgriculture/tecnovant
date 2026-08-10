@@ -1060,7 +1060,7 @@ def compute_mineral_balance(
     to the objective one so legacy reports without an actual aforo keep
     rendering). The difference keeps only deficits (surpluses clamp to 0).
     The formula grade is each deficit share of the total requirement, and
-    the nano dosage divides each deficit by the nano product concentration
+    the nano dosage divides each deficit by the numeric nano product grade
     (N 16, P 11, K 19, others 40).
 
     Args:
@@ -1155,7 +1155,7 @@ def compute_mineral_balance(
             if total > 0:
                 entry["grade_pct"] = magnitude / total * 100
             grade = NANO_PRODUCT_GRADES.get(entry["_symbol"] or "", DEFAULT_NANO_GRADE)
-            entry["nano_kg"] = magnitude * 100.0 / grade
+            entry["nano_kg"] = magnitude / grade
             total_nano += entry["nano_kg"]
         del entry["_symbol"]
         for key in (

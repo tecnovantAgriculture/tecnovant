@@ -1016,21 +1016,60 @@ class ObjectiveView(MethodView):
         """Retrieve a list of all objectives based on user role"""
         claims = get_jwt()
         user_role = claims.get("rol")
+        query = Objective.query.options(joinedload(Objective.crop))
         if user_role == RoleEnum.ADMINISTRATOR.value:
-            objectives = Objective.query.all()
+            objectives = query.all()
         elif user_role == RoleEnum.RESELLER.value:
             reseller_package = ResellerPackage.query.filter_by(
                 reseller_id=claims.get("org_id")
             ).first()
             if not reseller_package:
                 raise NotFound("Reseller package not found.")
-            objectives = []
+            reseller_objectives = []
             for organization in reseller_package.organizations:
                 for crop in organization.crops:
-                    objectives.extend(crop.objectives)
+                    reseller_objectives.extend(crop.objectives)
+            objective_ids = [objective.id for objective in reseller_objectives]
+            objectives = (
+                query.filter(Objective.id.in_(objective_ids)).all()
+                if objective_ids
+                else []
+            )
         else:
-            objectives = Objective.query.all()
-        response_data = [self._serialize_objective(obj) for obj in objectives]
+            objectives = query.all()
+
+        objective_ids = [objective.id for objective in objectives]
+        targets_by_objective = {objective_id: [] for objective_id in objective_ids}
+        nutrient_by_id = {}
+        if objective_ids:
+            nutrient_targets = (
+                db.session.query(objective_nutrients)
+                .filter(objective_nutrients.c.objective_id.in_(objective_ids))
+                .order_by(
+                    objective_nutrients.c.objective_id,
+                    objective_nutrients.c.nutrient_id,
+                )
+                .all()
+            )
+            nutrient_ids = sorted({target.nutrient_id for target in nutrient_targets})
+            if nutrient_ids:
+                nutrient_by_id = {
+                    nutrient.id: nutrient
+                    for nutrient in Nutrient.query.filter(
+                        Nutrient.id.in_(nutrient_ids)
+                    ).all()
+                }
+            for target in nutrient_targets:
+                targets_by_objective[target.objective_id].append(target)
+
+        response_data = [
+            self._serialize_objective(
+                objective,
+                nutrient_targets=targets_by_objective.get(objective.id, []),
+                nutrient_by_id=nutrient_by_id,
+            )
+            for objective in objectives
+        ]
         json_data = json.dumps(response_data, ensure_ascii=False, indent=4)
         return Response(json_data, status=200, mimetype="application/json")
 
@@ -1187,21 +1226,32 @@ class ObjectiveView(MethodView):
         """Check if the current user has access to the objective"""
         return check_resource_access(objective, claims)
 
-    def _serialize_objective(self, objective):
+    def _serialize_objective(
+        self, objective, nutrient_targets=None, nutrient_by_id=None
+    ):
         """Serialize an Objective object to a dictionary"""
-        nutrient_targets = (
-            db.session.query(objective_nutrients)
-            .filter_by(objective_id=objective.id)
-            .order_by(objective_nutrients.c.nutrient_id)
-            .all()
-        )
+        if nutrient_targets is None:
+            nutrient_targets = (
+                db.session.query(objective_nutrients)
+                .filter_by(objective_id=objective.id)
+                .order_by(objective_nutrients.c.nutrient_id)
+                .all()
+            )
+        if nutrient_by_id is None:
+            nutrient_ids = {target.nutrient_id for target in nutrient_targets}
+            nutrient_by_id = {
+                nutrient.id: nutrient
+                for nutrient in Nutrient.query.filter(
+                    Nutrient.id.in_(nutrient_ids)
+                ).all()
+            }
         nutrient_targets_dict = [
             {
                 "nutrient_id": target.nutrient_id,
                 "target_value": target.target_value,
-                "nutrient_name": Nutrient.query.get(target.nutrient_id).name,
-                "nutrient_symbol": Nutrient.query.get(target.nutrient_id).symbol,
-                "nutrient_unit": Nutrient.query.get(target.nutrient_id).unit,
+                "nutrient_name": nutrient_by_id[target.nutrient_id].name,
+                "nutrient_symbol": nutrient_by_id[target.nutrient_id].symbol,
+                "nutrient_unit": nutrient_by_id[target.nutrient_id].unit,
             }
             for target in nutrient_targets
         ]

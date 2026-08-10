@@ -236,7 +236,7 @@ def upload_local_api():
 
 @api.route("/assets/<int:asset_id>", methods=["DELETE"])
 @api_login_required
-@check_permission(required_roles=["administrator", "reseller"])
+@check_permission(required_roles=["administrator", "reseller", "org_admin"])
 def delete_asset(asset_id: int):
     """Eliminar un activo existente identificado por su ID numérico."""
 
