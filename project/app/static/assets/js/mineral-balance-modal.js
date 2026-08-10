@@ -36,6 +36,7 @@
     return node.innerHTML;
   }
   function number(value) {
+    if (value == null || value === "") return null;
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : null;
   }
@@ -68,7 +69,12 @@
       .sort((a, b) => ORDER.indexOf(a.symbol) - ORDER.indexOf(b.symbol));
   }
   function commonFor(leaf) {
-    return state.common.find(item => Number(item.id) === Number(leaf.common_analysis_id)) || {};
+    return state.common.find(item => Number(item.id) === Number(leaf.common_analysis_id)) || {
+      id: leaf.common_analysis_id, date: leaf.common_analysis_date,
+      farm_id: leaf.farm_id, farm_name: leaf.farm_name,
+      lot_id: leaf.lot_id, lot_name: leaf.lot_name,
+      protein: leaf.protein, yield_estimate: leaf.yield_estimate,
+    };
   }
 
   function installMarkup() {
@@ -185,16 +191,30 @@
   async function load() {
     if (state.loaded) return renderAll();
     setStatus("Cargando objetivos y análisis foliares…");
-    try {
-      const responses = await Promise.all([ENDPOINTS.objectives, ENDPOINTS.common, ENDPOINTS.leaf].map(url => fetch(url, { credentials: "include" })));
-      if (responses.some(response => !response.ok)) throw new Error("No fue posible consultar todos los datos.");
-      [state.objectives, state.common, state.leaf] = await Promise.all(responses.map(response => response.json()));
-      state.objectives = Array.isArray(state.objectives) ? state.objectives : [];
-      state.common = Array.isArray(state.common) ? state.common : [];
-      state.leaf = Array.isArray(state.leaf) ? state.leaf : [];
-      state.loaded = true;
-      renderAll(); setStatus("Selecciona un objetivo y un análisis foliar.");
-    } catch (error) { setStatus(error.message || "No se pudieron cargar los datos.", true); }
+    const resources = [
+      { key: "objectives", label: "Objetivos", url: ENDPOINTS.objectives },
+      { key: "leaf", label: "Análisis foliares", url: ENDPOINTS.leaf + "?page=1&per_page=100" },
+    ];
+    const results = await Promise.allSettled(resources.map(async resource => {
+      const response = await fetch(resource.url, { credentials: "include" });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const detail = body?.description || body?.error || body?.message || `HTTP ${response.status}`;
+        throw new Error(`${resource.label}: ${detail}`);
+      }
+      const data = Array.isArray(body) ? body : (Array.isArray(body?.items) ? body.items : []);
+      return { key: resource.key, data };
+    }));
+    const errors = [];
+    results.forEach((result, index) => {
+      if (result.status === "fulfilled") state[result.value.key] = result.value.data;
+      else errors.push(result.reason?.message || `${resources[index].label}: error de consulta`);
+    });
+    renderAll();
+    state.loaded = errors.length === 0;
+    if (errors.length) setStatus(errors.join(" · "), true);
+    else if (!state.objectives.length && !state.leaf.length) setStatus("No hay objetivos ni análisis foliares disponibles para este usuario.", true);
+    else setStatus("Selecciona un objetivo y un análisis foliar.");
   }
   function renderAll() { renderObjectives(); renderFoliar(); updateButtons(); }
   function renderObjectives() {
@@ -254,7 +274,7 @@
     const row = (label, key, cls, total, suffix) => `<tr class="${cls}"><th class="sticky left-0 bg-inherit px-2 py-1.5 text-left">${label}</th>${entries.map(item => `<td class="px-2 py-1.5 text-center">${fmt(displayValue(item, key), 2)}</td>`).join("")}<td class="px-2 py-1.5 text-center font-bold">${total == null ? "--" : fmt(total, 2) + (suffix || "")}</td></tr>`;
     const headerCells = entries.map(item => { const meta = nutrientMeta.get(String(item.name || "").toLowerCase()); return `<th class="px-2 py-2">${esc(item._symbol)} (${meta?.isMicro ? "g" : "kg"})</th>`; }).join("");
     const actionRow = (label, action, key, cls, visible, total, suffix) => `<tr class="${cls}"><th class="sticky left-0 bg-inherit px-2 py-1.5 text-left"><button type="button" class="mineral-row-action" data-mineral-reveal="${action}">${label}</button></th>${entries.map(item => `<td class="px-2 py-1.5 text-center">${visible ? fmt(item[key], 2) : ""}</td>`).join("")}<td class="px-2 py-1.5 text-center font-bold">${visible && total != null ? fmt(total, 2) + (suffix || "") : ""}</td></tr>`;
-    document.getElementById("mineral-result").innerHTML = `<table class="w-full min-w-[1120px] table-fixed border-collapse text-[11px]"><thead class="bg-gray-100"><tr><th class="sticky left-0 bg-gray-100 px-2 py-2 text-left">Concepto</th>${headerCells}<th class="px-2 py-2">Total</th></tr></thead><tbody>${row("Objetivo (% · ppm)", "objective_raw", "bg-indigo-50", null)}${row("Objetivo (kg/ha)", "objective_kg", "bg-indigo-50", sum("objective_kg"), " kg/ha")}${row("Actual (% · ppm)", "actual_raw", "bg-sky-50", null)}${row("Actual (kg/ha)", "actual_kg", "bg-sky-50", sum("actual_kg"), " kg/ha")}${row("Total (kg/ha)", "difference_kg", "bg-red-50 text-red-600", state.balance.total_kg_ha, " kg/ha")}${actionRow("GRADO FÓRMULA", "grade", "grade_pct", "bg-yellow-50", state.showGrade, sum("grade_pct"), "%")}${actionRow("NANO (kg/ha)", "nano", "nano_kg", "bg-emerald-50 text-emerald-800", state.showNano, state.balance.total_kg_ha, " kg/ha")}</tbody></table>`;
+    document.getElementById("mineral-result").innerHTML = `<table class="w-full min-w-[1120px] table-fixed border-collapse text-[11px]"><thead class="bg-gray-100"><tr><th class="sticky left-0 bg-gray-100 px-2 py-2 text-left">Concepto</th>${headerCells}<th class="px-2 py-2">Total</th></tr></thead><tbody>${row("Objetivo (% · ppm)", "objective_raw", "bg-indigo-50", null)}${row("Objetivo (kg/ha)", "objective_kg", "bg-indigo-50", sum("objective_kg"), " kg/ha")}${row("Actual (% · ppm)", "actual_raw", "bg-sky-50", null)}${row("Actual (kg/ha)", "actual_kg", "bg-sky-50", sum("actual_kg"), " kg/ha")}${row("Total (kg/ha)", "difference_kg", "bg-red-50 text-red-600", state.balance.total_kg_ha, " kg/ha")}${actionRow("GRADO FÓRMULA", "grade", "grade_pct", "bg-yellow-50", state.showGrade, sum("grade_pct"), "%")}${actionRow("NANO (kg/ha)", "nano", "nano_kg", "bg-emerald-50 text-emerald-800", state.showNano, state.balance.total_nano_kg_ha, " kg/ha")}</tbody></table>`;
   }
   function showLiebig() {
     const entries = Array.isArray(state.balance?.entries) ? state.balance.entries : [];

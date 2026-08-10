@@ -1147,6 +1147,7 @@ def compute_mineral_balance(
         if entry["difference_kg"] is not None
     )
 
+    total_nano = 0.0
     for entry in entries:
         deficit = entry["difference_kg"]
         if deficit is not None:
@@ -1154,7 +1155,8 @@ def compute_mineral_balance(
             if total > 0:
                 entry["grade_pct"] = magnitude / total * 100
             grade = NANO_PRODUCT_GRADES.get(entry["_symbol"] or "", DEFAULT_NANO_GRADE)
-            entry["nano_kg"] = magnitude / grade
+            entry["nano_kg"] = magnitude * 100.0 / grade
+            total_nano += entry["nano_kg"]
         del entry["_symbol"]
         for key in (
             "objective_raw",
@@ -1170,5 +1172,6 @@ def compute_mineral_balance(
     return {
         "entries": entries,
         "total_kg_ha": _round(total) if total > 0 else None,
+        "total_nano_kg_ha": _round(total_nano) if total_nano > 0 else None,
         "aforo_actual_fallback": aforo_actual_fallback,
     }

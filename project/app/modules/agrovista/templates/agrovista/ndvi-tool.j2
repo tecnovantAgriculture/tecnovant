@@ -4062,7 +4062,7 @@
         + row('Actual (kg/ha)', 'actual_kg', 'bg-sky-50', actualKgTotal, ' kg/ha')
         + row('Diferencia (kg/ha)', 'difference_kg', 'bg-red-50 text-red-600', diffTotal, ' kg/ha')
         + row('Grado fórmula (%)', 'grade_pct', 'bg-yellow-50', gradeTotal, '%')
-        + '<tr class="bg-emerald-50"><td class="sticky left-0 bg-emerald-50 px-2 py-1.5 font-semibold">Nano (kg/ha)</td>' + entries.map(item => '<td class="px-2 py-1.5 text-center font-semibold text-emerald-800">' + formatNutrientValue(item.nano_kg) + '</td>').join('') + '<td class="px-2 py-1.5 text-center font-bold">' + (balance.total_kg_ha != null ? formatNutrientValue(balance.total_kg_ha) + ' kg/ha' : '--') + '</td></tr></tbody></table></div>'
+        + '<tr class="bg-emerald-50"><td class="sticky left-0 bg-emerald-50 px-2 py-1.5 font-semibold">Nano (kg/ha)</td>' + entries.map(item => '<td class="px-2 py-1.5 text-center font-semibold text-emerald-800">' + formatNutrientValue(item.nano_kg) + '</td>').join('') + '<td class="px-2 py-1.5 text-center font-bold">' + (balance.total_nano_kg_ha != null ? formatNutrientValue(balance.total_nano_kg_ha) + ' kg/ha' : '--') + '</td></tr></tbody></table></div>'
         + '<p class="mt-3 text-[11px] text-gray-600">Objetivo se expresa en kg/ha con el aforo objetivo y Actual con el aforo actual. La Diferencia solo refleja déficits y Nano es la cantidad estimada del producto a aplicar según su concentración.</p></div>';
     }
     function renderEntry(entry, rows, label){
@@ -4211,5 +4211,5 @@
 
   })();
   </script>
-  <script src="/js/mineral-balance-modal.js?v=nutrient-order-fixed-20260810" data-comparison-url="{{ url_for('agrovista.comparison_config') }}"></script>
+  <script src="/js/mineral-balance-modal.js?v=nano-percentage-fix-20260810" data-comparison-url="{{ url_for('agrovista.comparison_config') }}"></script>
 {% endblock %}

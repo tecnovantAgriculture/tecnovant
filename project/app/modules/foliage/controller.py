@@ -2449,7 +2449,7 @@ class LeafAnalysisView(MethodView):
 
     decorators = [jwt_required()]
 
-    @check_permission(required_roles=["administrator", "reseller", "org_admin"])
+    @check_permission()
     def get(self, leaf_analysis_id=None):
         """
         Obtiene una lista de análisis de hojas o un análisis de hoja específico.
@@ -2459,14 +2459,12 @@ class LeafAnalysisView(MethodView):
         :status 403: Sin permiso sobre el análisis solicitado
         :status 404: Análisis de hoja no encontrado
         """
-        filter_by = request.args.get("filter_by")
-        if filter_by:
-            filter_by = int(filter_by)
-            return self._get_leaf_analysis_list(filter_by=filter_by)
-
+        filter_by = request.args.get("filter_by", type=int)
+        page = request.args.get("page", type=int)
+        per_page = request.args.get("per_page", type=int)
         if leaf_analysis_id:
             return self._get_leaf_analysis(leaf_analysis_id)
-        return self._get_leaf_analysis_list()
+        return self._get_leaf_analysis_list(filter_by=filter_by, page=page, per_page=per_page)
 
     @check_permission(required_roles=["administrator", "reseller", "org_admin"])
     def post(self):
@@ -2559,12 +2557,19 @@ class LeafAnalysisView(MethodView):
             query = query.join(Farm, Lot.farm_id == Farm.id)
             query = query.filter(Farm.org_id.in_(org_ids))
         else:
-            raise Forbidden("You do not have permission to list leaf analyses.")
+            user = User.query.get(claims.get("id"))
+            org_ids = [org.id for org in user.organizations.all()] if user else []
+            query = LeafAnalysis.query.join(
+                CommonAnalysis, LeafAnalysis.common_analysis_id == CommonAnalysis.id
+            )
+            query = query.join(Lot, CommonAnalysis.lot_id == Lot.id)
+            query = query.join(Farm, Lot.farm_id == Farm.id)
+            query = query.filter(Farm.org_id.in_(org_ids)) if org_ids else query.filter(db.false())
 
         if filter_by:
             query = query.filter(Lot.farm_id == filter_by)
 
-        query = query.options(
+        query = query.order_by(LeafAnalysis.created_at.desc()).options(
             joinedload(LeafAnalysis.common_analysis)
             .joinedload(CommonAnalysis.lot)
             .joinedload(Lot.farm),
@@ -2753,8 +2758,12 @@ class LeafAnalysisView(MethodView):
             "common_analysis_id": leaf_analysis.common_analysis_id,
             "common_analysis_date": leaf_analysis.common_analysis.date.isoformat(),
             "common_analysis_display": f"{leaf_analysis.common_analysis.lot.farm.name}, {leaf_analysis.common_analysis.lot.name}, {leaf_analysis.common_analysis.date.isoformat()}",
+            "farm_id": leaf_analysis.common_analysis.lot.farm_id,
             "farm_name": leaf_analysis.common_analysis.farm_name,
+            "lot_id": leaf_analysis.common_analysis.lot_id,
             "lot_name": leaf_analysis.common_analysis.lot_name,
+            "protein": leaf_analysis.common_analysis.protein,
+            "yield_estimate": leaf_analysis.common_analysis.yield_estimate,
             "created_at": leaf_analysis.created_at.isoformat(),
             "updated_at": leaf_analysis.updated_at.isoformat(),
             "nutrients_info": {
