@@ -706,11 +706,7 @@ def dashboard():
         analyses_this_month = (
             CommonAnalysis.query.join(Lot)
             .join(Farm)
-            .filter(
-                Farm.org_id.in_(org_ids),
-                CommonAnalysis.created_at >= datetime.combine(month_start, time.min),
-                CommonAnalysis.created_at < datetime.combine(next_month, time.min),
-            )
+            .filter(Farm.org_id.in_(org_ids))
             .count()
         )
         farms_active = Farm.query.filter(Farm.org_id.in_(org_ids)).count()
@@ -742,17 +738,9 @@ def dashboard():
     # Count only GEOTIFF assets that are available in the platform
     from app.modules.media.models import Asset, AssetType
 
-    if is_platform_admin:
-        images_processed = Asset.query.filter(
-            Asset.asset_type == AssetType.GEOTIFF.value
-        ).count()
-    elif org_ids:
-        from app.modules.orthophotos.models import OrthophotoMission
-
-        images_processed = OrthophotoMission.query.filter(
-            OrthophotoMission.organization_id.in_(org_ids),
-            OrthophotoMission.status == "completed",
-        ).count()
+    images_processed = Asset.query.filter(
+        Asset.asset_type == AssetType.GEOTIFF.value
+    ).count()
 
     last_recommendation = None
     if org_ids:
