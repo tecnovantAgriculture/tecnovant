@@ -2449,7 +2449,7 @@ class LeafAnalysisView(MethodView):
 
     decorators = [jwt_required()]
 
-    @check_permission(required_roles=["administrator", "reseller"])
+    @check_permission(required_roles=["administrator", "reseller", "org_admin"])
     def get(self, leaf_analysis_id=None):
         """
         Obtiene una lista de análisis de hojas o un análisis de hoja específico.
@@ -2468,7 +2468,7 @@ class LeafAnalysisView(MethodView):
             return self._get_leaf_analysis(leaf_analysis_id)
         return self._get_leaf_analysis_list()
 
-    @check_permission(required_roles=["administrator", "reseller"])
+    @check_permission(required_roles=["administrator", "reseller", "org_admin"])
     def post(self):
         """
         Crea un nuevo análisis de hoja con valores de nutrientes.
@@ -2548,8 +2548,18 @@ class LeafAnalysisView(MethodView):
             query = query.join(Farm, Lot.farm_id == Farm.id)
             query = query.join(Organization, Farm.org_id == Organization.id)
             query = query.filter(Organization.id.in_(reseller_package.organization_ids))
+        elif user_role == RoleEnum.ORG_ADMIN.value:
+            org_ids = [org["id"] for org in claims.get("organizations", [])]
+            if not org_ids:
+                raise Forbidden("User is not associated with any organization.")
+            query = LeafAnalysis.query.join(
+                CommonAnalysis, LeafAnalysis.common_analysis_id == CommonAnalysis.id
+            )
+            query = query.join(Lot, CommonAnalysis.lot_id == Lot.id)
+            query = query.join(Farm, Lot.farm_id == Farm.id)
+            query = query.filter(Farm.org_id.in_(org_ids))
         else:
-            raise Forbidden("Only administrators and resellers can list leaf analyses.")
+            raise Forbidden("You do not have permission to list leaf analyses.")
 
         if filter_by:
             query = query.filter(Lot.farm_id == filter_by)
@@ -2628,6 +2638,8 @@ class LeafAnalysisView(MethodView):
         common_analysis = CommonAnalysis.query.get(common_analysis_id)
         if not common_analysis:
             raise BadRequest("Invalid common_analysis_id.")
+        if not check_resource_access(common_analysis, get_jwt()):
+            raise Forbidden("You do not have access to this common analysis.")
 
         # Crear el nuevo análisis foliar
         new_leaf_analysis = LeafAnalysis(common_analysis_id=common_analysis_id)
@@ -2763,7 +2775,7 @@ class SoilAnalysisView(MethodView):
 
     decorators = [jwt_required()]
 
-    @check_permission(required_roles=["administrator", "reseller"])
+    @check_permission(required_roles=["administrator", "reseller", "org_admin"])
     def get(self, soil_analysis_id=None):
         """
         Obtiene una lista de análisis de suelo o un análisis de suelo específico.
@@ -2783,7 +2795,7 @@ class SoilAnalysisView(MethodView):
         else:
             return self._get_soil_analysis_list()
 
-    @check_permission(required_roles=["administrator", "reseller"])
+    @check_permission(required_roles=["administrator", "reseller", "org_admin"])
     def post(self):
         """
         Crea un nuevo análisis de suelo.
@@ -2855,8 +2867,18 @@ class SoilAnalysisView(MethodView):
             query = query.join(Farm, Lot.farm_id == Farm.id)
             query = query.join(Organization, Farm.org_id == Organization.id)
             query = query.filter(Organization.id.in_(reseller_package.organization_ids))
+        elif user_role == RoleEnum.ORG_ADMIN.value:
+            org_ids = [org["id"] for org in claims.get("organizations", [])]
+            if not org_ids:
+                raise Forbidden("User is not associated with any organization.")
+            query = SoilAnalysis.query.join(
+                CommonAnalysis, SoilAnalysis.common_analysis_id == CommonAnalysis.id
+            )
+            query = query.join(Lot, CommonAnalysis.lot_id == Lot.id)
+            query = query.join(Farm, Lot.farm_id == Farm.id)
+            query = query.filter(Farm.org_id.in_(org_ids))
         else:
-            raise Forbidden("Only administrators and resellers can list soil analyses")
+            raise Forbidden("You do not have permission to list soil analyses.")
 
         if filter_by:
             query = query.filter(Lot.farm_id == filter_by)
@@ -2891,6 +2913,12 @@ class SoilAnalysisView(MethodView):
         common_analysis_id = data["common_analysis_id"]
         energy = data["energy"]
         grazing = data["grazing"]
+        common_analysis = CommonAnalysis.query.get(common_analysis_id)
+        if not common_analysis:
+            raise BadRequest("Invalid common_analysis_id.")
+        if not check_resource_access(common_analysis, get_jwt()):
+            raise Forbidden("You do not have access to this common analysis.")
+
         soil_analysis = SoilAnalysis(
             common_analysis_id=common_analysis_id, energy=energy, grazing=grazing
         )

@@ -48,6 +48,14 @@
         {"name": "Producción", "url": url_for('foliage.amd_productions') },
     ] %}
 {% endif %}
+{% if rol == "org_admin" %}
+    {% set analysis_image_submenu = analysis_image_submenu + [
+        {"name": "Análisis foliar (físico)", "url": url_for('foliage.amd_common_analyses') },
+        {"name": "Foliares digitales", "url": url_for('foliage.amd_leaf_analyses') },
+        {"name": "Análisis de suelo", "url": url_for('foliage.amd_soil_analyses') },
+    ] %}
+{% endif %}
+
 
 {# "name": "Ver reporte", "url": url_for('foliage_report.vista_reporte') #}
 {% set analysis_image_submenu = analysis_image_submenu + [

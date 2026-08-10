@@ -392,14 +392,24 @@
         <div class="orth-field">
           <label for="orth-client">Cliente</label>
           <select id="orth-client" required><option value="">Selecciona un cliente</option></select>
+          <div id="orth-new-client-wrap" class="hidden mt-2">
+            <input id="orth-new-client" maxlength="100" placeholder="Nombre del nuevo cliente">
+          </div>
         </div>
         <div class="orth-field">
           <label for="orth-farm">Finca</label>
           <select id="orth-farm" required disabled><option value="">Selecciona una finca</option></select>
+          <div id="orth-new-farm-wrap" class="hidden mt-2">
+            <input id="orth-new-farm" maxlength="100" placeholder="Nombre de la nueva finca">
+          </div>
         </div>
         <div class="orth-field">
           <label for="orth-lot">Lote</label>
           <select id="orth-lot" required disabled><option value="">Selecciona un lote</option></select>
+          <div id="orth-new-lot-wrap" class="hidden mt-2 grid grid-cols-2 gap-2">
+            <input id="orth-new-lot" maxlength="100" placeholder="Nombre del nuevo lote">
+            <input id="orth-new-lot-area" type="number" min="0.01" step="0.01" placeholder="Área (ha)">
+          </div>
         </div>
         <div class="orth-field">
           <label for="orth-mission-name">Nombre de la mision</label>
@@ -523,6 +533,8 @@
 <script>
 document.addEventListener('DOMContentLoaded', () => {
   const uploadEndpoint = {{ url_for('orthophotos_api.upload_photos')|tojson }};
+  const locationEndpoint = {{ url_for('orthophotos_api.create_location_path')|tojson }};
+  const canCreateClients = {{ can_create_clients|tojson }};
   const activeProcessing = {{ active_processing_count|default(0)|int }};
   if (activeProcessing > 0) {
     window.setTimeout(() => window.location.reload(), 30000);
@@ -538,34 +550,87 @@ document.addEventListener('DOMContentLoaded', () => {
   const lotSelect = document.getElementById('orth-lot');
   const missionNameInput = document.getElementById('orth-mission-name');
   const filesInput = document.getElementById('orth-files');
+  const newClientWrap = document.getElementById('orth-new-client-wrap');
+  const newClientInput = document.getElementById('orth-new-client');
+  const newFarmWrap = document.getElementById('orth-new-farm-wrap');
+  const newFarmInput = document.getElementById('orth-new-farm');
+  const newLotWrap = document.getElementById('orth-new-lot-wrap');
+  const newLotInput = document.getElementById('orth-new-lot');
+  const newLotAreaInput = document.getElementById('orth-new-lot-area');
 
-  const fillSelect = (select, items, placeholder) => {
+  const fillSelect = (select, items, placeholder, allowNew = true) => {
     select.innerHTML = `<option value="">${placeholder}</option>`;
     items.forEach((item) => select.add(new Option(item.name, String(item.id))));
-    select.disabled = items.length === 0;
+    if (allowNew) select.add(new Option('+ Crear nuevo…', '__new__'));
+    select.disabled = items.length === 0 && !allowNew;
+  };
+  const toggleNewField = (select, wrap, inputs) => {
+    const isNew = select.value === '__new__';
+    wrap.classList.toggle('hidden', !isNew);
+    inputs.forEach(input => { input.required = isNew; if (!isNew) input.value = ''; });
+  };
+  const resetNewFields = () => {
+    [newClientWrap, newFarmWrap, newLotWrap].forEach(node => node.classList.add('hidden'));
+    [newClientInput, newFarmInput, newLotInput, newLotAreaInput].forEach(input => { input.required = false; input.value = ''; });
+    clientSelect.value = '';
+    fillSelect(farmSelect, [], 'Selecciona una finca', false);
+    fillSelect(lotSelect, [], 'Selecciona un lote', false);
   };
 
-  fillSelect(clientSelect, locations, 'Selecciona un cliente');
+  fillSelect(clientSelect, locations, 'Selecciona un cliente', canCreateClients);
   openUpload.addEventListener('click', () => {
     missionNameInput.value = `Mision ${new Date().toLocaleString('es-CO')}`;
+    resetNewFields();
     uploadDialog.showModal();
   });
   cancelUpload.addEventListener('click', () => uploadDialog.close());
   clientSelect.addEventListener('change', () => {
+    toggleNewField(clientSelect, newClientWrap, [newClientInput]);
     const client = locations.find((item) => String(item.id) === clientSelect.value);
-    fillSelect(farmSelect, client ? client.farms : [], 'Selecciona una finca');
-    fillSelect(lotSelect, [], 'Selecciona un lote');
+    fillSelect(farmSelect, client ? client.farms : [], 'Selecciona una finca', Boolean(client) || clientSelect.value === '__new__');
+    fillSelect(lotSelect, [], 'Selecciona un lote', false);
+    newFarmWrap.classList.add('hidden'); newFarmInput.required = false; newFarmInput.value = '';
+    newLotWrap.classList.add('hidden'); [newLotInput,newLotAreaInput].forEach(input => { input.required=false; input.value=''; });
   });
   farmSelect.addEventListener('change', () => {
+    toggleNewField(farmSelect, newFarmWrap, [newFarmInput]);
     const client = locations.find((item) => String(item.id) === clientSelect.value);
     const farm = client && client.farms.find((item) => String(item.id) === farmSelect.value);
-    fillSelect(lotSelect, farm ? farm.lots : [], 'Selecciona un lote');
+    fillSelect(lotSelect, farm ? farm.lots : [], 'Selecciona un lote', Boolean(farm) || farmSelect.value === '__new__');
   });
+  lotSelect.addEventListener('change', () => toggleNewField(lotSelect, newLotWrap, [newLotInput, newLotAreaInput]));
 
   uploadForm.addEventListener('submit', async (event) => {
     event.preventDefault();
     const files = Array.from(filesInput.files || []);
     if (!uploadForm.reportValidity() || !files.length) return;
+    let locationIds;
+    try {
+      const locationResponse = await fetch(locationEndpoint, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-TOKEN': typeof getCsrfToken === 'function' ? getCsrfToken() : '',
+          'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: JSON.stringify({
+          organization_id: clientSelect.value !== '__new__' ? clientSelect.value : null,
+          organization_name: clientSelect.value === '__new__' ? newClientInput.value.trim() : '',
+          farm_id: farmSelect.value !== '__new__' ? farmSelect.value : null,
+          farm_name: farmSelect.value === '__new__' ? newFarmInput.value.trim() : '',
+          lot_id: lotSelect.value !== '__new__' ? lotSelect.value : null,
+          lot_name: lotSelect.value === '__new__' ? newLotInput.value.trim() : '',
+          lot_area: lotSelect.value === '__new__' ? newLotAreaInput.value : null
+        })
+      });
+      const locationData = await locationResponse.json();
+      if (!locationResponse.ok || !locationData.success) throw new Error(locationData.message || 'No se pudo preparar la ubicación.');
+      locationIds = {organization: locationData.organization.id, farm: locationData.farm.id, lot: locationData.lot.id};
+    } catch (error) {
+      alert(error.message || 'No se pudo preparar la ubicación.');
+      return;
+    }
     const button = uploadForm.querySelector('button[type="submit"]');
     const originalContent = button.innerHTML;
     const uploadSessionId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -580,9 +645,9 @@ document.addEventListener('DOMContentLoaded', () => {
         formData.append('files', file);
         formData.append('mission_name', missionNameInput.value.trim());
         formData.append('upload_session_id', uploadSessionId);
-        formData.append('organization_id', clientSelect.value);
-        formData.append('farm_id', farmSelect.value);
-        formData.append('lot_id', lotSelect.value);
+        formData.append('organization_id', locationIds.organization);
+        formData.append('farm_id', locationIds.farm);
+        formData.append('lot_id', locationIds.lot);
         button.textContent = `Subiendo ${index + 1}/${files.length}...`;
         try {
           const response = await fetch(uploadEndpoint, {

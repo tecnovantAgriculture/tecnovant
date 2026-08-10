@@ -63,27 +63,8 @@
 {% block content %}
 <div id="workzone" class="w-full bg-transparent min-h-screen">
   <div class="w-full px-0 py-0 space-y-4">
-    <nav class="text-sm text-gray-500 dark:text-gray-400">
-      <ol class="flex items-center gap-2">
-        <li><a href="{{ url_for('core.dashboard') }}" class="hover:text-gray-700 dark:hover:text-gray-300">Inicio</a></li>
-        <li class="text-gray-400 dark:text-gray-600">/</li>
-        <li><a href="{{ url_for('agrovista.hello') }}" class="hover:text-gray-700 dark:hover:text-gray-300">Análisis</a></li>
-        <li class="text-gray-400 dark:text-gray-600">/</li>
-        <li class="text-gray-700 dark:text-gray-300 font-medium">Imagen</li>
-      </ol>
-    </nav>
-
-    <header class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <div>
-        <h1 class="text-xl font-semibold text-gray-900 dark:text-gray-100">
-          Análisis de imagen –
-          <span id="headerAssetName" class="text-gray-500 dark:text-gray-400">{{ context_asset or "Sin ortofoto" }}</span>
-        </h1>
-        <p class="text-sm text-gray-500 dark:text-gray-400">
-          Dibuja polígonos sobre la ortofoto para calcular índices y preparar la comparación de lotes.
-        </p>
-      </div>
-      <div class="flex flex-wrap items-center gap-2">
+    <header class="flex w-full flex-col gap-3 sm:flex-row sm:items-center" style="justify-content:flex-end">
+      <div class="flex flex-wrap items-center gap-2" style="margin-left:auto;justify-content:flex-end">
         <button id="upload-trigger"
                 class="inline-flex items-center rounded-lg bg-white dark:bg-gray-800 px-3 py-2 text-xs font-medium text-gray-700 dark:text-gray-300 shadow-sm ring-1 ring-gray-200 dark:ring-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700">
           Subir ortofoto
@@ -246,32 +227,18 @@
       </div>
 
       <aside class="space-y-4 lg:col-span-4 xl:col-span-3">
-        <section class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 shadow-sm">
-          <h2 class="mb-3 text-sm font-semibold text-gray-800 dark:text-gray-200">Contexto</h2>
-          <dl class="space-y-1 text-sm text-gray-600 dark:text-gray-400">
-            <div class="flex justify-between">
-              <dt class="text-gray-500 dark:text-gray-400"><i class="fas fa-users mr-2"></i>Cliente</dt>
-              <dd id="contextClient" class="font-medium text-gray-800 dark:text-gray-200">{{ context_client or "Sin cliente" }}</dd>
-            </div>
-            <div class="flex justify-between">
-              <dt class="text-gray-500 dark:text-gray-400"><i class="fas fa-tractor mr-2"></i>Finca</dt>
-              <button id="contextFarm" type="button"
-                      class="font-medium text-emerald-600 dark:text-emerald-400 hover:underline text-sm text-right leading-snug">
-                {{ context_farm or "Seleccionar finca…" }}
-              </button>
-            </div>
-            <div class="flex justify-between">
-              <dt class="text-gray-500 dark:text-gray-400"><i class="fas fa-satellite-dish mr-2"></i>Ortofoto</dt>
-              <dd id="contextAsset" class="font-medium text-gray-800 dark:text-gray-200">{{ context_asset or "Sin ortofoto" }}</dd>
-            </div>
-          </dl>
-        </section>
-
         <section class="rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50/70 dark:bg-blue-900/20 p-4 shadow-sm">
           <h2 class="mb-3 text-sm font-semibold text-blue-900 dark:text-blue-300">
             <i class="fas fa-map-marker mr-2"></i>Lote de referencia (trazabilidad)
           </h2>
           <div class="space-y-3 text-xs text-gray-700 dark:text-gray-300">
+            <div>
+              <label class="mb-1 block font-medium text-gray-700 dark:text-gray-400">Selecciona una finca</label>
+              <select id="referenceFarmSelect"
+                      class="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 py-1.5 px-3 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                <option value="">-- Seleccionar finca --</option>
+              </select>
+            </div>
             <div>
               <label class="mb-1 block font-medium text-gray-700 dark:text-gray-400">Selecciona un lote guardado</label>
               <select id="referenceLotsSelect"
@@ -3141,7 +3108,7 @@
         if(firstLayer){ setActiveLayer(firstLayer); }
         renderLotsList();
         toggleKmzButton();
-        updateSaveButtonState();
+        window.updateLotReferenceSaveState?.();
         setStatus("Polígonos restaurados del borrador local.");
       }finally{
         restoringDraftPolygons = false;
@@ -3236,7 +3203,7 @@
         setActiveLayer(layer);
         await updateStatsForLayer(layer);
         toggleKmzButton();
-        updateSaveButtonState(); // Actualizar estado del botón de guardar
+        window.updateLotReferenceSaveState?.();
         saveDraftPolygons();
       }
     });
@@ -3249,12 +3216,12 @@
           updateStatsForLayer(layer);
         }
       });
-      updateSaveButtonState(); // Actualizar estado del botón tras editar
+      window.updateLotReferenceSaveState?.();
       saveDraftPolygons();
     });
     map.on(L.Draw.Event.DELETED, ()=>{
       resetMapState(false);
-      updateSaveButtonState(); // Actualizar estado del botón tras borrar polígono
+      window.updateLotReferenceSaveState?.();
       saveDraftPolygons();
     });
 
@@ -3591,6 +3558,7 @@
 
     // ===== Lot Reference (Geometry) Loader =====
     (function() {
+      const farmSelector = document.getElementById('referenceFarmSelect');
       const lotSelector = document.getElementById('referenceLotsSelect');
       const lotStatus = document.getElementById('lotPolygonStatus');
       const savePolygonBtn = document.getElementById('savePolygonToLotBtn');
@@ -3602,10 +3570,47 @@
 
       if (!lotSelector) return;
 
+      async function loadReferenceFarms() {
+        if (!farmSelector) return;
+        farmSelector.disabled = true;
+        try {
+          const response = await fetch('/api/foliage/farms/', { credentials: 'include' });
+          const farms = await response.json().catch(() => []);
+          if (!response.ok) throw new Error(farms?.description || farms?.error || 'No se pudieron cargar las fincas');
+          farmSelector.innerHTML = '<option value="">-- Seleccionar finca --</option>';
+          (Array.isArray(farms) ? farms : []).forEach(function(farm) {
+            const option = document.createElement('option');
+            option.value = farm.id;
+            option.textContent = farm.name || ('Finca ' + farm.id);
+            farmSelector.appendChild(option);
+          });
+          if (window.currentFarmId) farmSelector.value = String(window.currentFarmId);
+        } catch (error) {
+          farmSelector.innerHTML = '<option value="">-- Error al cargar fincas --</option>';
+          lotStatus.textContent = '❌ ' + error.message;
+        } finally {
+          farmSelector.disabled = false;
+        }
+      }
+
+      if (farmSelector) {
+        farmSelector.addEventListener('change', function() {
+          window.currentFarmId = this.value ? Number(this.value) : null;
+          if (el.analysisFarmSelect) {
+            el.analysisFarmSelect.value = this.value;
+            renderLotOptions(this.value);
+          }
+          loadLotsForCurrentFarm();
+        });
+      }
       // Cargar lotes cuando se cambia de finca
       function loadLotsForCurrentFarm() {
         // Usar window.currentFarmId como fuente de verdad (establecido por farm picker o analysisFarmSelect)
         const farmId = window.currentFarmId;
+        selectedLotId = null;
+        removeLotPolygon();
+        lotGeometryMap = {};
+        lotSelector.value = '';
         if (!farmId) {
           lotSelector.innerHTML = '<option value="">-- Sin finca seleccionada --</option>';
           lotStatus.textContent = 'Selecciona una finca para ver los lotes disponibles';
@@ -3616,7 +3621,11 @@
         fetch('/api/foliage/lots/?filter_value=' + farmId, {
           credentials: 'include'
         })
-        .then(r => r.json())
+        .then(async r => {
+          const body = await r.json().catch(() => ({}));
+          if (!r.ok) throw new Error(body?.description || body?.error || body?.message || 'La solicitud no pudo completarse');
+          return body;
+        })
         .then(lots => {
           lotSelector.innerHTML = '<option value="">-- Seleccionar lote --</option>';
           lotGeometryMap = {};
@@ -3724,7 +3733,9 @@
 
         const hasLotSelected = !!selectedLotId;
         const lotHasGeometry = hasLotSelected && lotGeometryMap[selectedLotId];
-        const hasPolygonDrawn = window.drawnItems && window.drawnItems.getLayers && window.drawnItems.getLayers().length > 0;
+        const hasPolygonDrawn = window.drawnItems && window.drawnItems.getLayers && window.drawnItems.getLayers().some(function(layer) {
+          return (layer instanceof L.Polygon || layer instanceof L.Rectangle) && layer !== currentLotPolygon;
+        });
 
         // Resetear clases de color (remover clases de color anteriores)
         savePolygonBtn.classList.remove('bg-blue-600', 'hover:bg-blue-700', 'bg-amber-600', 'bg-emerald-600');
@@ -3777,7 +3788,7 @@
         var drawnLayers = [];
         if (window.drawnItems) {
           window.drawnItems.eachLayer(function(layer) {
-            if (layer instanceof L.Polygon || layer instanceof L.Rectangle) {
+            if ((layer instanceof L.Polygon || layer instanceof L.Rectangle) && layer !== currentLotPolygon) {
               drawnLayers.push(layer);
             }
           });
@@ -3793,19 +3804,24 @@
         // PUT request to update lot with geometry
         fetch('/api/foliage/lots/', {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() || '' },
           credentials: 'include',
           body: JSON.stringify({
             id: parseInt(selectedLotId),
             geometry: geojsonStr
           })
         })
-        .then(r => r.json())
-        .then(function() {
+        .then(async r => {
+          const body = await r.json().catch(() => ({}));
+          if (!r.ok) throw new Error(body?.description || body?.error || body?.message || 'La solicitud no pudo completarse');
+          return body;
+        })
+        .then(function(savedLot) {
+          if (!savedLot.geometry) throw new Error('El servidor no confirmó la geometría guardada');
           alert('✓ Polígono guardado exitosamente');
-          lotGeometryMap[selectedLotId] = geojsonStr;
+          lotGeometryMap[selectedLotId] = savedLot.geometry;
           removeLotPolygon();
-          drawLotPolygon(geojsonStr);
+          drawLotPolygon(savedLot.geometry);
           lotStatus.textContent = '✓ Polígono guardado en lote';
         })
         .catch(function(err) {
@@ -3815,10 +3831,11 @@
 
       // Exponer globalmente para que sea accesible desde selectFarmFromPicker y analysisFarmSelect
       window.loadLotsForCurrentFarm = loadLotsForCurrentFarm;
+      window.updateLotReferenceSaveState = updateSaveButtonState;
 
       // Intentar cargar lotes inicialmente (si hay farm_id disponible)
       // El ndvi_tool.js debe establecer window.currentFarmId
-      loadLotsForCurrentFarm();
+      loadReferenceFarms().then(loadLotsForCurrentFarm);
     })();
 
   // Codex: vista previa nutricional aislada. No modifica cálculos ni endpoints existentes.
@@ -4005,7 +4022,12 @@
       return data;
     }
     function balanceTable(balance, entry, objective){
-      const entries = balance && Array.isArray(balance.entries) ? balance.entries : [];
+      const requiredNutrientOrder = ["n", "p", "k", "ca", "mg", "s", "cu", "zn", "mn", "b", "mo", "fe", "si"];
+      const nutrientDisplaySymbols = {n:"N", p:"P", k:"K", ca:"Ca", mg:"Mg", s:"S", cu:"Cu", zn:"Zn", mn:"Mn", b:"B", mo:"Mo", fe:"Fe", si:"Si"};
+      const entries = (balance && Array.isArray(balance.entries) ? balance.entries : [])
+        .map(item => ({...item, _nutrientKey: canonicalNutrientKey({name:item.name, symbol:item.symbol})}))
+        .filter(item => requiredNutrientOrder.includes(item._nutrientKey))
+        .sort((a, b) => requiredNutrientOrder.indexOf(a._nutrientKey) - requiredNutrientOrder.indexOf(b._nutrientKey));
       if(!entries.length){ return '<div class="rounded-2xl border border-gray-200 bg-white p-4 text-xs text-gray-500 shadow-sm">Balance mineral pendiente de datos suficientes.</div>'; }
       const stats = entry && entry.areaStats ? entry.areaStats : {};
       const broma = stats.bromatologia || {};
@@ -4033,7 +4055,7 @@
       const gradeTotal = sumFor('grade_pct');
       return '<div class="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm"><div class="mb-3 flex flex-wrap items-center justify-between gap-2"><h4 class="text-sm font-semibold text-gray-800">Balance de Minerales</h4><span class="rounded-full bg-gray-100 px-2.5 py-1 text-[11px] text-gray-600">Déficits convertidos a kg/ha según el aforo</span></div>'
         + '<div class="mb-3 grid grid-cols-4 divide-x divide-gray-200 overflow-hidden rounded-lg border border-gray-200 text-center text-[11px]"><div class="bg-gray-100 px-3 py-2"><div class="uppercase tracking-wide text-gray-500">Proteína objetivo</div><strong class="mt-1 block text-sm text-gray-900">' + formatSummary(proteinObjective, '') + '</strong></div><div class="bg-gray-100 px-3 py-2"><div class="uppercase tracking-wide text-gray-500">Aforo objetivo</div><strong class="mt-1 block text-sm text-gray-900">' + formatSummary(aforoObjective, '') + '</strong></div><div class="bg-gray-200 px-3 py-2"><div class="uppercase tracking-wide text-gray-500">Proteína actual</div><strong class="mt-1 block text-sm text-gray-900">' + formatSummary(proteinActual, '') + '</strong></div><div class="bg-gray-200 px-3 py-2"><div class="uppercase tracking-wide text-gray-500">Aforo actual</div><strong class="mt-1 block text-sm text-gray-900">' + formatSummary(aforoActual, '') + '</strong></div></div>'
-        + '<div class="overflow-x-auto"><table class="w-full min-w-[1120px] table-fixed text-[11px]"><thead class="bg-gray-50"><tr><th class="sticky left-0 w-28 bg-gray-50 px-2 py-1.5 text-left">Concepto</th>' + entries.map(item => '<th class="px-2 py-1.5 text-center">' + escapeHtml(item.name) + '</th>').join('') + '<th class="px-2 py-1.5 text-center">Total</th></tr></thead><tbody>'
+        + '<div class="overflow-x-auto"><table class="w-full min-w-[1120px] table-fixed text-[11px]"><thead class="bg-gray-50"><tr><th class="sticky left-0 w-28 bg-gray-50 px-2 py-1.5 text-left">Concepto</th>' + entries.map(item => '<th class="px-2 py-1.5 text-center">' + escapeHtml(item.name) + ' (' + nutrientDisplaySymbols[item._nutrientKey] + ')</th>').join('') + '<th class="px-2 py-1.5 text-center">Total</th></tr></thead><tbody>'
         + row('Objetivo (% · ppm)', 'objective_raw', 'bg-indigo-50', null)
         + row('Objetivo (kg/ha)', 'objective_kg', 'bg-indigo-50', objectiveKgTotal, ' kg/ha')
         + row('Actual (% · ppm)', 'actual_raw', 'bg-sky-50', null)
@@ -4189,4 +4211,5 @@
 
   })();
   </script>
+  <script src="/js/mineral-balance-modal.js?v=nutrient-order-fixed-20260810" data-comparison-url="{{ url_for('agrovista.comparison_config') }}"></script>
 {% endblock %}

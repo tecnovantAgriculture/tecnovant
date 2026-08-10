@@ -42,6 +42,7 @@
   </div>
   <div class="flex gap-2">
      {% if picker_mode %}
+     <a href="{{ url_for('orthophotos.library_picker', picker=1, event=picker_event_name) }}" class="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md border border-emerald-600 bg-white text-emerald-700 hover:bg-emerald-50"><i class="fas fa-folder-tree mr-2"></i>Fotogrametría</a>
      <a href="{{ url_for('media.upload_s3', picker=1, event=picker_event_name, multi=1 if picker_multi else 0, allowed=picker_allowed_types | join(',') if picker_allowed_types else '') }}" class="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md bg-sky-100 text-sky-800 hover:bg-sky-200 dark:bg-sky-900 dark:text-sky-200">Importar desde S3</a>
      <a href="{{ url_for('media.upload_local', picker=1, event=picker_event_name, multi=1 if picker_multi else 0, allowed=picker_allowed_types | join(',') if picker_allowed_types else '') }}" class="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md bg-emerald-600 text-white hover:bg-emerald-700">Subir desde el equipo</a>
      {% else %}

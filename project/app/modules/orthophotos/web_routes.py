@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import tempfile
 import secrets
 import threading
 import time
@@ -21,15 +22,17 @@ from flask import (
 from urllib.parse import urljoin
 
 from flask_jwt_extended import get_jwt_identity
+from werkzeug.datastructures import FileStorage
 
 from app.core.controller import login_required
-from app.core.models import get_clients_for_user
+from app.core.models import User, get_clients_for_user
 from app.extensions import db
 from app.helpers.dashboard_helpers import get_dashboard_menu
 from app.modules.media.controller import MediaController
 from app.modules.media.helpers import _media_root
-from app.modules.media.models import StorageLocation
+from app.modules.media.models import Asset, StorageLocation
 from app.modules.media.storage import ensure_local_file
+from app.modules.media.tasks import enqueue_preprocess_asset
 from app.modules.foliage.models import Farm, Lot
 
 from . import orthophotos as web
@@ -481,6 +484,7 @@ def dashboard():
         webodm_vm_status=webodm_vm_status,
         active_processing_count=active_processing_count,
         location_options=location_options,
+        can_create_clients=bool((User.query.get(user_id) and (User.query.get(user_id).is_admin() or User.query.get(user_id).is_reseller()))),
         pilot_upload_url=lambda mission_id: _public_url_for(
             "orthophotos.pilot_upload",
             mission_id=mission_id,
@@ -558,6 +562,131 @@ def open_webodm_task(mission_id: int):
             mission.webodm_task_id,
         )
     )
+
+
+def _accessible_mission(mission_id: int) -> OrthophotoMission:
+    mission = OrthophotoMission.query.get_or_404(mission_id)
+    client_ids = {client.id for client in get_clients_for_user(get_jwt_identity())}
+    if mission.organization_id not in client_ids:
+        abort(403)
+    return mission
+
+
+def _mission_asset_payload(asset: Asset) -> dict:
+    return {
+        "id": asset.id,
+        "storage_key": asset.storage_key,
+        "original_name": asset.original_name,
+        "asset_type": asset.asset_type,
+        "mime": asset.mime,
+        "width": asset.width,
+        "height": asset.height,
+        "size_bytes": asset.size_bytes,
+        "serve_url": url_for("media.serve_file", key=asset.storage_key),
+        "download_url": url_for("media.download_file", key=asset.storage_key),
+    }
+
+
+def _cached_mission_orthophoto(mission: OrthophotoMission) -> Asset | None:
+    candidates = Asset.query.filter(Asset.ext.in_(["tif", "tiff"])).order_by(
+        Asset.created_at.desc()
+    )
+    for asset in candidates:
+        metadata = asset.exif if isinstance(asset.exif, dict) else {}
+        if str(metadata.get("orthophoto_mission_id") or "") == str(mission.id):
+            return asset
+    return None
+
+
+@web.route("/dashboard/orthophotos/library", methods=["GET"])
+@login_required
+def library_picker():
+    client_ids = {client.id for client in get_clients_for_user(get_jwt_identity())}
+    missions = (
+        OrthophotoMission.query.filter(OrthophotoMission.organization_id.in_(client_ids))
+        .order_by(OrthophotoMission.created_at.desc())
+        .all()
+        if client_ids
+        else []
+    )
+    selectable = []
+    for mission in missions:
+        available = mission.available_assets or []
+        has_orthophoto = not available or "orthophoto.tif" in available
+        if mission.status == "completed" and mission.webodm_project_id and mission.webodm_task_id and has_orthophoto:
+            selectable.append(mission)
+    return render_template(
+        "orthophotos/library_picker.j2",
+        dashboard=False,
+        picker_mode=True,
+        missions=selectable,
+        picker_event_name=request.args.get("event", "media-library:select"),
+        media_library_url=url_for(
+            "media.library",
+            picker=1,
+            allowed="geotiff",
+            type="geotiff",
+            multi=0,
+            event=request.args.get("event", "media-library:select"),
+        ),
+    )
+
+
+@web.route("/dashboard/orthophotos/<int:mission_id>/select", methods=["POST"])
+@login_required
+def select_mission_orthophoto(mission_id: int):
+    mission = _accessible_mission(mission_id)
+    if mission.status != "completed" or not mission.webodm_project_id or not mission.webodm_task_id:
+        return jsonify({"success": False, "message": "La ortofoto todavía no está terminada."}), 409
+
+    cached = _cached_mission_orthophoto(mission)
+    if cached:
+        return jsonify({"success": True, "cached": True, "asset": _mission_asset_payload(cached)})
+
+    upstream = None
+    temporary_path = None
+    try:
+        _ensure_webodm_ready_for_download()
+        upstream = WebODMClient().download_asset(
+            mission.webodm_project_id,
+            mission.webodm_task_id,
+            "orthophoto.tif",
+        )
+        with tempfile.NamedTemporaryFile(prefix=f"mission-{mission.id}-", suffix=".tif", delete=False) as temporary:
+            temporary_path = temporary.name
+            for chunk in upstream.iter_content(chunk_size=1024 * 1024):
+                if chunk:
+                    temporary.write(chunk)
+
+        with open(temporary_path, "rb") as source:
+            upload = FileStorage(
+                stream=source,
+                filename=f"{mission.name}-ortofoto.tif",
+                content_type="image/tiff",
+            )
+            asset, created = MediaController().save_local_upload(upload)
+        metadata = dict(asset.exif) if isinstance(asset.exif, dict) else {}
+        metadata.update({
+            "orthophoto_mission_id": mission.id,
+            "orthophoto_mission_uuid": mission.uuid,
+            "orthophoto_folder": mission.folder_path,
+        })
+        asset.exif = metadata
+        db.session.add(asset)
+        db.session.commit()
+        if created or not asset.variants:
+            enqueue_preprocess_asset(asset.id)
+        return jsonify({"success": True, "cached": not created, "asset": _mission_asset_payload(asset)})
+    except Exception as exc:
+        db.session.rollback()
+        current_app.logger.exception("orthophotos: no se pudo incorporar la ortofoto de la misión %s", mission.id)
+        return jsonify({"success": False, "message": str(exc) or "No se pudo preparar la ortofoto."}), 500
+    finally:
+        if upstream is not None:
+            upstream.close()
+        if temporary_path and os.path.exists(temporary_path):
+            os.unlink(temporary_path)
+        _autostop_webodm_if_idle(current_app._get_current_object())
 
 
 @web.route("/dashboard/orthophotos/<int:mission_id>/download/<asset_key>", methods=["GET"])

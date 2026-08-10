@@ -1,0 +1,115 @@
+{% extends "base.j2" %}
+{% set dashboard = false %}
+
+{% block header %}{% endblock %}
+{% block footer %}{% endblock %}
+
+{% block extra_css %}
+{{ super() }}
+<style>
+  body{background:transparent}
+  .photo-shell{max-width:1120px;margin:30px auto;padding:24px;border:1px solid #e2e8f0;border-radius:16px;background:#fff;box-shadow:0 10px 30px rgba(15,23,42,.06)}
+  .photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px}
+  .photo-card{border:1px solid #e2e8f0;border-radius:12px;background:#fff;padding:16px;transition:.15s ease}
+  .photo-card:hover{border-color:#10b981;box-shadow:0 8px 22px rgba(15,23,42,.08);transform:translateY(-1px)}
+  .photo-folder{display:flex;height:92px;align-items:center;justify-content:center;border-radius:9px;background:linear-gradient(135deg,#ecfdf5,#eff6ff);color:#047857;font-size:34px}
+  .photo-hidden{display:none!important}
+  .photo-loader{position:fixed;inset:0;z-index:50;display:none;align-items:center;justify-content:center;background:rgba(15,23,42,.45);backdrop-filter:blur(2px)}
+  .photo-loader.open{display:flex}
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="photo-loader" class="photo-loader"><div class="rounded-xl bg-white px-6 py-5 text-center shadow-xl"><i class="fas fa-circle-notch fa-spin text-2xl text-emerald-600"></i><p class="mt-3 font-semibold text-gray-800">Preparando ortofoto…</p><p class="mt-1 text-xs text-gray-500">La primera selección puede tardar mientras se incorpora el TIFF.</p></div></div>
+<main class="photo-shell">
+  <div class="mb-5 flex flex-wrap items-start justify-between gap-3">
+    <div>
+      <h1 class="text-2xl font-semibold text-gray-900">Fotogrametría</h1>
+      <p class="mt-1 text-sm text-gray-500">Navega por finca, potrero y proyecto para seleccionar una ortofoto terminada.</p>
+    </div>
+    <a href="{{ media_library_url }}" class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"><i class="fas fa-images mr-2"></i>Biblioteca general</a>
+  </div>
+
+  <div class="mb-5 grid gap-3 rounded-xl border border-gray-200 bg-gray-50 p-4 sm:grid-cols-3">
+    <label class="text-xs font-semibold uppercase text-gray-500">Finca
+      <select id="photo-farm" class="mt-1 block w-full rounded-lg border-gray-300 bg-white px-3 py-2 text-sm normal-case text-gray-800"><option value="">Todas las fincas</option></select>
+    </label>
+    <label class="text-xs font-semibold uppercase text-gray-500">Potrero
+      <select id="photo-lot" class="mt-1 block w-full rounded-lg border-gray-300 bg-white px-3 py-2 text-sm normal-case text-gray-800"><option value="">Todos los potreros</option></select>
+    </label>
+    <label class="text-xs font-semibold uppercase text-gray-500">Proyecto
+      <input id="photo-search" type="search" placeholder="Nombre del proyecto…" class="mt-1 block w-full rounded-lg border-gray-300 bg-white px-3 py-2 text-sm normal-case text-gray-800">
+    </label>
+  </div>
+
+  <div id="photo-empty" class="hidden rounded-xl border border-dashed border-gray-300 p-10 text-center text-sm text-gray-500">No hay ortofotos terminadas para estos filtros.</div>
+  <div id="photo-grid" class="photo-grid">
+    {% for mission in missions %}
+    <article class="photo-card" data-mission-card data-farm="{{ mission.farm.name if mission.farm else '' }}" data-lot="{{ mission.lot.name if mission.lot else '' }}" data-name="{{ mission.name|lower }}">
+      <div class="photo-folder"><i class="fas fa-map"></i></div>
+      <div class="mt-3">
+        <div class="flex items-start justify-between gap-2"><h2 class="font-semibold text-gray-900">{{ mission.name }}</h2><span class="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-bold uppercase text-emerald-700">Lista</span></div>
+        <p class="mt-2 text-xs text-gray-500"><i class="fas fa-building mr-1"></i>{{ mission.organization.name if mission.organization else 'Organización' }}</p>
+        <p class="mt-1 text-xs text-gray-500"><i class="fas fa-seedling mr-1"></i>{{ mission.farm.name if mission.farm else 'Sin finca' }} / {{ mission.lot.name if mission.lot else 'Sin potrero' }}</p>
+        <p class="mt-1 text-xs text-gray-500"><i class="fas fa-calendar mr-1"></i>{{ mission.updated_at.strftime('%Y-%m-%d %H:%M') }}</p>
+        <button type="button" data-select-mission="{{ mission.id }}" class="mt-4 w-full rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"><i class="fas fa-check mr-2"></i>Seleccionar ortofoto</button>
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+</main>
+
+<script>
+(() => {
+  const eventName = {{ picker_event_name|tojson }};
+  const cards = Array.from(document.querySelectorAll('[data-mission-card]'));
+  const farm = document.getElementById('photo-farm');
+  const lot = document.getElementById('photo-lot');
+  const search = document.getElementById('photo-search');
+  const empty = document.getElementById('photo-empty');
+  const loader = document.getElementById('photo-loader');
+
+  function options(values, placeholder){
+    return `<option value="">${placeholder}</option>` + [...new Set(values.filter(Boolean))].sort().map(value => `<option value="${value.replaceAll('&','&amp;').replaceAll('"','&quot;')}">${value}</option>`).join('');
+  }
+  farm.innerHTML = options(cards.map(card => card.dataset.farm), 'Todas las fincas');
+
+  function refreshLots(){
+    const available = cards.filter(card => !farm.value || card.dataset.farm === farm.value);
+    const previous = lot.value;
+    lot.innerHTML = options(available.map(card => card.dataset.lot), 'Todos los potreros');
+    if(Array.from(lot.options).some(option => option.value === previous)) lot.value = previous;
+  }
+  function filterCards(){
+    const term = search.value.trim().toLowerCase();
+    let visible = 0;
+    cards.forEach(card => {
+      const show = (!farm.value || card.dataset.farm === farm.value) && (!lot.value || card.dataset.lot === lot.value) && (!term || card.dataset.name.includes(term));
+      card.classList.toggle('photo-hidden', !show);
+      if(show) visible += 1;
+    });
+    empty.classList.toggle('hidden', visible !== 0);
+  }
+  farm.addEventListener('change', () => { refreshLots(); filterCards(); });
+  lot.addEventListener('change', filterCards);
+  search.addEventListener('input', filterCards);
+  refreshLots(); filterCards();
+
+  document.querySelectorAll('[data-select-mission]').forEach(button => button.addEventListener('click', async () => {
+    button.disabled = true;
+    loader.classList.add('open');
+    try{
+      const response = await fetch(`/dashboard/orthophotos/${button.dataset.selectMission}/select`, {method:'POST', credentials:'include', headers:{'X-Requested-With':'XMLHttpRequest'}});
+      const data = await response.json();
+      if(!response.ok || !data.success) throw new Error(data.message || 'No se pudo seleccionar la ortofoto.');
+      window.parent.postMessage({type:eventName, payload:data.asset}, '*');
+    }catch(error){
+      alert(error.message || 'No se pudo seleccionar la ortofoto.');
+    }finally{
+      loader.classList.remove('open');
+      button.disabled = false;
+    }
+  }));
+})();
+</script>
+{% endblock %}
