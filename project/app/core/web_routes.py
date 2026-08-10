@@ -708,8 +708,8 @@ def dashboard():
             .join(Farm)
             .filter(
                 Farm.org_id.in_(org_ids),
-                CommonAnalysis.date >= month_start,
-                CommonAnalysis.date < next_month,
+                CommonAnalysis.created_at >= datetime.combine(month_start, time.min),
+                CommonAnalysis.created_at < datetime.combine(next_month, time.min),
             )
             .count()
         )
@@ -742,12 +742,16 @@ def dashboard():
     # Count only GEOTIFF assets that are available in the platform
     from app.modules.media.models import Asset, AssetType
 
-    # Los assets aun no tienen una relacion directa con organizaciones. Para
-    # evitar exponer archivos de otros clientes, solo se agregan globalmente
-    # para el administrador de plataforma.
     if is_platform_admin:
         images_processed = Asset.query.filter(
             Asset.asset_type == AssetType.GEOTIFF.value
+        ).count()
+    elif org_ids:
+        from app.modules.orthophotos.models import OrthophotoMission
+
+        images_processed = OrthophotoMission.query.filter(
+            OrthophotoMission.organization_id.in_(org_ids),
+            OrthophotoMission.status == "completed",
         ).count()
 
     last_recommendation = None
