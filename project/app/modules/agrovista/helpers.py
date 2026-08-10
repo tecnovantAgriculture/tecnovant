@@ -1174,4 +1174,5 @@ def compute_mineral_balance(
         "total_kg_ha": _round(total) if total > 0 else None,
         "total_nano_kg_ha": _round(total_nano) if total_nano > 0 else None,
         "aforo_actual_fallback": aforo_actual_fallback,
+        "aforo_actual_used": _round(aforo_act_val),
     }

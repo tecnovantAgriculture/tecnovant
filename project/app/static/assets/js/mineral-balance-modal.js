@@ -193,24 +193,24 @@
     setStatus("Cargando objetivos y análisis foliares…");
     const resources = [
       { key: "objectives", label: "Objetivos", url: ENDPOINTS.objectives },
-      { key: "leaf", label: "Análisis foliares", url: ENDPOINTS.leaf + "?page=1&per_page=100" },
+      { key: "leaf", label: "Análisis foliares", url: ENDPOINTS.leaf + "?limit=100" },
     ];
-    const results = await Promise.allSettled(resources.map(async resource => {
-      const response = await fetch(resource.url, { credentials: "include" });
-      const body = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        const detail = body?.description || body?.error || body?.message || `HTTP ${response.status}`;
-        throw new Error(`${resource.label}: ${detail}`);
-      }
-      const data = Array.isArray(body) ? body : (Array.isArray(body?.items) ? body.items : []);
-      return { key: resource.key, data };
-    }));
     const errors = [];
-    results.forEach((result, index) => {
-      if (result.status === "fulfilled") state[result.value.key] = result.value.data;
-      else errors.push(result.reason?.message || `${resources[index].label}: error de consulta`);
-    });
-    renderAll();
+    await Promise.all(resources.map(async resource => {
+      try {
+        const response = await fetch(resource.url, { credentials: "include" });
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          const detail = body?.description || body?.error || body?.message || `HTTP ${response.status}`;
+          throw new Error(`${resource.label}: ${detail}`);
+        }
+        state[resource.key] = Array.isArray(body) ? body : (Array.isArray(body?.items) ? body.items : []);
+        renderAll();
+        setStatus(resource.key === "objectives" ? "Objetivos cargados; cargando análisis foliares…" : "Análisis foliares cargados; cargando objetivos…");
+      } catch (error) {
+        errors.push(error?.message || `${resource.label}: error de consulta`);
+      }
+    }));
     state.loaded = errors.length === 0;
     if (errors.length) setStatus(errors.join(" · "), true);
     else if (!state.objectives.length && !state.leaf.length) setStatus("No hay objetivos ni análisis foliares disponibles para este usuario.", true);
@@ -245,7 +245,7 @@
       const name = target.name || nutrient.name || nutrient.symbol;
       order.push(name); targets[name] = target.value; actuals[name] = leaf[`nutrient_${nutrient.id}`];
     });
-    return { order, targets, actuals, aforo_objective: objective.target_value, aforo_actual: common.yield_estimate, protein: objective.protein };
+    return { order, targets, actuals, aforo_objective: objective.target_value, aforo_actual: common.yield_estimate, use_objective_aforo_for_actual: true, protein: objective.protein };
   }
   async function calculate() {
     setStatus("Calculando balance mineral…");
@@ -263,7 +263,7 @@
       .map(item => ({ ...item, _symbol: nutrientSymbol(item.symbol) || nutrientSymbol(item.name) || nutrientSymbol(nutrientMeta.get(String(item.name || "").toLowerCase())?.symbol) }))
       .filter(item => ORDER.includes(item._symbol))
       .sort((a, b) => ORDER.indexOf(a._symbol) - ORDER.indexOf(b._symbol));
-    const cards = [["Proteína objetivo", objective.protein, "%"], ["Aforo objetivo", state.balance.aforo_objective ?? objective.target_value, " kg/m²"], ["Proteína actual", common.protein, "%"], ["Aforo actual", common.yield_estimate, " kg/m²"]];
+    const cards = [["Proteína objetivo", objective.protein, "%"], ["Aforo objetivo", state.balance.aforo_objective ?? objective.target_value, " kg/m²"], ["Proteína actual", common.protein, "%"], ["Aforo usado", state.balance.aforo_actual_used ?? objective.target_value, " kg/m²"]];
     document.getElementById("mineral-summary").innerHTML = cards.map(([label, value, suffix]) => `<div class="border bg-gray-100 px-3 py-2"><span class="block uppercase text-gray-500">${label}</span><strong class="mt-1 block text-sm">${number(value) == null ? "--" : fmt(value, 2) + suffix}</strong></div>`).join("");
     const sum = key => entries.reduce((total, item) => total + (number(item[key]) || 0), 0);
     const displayValue = (item, key) => {

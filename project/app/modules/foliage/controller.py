@@ -2462,9 +2462,10 @@ class LeafAnalysisView(MethodView):
         filter_by = request.args.get("filter_by", type=int)
         page = request.args.get("page", type=int)
         per_page = request.args.get("per_page", type=int)
+        limit = request.args.get("limit", type=int)
         if leaf_analysis_id:
             return self._get_leaf_analysis(leaf_analysis_id)
-        return self._get_leaf_analysis_list(filter_by=filter_by, page=page, per_page=per_page)
+        return self._get_leaf_analysis_list(filter_by=filter_by, page=page, per_page=per_page, limit=limit)
 
     @check_permission(required_roles=["administrator", "reseller", "org_admin"])
     def post(self):
@@ -2516,7 +2517,7 @@ class LeafAnalysisView(MethodView):
         return self._delete_leaf_analysis(leaf_analysis_id)
 
     # Métodos auxiliares
-    def _get_leaf_analysis_list(self, filter_by=None, page=None, per_page=None):
+    def _get_leaf_analysis_list(self, filter_by=None, page=None, per_page=None, limit=None):
         """Obtiene una lista de todos los análisis de hojas según el rol del usuario y el filtro por finca.
 
         Args:
@@ -2569,7 +2570,7 @@ class LeafAnalysisView(MethodView):
         if filter_by:
             query = query.filter(Lot.farm_id == filter_by)
 
-        query = query.order_by(LeafAnalysis.created_at.desc()).options(
+        query = query.order_by(LeafAnalysis.id.desc()).options(
             joinedload(LeafAnalysis.common_analysis)
             .joinedload(CommonAnalysis.lot)
             .joinedload(Lot.farm),
@@ -2577,7 +2578,11 @@ class LeafAnalysisView(MethodView):
         )
 
         pagination = None
-        if page is not None or per_page is not None:
+        if limit is not None:
+            if limit < 1 or limit > 100:
+                raise BadRequest("Limit must be between 1 and 100.")
+            leaf_analyses = query.limit(limit).all()
+        elif page is not None or per_page is not None:
             page = page if page is not None else 1
             per_page = per_page if per_page is not None else 10
             if page < 1:

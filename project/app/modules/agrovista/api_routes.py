@@ -813,7 +813,7 @@ def mineral_balance():
         actuals,
         aforo,
         nutrients,
-        aforo_actual=data.get("aforo_actual"),
+        aforo_actual=(None if data.get("use_objective_aforo_for_actual") else data.get("aforo_actual")),
     )
     result["targets"] = targets
     result["aforo_objective"] = derived_aforo
