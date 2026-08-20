@@ -43,7 +43,6 @@
   <div class="flex gap-2">
      {% if picker_mode %}
      <a href="{{ url_for('orthophotos.library_picker', picker=1, event=picker_event_name) }}" class="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md border border-emerald-600 bg-white text-emerald-700 hover:bg-emerald-50"><i class="fas fa-folder-tree mr-2"></i>Fotogrametría</a>
-     <a href="{{ url_for('media.upload_s3', picker=1, event=picker_event_name, multi=1 if picker_multi else 0, allowed=picker_allowed_types | join(',') if picker_allowed_types else '') }}" class="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md bg-sky-100 text-sky-800 hover:bg-sky-200 dark:bg-sky-900 dark:text-sky-200">Importar desde S3</a>
      <a href="{{ url_for('media.upload_local', picker=1, event=picker_event_name, multi=1 if picker_multi else 0, allowed=picker_allowed_types | join(',') if picker_allowed_types else '') }}" class="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md bg-emerald-600 text-white hover:bg-emerald-700">Subir desde el equipo</a>
      {% else %}
      <a href="{{ url_for('media.upload_s3') }}" class="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md bg-sky-100 text-sky-800 hover:bg-sky-200 dark:bg-sky-900 dark:text-sky-200">Importar desde S3</a>
@@ -52,6 +51,7 @@
   </div>
   </div>
 
+  {% if not picker_mode %}
   <form method="get" class="flex flex-wrap items-end gap-3 mb-4" data-media-filters>
     {% if picker_mode %}
       <input type="hidden" name="picker" value="1">
@@ -65,6 +65,7 @@
       <label for="q" class="block text-xs text-gray-500 dark:text-gray-300 mb-1">Buscar</label>
        <input id="q" name="q" type="text" placeholder="Nombre del archivo…" value="{{ q }}" class="w-64 px-3 py-2 rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-emerald-500">
     </div>
+    {% if not picker_mode %}
     <div>
       <label for="type" class="block text-xs text-gray-500 dark:text-gray-300 mb-1">Tipo</label>
       {% set type_options = [
@@ -74,12 +75,11 @@
       ] %}
        <select id="type" name="type" class="px-3 py-2 rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-emerald-500">
         {% for value, label in type_options %}
-          {% if value == 'all' or not picker_allowed_types or value in picker_allowed_types %}
-            <option value="{{ value }}" {% if type_filter == value %}selected{% endif %}>{{ label }}</option>
-          {% endif %}
+          <option value="{{ value }}" {% if type_filter == value %}selected{% endif %}>{{ label }}</option>
         {% endfor %}
       </select>
     </div>
+    {% endif %}
     <div>
       <label for="per_page" class="block text-xs text-gray-500 dark:text-gray-300 mb-1">Por página</label>
        <select id="per_page" name="per_page" class="px-3 py-2 rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-emerald-500">
@@ -100,6 +100,7 @@
       {% endif %}
     </div>
   </form>
+  {% endif %}
 
   <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
     {% if items and items|length > 0 %}
@@ -140,7 +141,9 @@
               {% set display_unit = 'GB' %}
             {% endif %}
             <div class="min-w-0">
-              <p class="truncate text-sm font-medium text-gray-900 dark:text-gray-100" title="{{ it.original_name }}">{{ it.original_name }}</p>
+              {% set orthophoto_folder = it.exif.get('orthophoto_folder') if it.exif and it.exif is mapping else None %}
+              {% set display_name = orthophoto_folder.split(' / ')[-1] if orthophoto_folder else it.original_name %}
+              <p class="truncate text-sm font-medium text-gray-900 dark:text-gray-100" title="{{ display_name }}">{{ display_name }}</p>
               <p class="text-xs text-gray-500 dark:text-gray-400" title="{{ size_kb|round(1) }} KB">
                 {{ it.width or '?' }}×{{ it.height or '?' }} px • {{ display_size|round(1) }} {{ display_unit }}
               </p>

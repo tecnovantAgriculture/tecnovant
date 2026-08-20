@@ -566,14 +566,20 @@ def open_webodm_task(mission_id: int):
 
 def _accessible_mission(mission_id: int) -> OrthophotoMission:
     mission = OrthophotoMission.query.get_or_404(mission_id)
-    client_ids = {client.id for client in get_clients_for_user(get_jwt_identity())}
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    if user and user.is_admin():
+        return mission
+    client_ids = {client.id for client in get_clients_for_user(user_id)}
     if mission.organization_id not in client_ids:
         abort(403)
     return mission
 
 
-def _mission_asset_payload(asset: Asset) -> dict:
+def _mission_asset_payload(asset: Asset, mission: OrthophotoMission | None = None) -> dict:
     return {
+        "display_name": mission.name if mission else asset.original_name,
+        "folder_path": mission.folder_path if mission else None,
         "id": asset.id,
         "storage_key": asset.storage_key,
         "original_name": asset.original_name,
@@ -601,14 +607,19 @@ def _cached_mission_orthophoto(mission: OrthophotoMission) -> Asset | None:
 @web.route("/dashboard/orthophotos/library", methods=["GET"])
 @login_required
 def library_picker():
-    client_ids = {client.id for client in get_clients_for_user(get_jwt_identity())}
-    missions = (
-        OrthophotoMission.query.filter(OrthophotoMission.organization_id.in_(client_ids))
-        .order_by(OrthophotoMission.created_at.desc())
-        .all()
-        if client_ids
-        else []
-    )
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    if user and user.is_admin():
+        missions = OrthophotoMission.query.order_by(OrthophotoMission.created_at.desc()).all()
+    else:
+        client_ids = {client.id for client in get_clients_for_user(user_id)}
+        missions = (
+            OrthophotoMission.query.filter(OrthophotoMission.organization_id.in_(client_ids))
+            .order_by(OrthophotoMission.created_at.desc())
+            .all()
+            if client_ids
+            else []
+        )
     selectable = []
     for mission in missions:
         available = mission.available_assets or []
@@ -641,7 +652,7 @@ def select_mission_orthophoto(mission_id: int):
 
     cached = _cached_mission_orthophoto(mission)
     if cached:
-        return jsonify({"success": True, "cached": True, "asset": _mission_asset_payload(cached)})
+        return jsonify({"success": True, "cached": True, "asset": _mission_asset_payload(cached, mission)})
 
     upstream = None
     temporary_path = None
@@ -676,7 +687,7 @@ def select_mission_orthophoto(mission_id: int):
         db.session.commit()
         if created or not asset.variants:
             enqueue_preprocess_asset(asset.id)
-        return jsonify({"success": True, "cached": not created, "asset": _mission_asset_payload(asset)})
+        return jsonify({"success": True, "cached": not created, "asset": _mission_asset_payload(asset, mission)})
     except Exception as exc:
         db.session.rollback()
         current_app.logger.exception("orthophotos: no se pudo incorporar la ortofoto de la misión %s", mission.id)

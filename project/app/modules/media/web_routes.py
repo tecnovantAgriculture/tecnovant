@@ -125,9 +125,11 @@ def library():
     if picker_mode:
         context["data_menu"] = None
 
-    # Si hay un subconjunto permitido y el filtro actual no pertenece a él,
-    # forzamos a utilizar el primero disponible para evitar resultados vacíos.
-    if allowed_types and type_filter not in allowed_types and type_filter != "all":
+    # Un selector restringido a un solo tipo no necesita mostrar el filtro:
+    # aplicamos siempre ese tipo en el servidor (Indicadores usa solo GeoTIFF).
+    if picker_mode and len(allowed_types) == 1:
+        type_filter = next(iter(allowed_types))
+    elif allowed_types and type_filter not in allowed_types and type_filter != "all":
         type_filter = next(iter(sorted(allowed_types)))
 
     pagination = _fetch_assets_for_library(

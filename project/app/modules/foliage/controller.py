@@ -410,7 +410,13 @@ class LotView(MethodView):
             area=data["area"],
             farm_id=data["farm_id"],
             geometry=data.get("geometry"),
+            media_asset_id=data.get("media_asset_id"),
+            is_objective=bool(data.get("is_objective", False) and data.get("geometry") and data.get("media_asset_id")),
         )
+        if lot.is_objective:
+            Lot.query.filter_by(farm_id=lot.farm_id, is_objective=True).update(
+                {"is_objective": False}, synchronize_session=False
+            )
         db.session.add(lot)
         db.session.commit()
         response_data = self._serialize_lot(lot)
@@ -440,6 +446,20 @@ class LotView(MethodView):
             lot.geometry = data["geometry"]
         elif "geometry" in data and data["geometry"] is None:
             lot.geometry = None
+            lot.media_asset_id = None
+        if "media_asset_id" in data and data["media_asset_id"] is not None:
+            lot.media_asset_id = int(data["media_asset_id"])
+        if "is_objective" in data:
+            is_objective = bool(data["is_objective"])
+            if is_objective:
+                Lot.query.filter(
+                    Lot.farm_id == lot.farm_id,
+                    Lot.id != lot.id,
+                    Lot.is_objective.is_(True),
+                ).update({"is_objective": False}, synchronize_session=False)
+            lot.is_objective = is_objective
+        if not lot.geometry:
+            lot.is_objective = False
         db.session.commit()
         response_data = self._serialize_lot(lot)
         json_data = json.dumps(response_data, ensure_ascii=False, indent=4)
@@ -504,6 +524,8 @@ class LotView(MethodView):
             "farm_id": lot.farm_id,
             "farm_name": lot.farm.name if lot.farm else "",
             "geometry": lot.geometry,
+            "media_asset_id": lot.media_asset_id,
+            "is_objective": bool(lot.is_objective and lot.geometry and lot.media_asset_id),
             "created_at": lot.created_at.isoformat(),
             "updated_at": lot.updated_at.isoformat(),
         }
@@ -2513,9 +2535,16 @@ class LeafAnalysisView(MethodView):
         page = request.args.get("page", type=int)
         per_page = request.args.get("per_page", type=int)
         limit = request.args.get("limit", type=int)
+        linked_polygons = request.args.get("linked_polygons", default=False, type=lambda value: str(value).lower() in {"1", "true", "yes"})
         if leaf_analysis_id:
             return self._get_leaf_analysis(leaf_analysis_id)
-        return self._get_leaf_analysis_list(filter_by=filter_by, page=page, per_page=per_page, limit=limit)
+        return self._get_leaf_analysis_list(
+            filter_by=filter_by,
+            page=page,
+            per_page=per_page,
+            limit=limit,
+            linked_polygons=linked_polygons,
+        )
 
     @check_permission(required_roles=["administrator", "reseller", "org_admin"])
     def post(self):
@@ -2567,7 +2596,7 @@ class LeafAnalysisView(MethodView):
         return self._delete_leaf_analysis(leaf_analysis_id)
 
     # Métodos auxiliares
-    def _get_leaf_analysis_list(self, filter_by=None, page=None, per_page=None, limit=None):
+    def _get_leaf_analysis_list(self, filter_by=None, page=None, per_page=None, limit=None, linked_polygons=False):
         """Obtiene una lista de todos los análisis de hojas según el rol del usuario y el filtro por finca.
 
         Args:
@@ -2619,6 +2648,11 @@ class LeafAnalysisView(MethodView):
 
         if filter_by:
             query = query.filter(Lot.farm_id == filter_by)
+        if linked_polygons:
+            query = query.filter(
+                Lot.geometry.isnot(None),
+                Lot.media_asset_id.isnot(None),
+            )
 
         query = query.order_by(LeafAnalysis.id.desc()).options(
             joinedload(LeafAnalysis.common_analysis)

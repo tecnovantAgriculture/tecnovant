@@ -184,7 +184,7 @@
   function updateButtons() {
     const ready = !!state.selectedObjective && !!state.selectedLeaf;
     document.getElementById("mineral-formulator").disabled = !ready;
-    document.getElementById("mineral-projection").disabled = !ready;
+    document.getElementById("mineral-projection").disabled = !ready || !!state.selectedLeaf?.is_polygon_calculation;
     document.getElementById("mineral-liebig").disabled = !state.balance;
   }
 
@@ -195,7 +195,6 @@
     setStatus("Cargando objetivos y análisis foliares…");
     const resources = [
       { key: "objectives", label: "Objetivos", url: ENDPOINTS.objectives },
-      { key: "leaf", label: "Análisis foliares", url: ENDPOINTS.leaf + "?limit=100" },
     ];
     const errors = [];
     await Promise.all(resources.map(async resource => {
@@ -215,10 +214,20 @@
         errors.push(error?.message || `${resource.label}: error de consulta`);
       }
     }));
+    try {
+      state.leaf = typeof window.getSavedPolygonMineralRows === "function"
+        ? await window.getSavedPolygonMineralRows()
+        : [];
+      state.loadingLeaf = false;
+      renderAll();
+    } catch (error) {
+      state.loadingLeaf = false;
+      errors.push(error?.message || "No se pudieron calcular los polígonos guardados.");
+    }
     state.loaded = errors.length === 0;
     if (errors.length) setStatus(errors.join(" · "), true);
-    else if (!state.objectives.length && !state.leaf.length) setStatus("No hay objetivos ni análisis foliares disponibles para este usuario.", true);
-    else setStatus("Selecciona un objetivo y un análisis foliar.");
+    else if (!state.leaf.length) setStatus("No hay polígonos guardados con datos calculables en esta ortofoto.", true);
+    else setStatus("Selecciona un objetivo y uno de los lotes guardados.");
   }
   function renderAll() { renderObjectives(); renderFoliar(); updateButtons(); }
   function renderObjectives() {
@@ -235,7 +244,7 @@
     document.getElementById("mineral-foliar-head").innerHTML = `<tr><th class="px-2 py-2">ID</th><th class="px-2 py-2">Fecha</th><th class="px-2 py-2 text-left">Finca</th><th class="px-2 py-2 text-left">Potrero</th>${nutrients.map(n => `<th class="px-2 py-2">${esc(n.symbol)}</th>`).join("")}</tr>`;
     const rows = state.leaf;
     document.getElementById("mineral-foliar-body").innerHTML = rows.length ? rows.map(item => {
-      const common = commonFor(item), selected = Number(state.selectedLeaf?.id) === Number(item.id);
+      const common = commonFor(item), selected = String(state.selectedLeaf?.id ?? "") === String(item.id);
       return `<tr data-leaf-id="${item.id}" class="cursor-pointer hover:bg-sky-50 ${selected ? "bg-sky-100 ring-1 ring-inset ring-sky-500" : ""}"><td class="px-2 py-1.5 text-center">${item.id}</td><td class="px-2 py-1.5 text-center">${esc(common.date || item.common_analysis_date || "")}</td><td class="px-2 py-1.5">${esc(common.farm_name || item.farm_name || "")}</td><td class="px-2 py-1.5">${esc(common.lot_name || item.lot_name || "")}</td>${nutrients.map(n => `<td class="px-2 py-1.5 text-center">${fmt(item[`nutrient_${n.id}`], 3)}</td>`).join("")}</tr>`;
     }).join("") : `<tr><td colspan="${nutrients.length + 4}" class="p-5 text-center text-gray-500">${state.loadingLeaf ? "Cargando análisis foliares…" : "No hay análisis foliares para este filtro."}</td></tr>`;
   }
@@ -292,14 +301,22 @@
     const params = new URLSearchParams({ mode: "lot_vs_objective", lot_id: String(common.lot_id || ""), common_analysis_id: String(common.id || state.selectedLeaf.common_analysis_id), objective_id: String(objective.id), objective_type: "crop", objective_label: objective.crop_name || "Objetivo" });
     window.location.href = `${ENDPOINTS.comparison}?${params}`;
   }
-  function open() { document.getElementById("mineral-balance-modal").classList.remove("hidden"); document.body.classList.add("overflow-hidden"); load(); }
+  function open() {
+    document.getElementById("mineral-balance-modal").classList.remove("hidden");
+    document.body.classList.add("overflow-hidden");
+    state.loaded = false;
+    state.leaf = [];
+    state.selectedLeaf = null;
+    state.balance = null;
+    load();
+  }
   function close() { document.getElementById("mineral-balance-modal").classList.add("hidden"); document.body.classList.remove("overflow-hidden"); document.getElementById("open-mineral-balance")?.focus(); }
 
   function bind() {
     document.getElementById("open-mineral-balance").addEventListener("click", open);
     document.querySelectorAll("[data-mineral-close]").forEach(node => node.addEventListener("click", close));
     document.getElementById("mineral-objective-body").addEventListener("click", event => { const row = event.target.closest("[data-objective-id]"); if (!row) return; state.selectedObjective = state.objectives.find(item => Number(item.id) === Number(row.dataset.objectiveId)); state.balance = null; state.showGrade = false; state.showNano = false; renderObjectives(); updateButtons(); if (state.selectedLeaf) calculate(); else setStatus("Objetivo seleccionado; selecciona el análisis foliar."); });
-    document.getElementById("mineral-foliar-body").addEventListener("click", event => { const row = event.target.closest("[data-leaf-id]"); if (!row) return; state.selectedLeaf = state.leaf.find(item => Number(item.id) === Number(row.dataset.leafId)); state.balance = null; state.showGrade = false; state.showNano = false; renderFoliar(); updateButtons(); if (state.selectedObjective) calculate(); else setStatus("Análisis seleccionado; selecciona el objetivo."); });
+    document.getElementById("mineral-foliar-body").addEventListener("click", event => { const row = event.target.closest("[data-leaf-id]"); if (!row) return; state.selectedLeaf = state.leaf.find(item => String(item.id) === String(row.dataset.leafId)); state.balance = null; state.showGrade = false; state.showNano = false; renderFoliar(); updateButtons(); if (state.selectedObjective) calculate(); else setStatus("Análisis seleccionado; selecciona el objetivo."); });
     document.getElementById("mineral-formulator").addEventListener("click", calculate);
     document.getElementById("mineral-projection").addEventListener("click", openProjection);
     document.getElementById("mineral-liebig").addEventListener("click", showLiebig);

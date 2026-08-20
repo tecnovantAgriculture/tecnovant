@@ -108,6 +108,13 @@ class Lot(db.Model):
     area = db.Column(db.Float, nullable=False)
     farm_id = db.Column(db.Integer, db.ForeignKey("farms.id"), nullable=False)
     geometry = db.Column(db.Text, nullable=True)  # GeoJSON polygon of the lot
+    media_asset_id = db.Column(
+        db.Integer,
+        db.ForeignKey("media_asset.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    is_objective = db.Column(db.Boolean, nullable=False, default=False)
     active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(

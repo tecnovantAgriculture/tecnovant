@@ -44,6 +44,11 @@
     #foliar-analysis-modal {z-index:999999 !important}
     #farm-picker-modal {z-index:999999 !important}
 
+    .agrovista-collapsible > summary {list-style:none}
+    .agrovista-collapsible > summary::-webkit-details-marker {display:none}
+    .agrovista-collapsible .collapsible-chevron {transition:transform .18s ease}
+    .agrovista-collapsible[open] .collapsible-chevron {transform:rotate(180deg)}
+
     /* Fullscreen: right sidebar must not overflow viewport and must scroll independently */
     #workzone:fullscreen aside,
     #workzone:-webkit-full-screen aside,
@@ -51,6 +56,15 @@
       max-height: 100vh;
       overflow-y: auto;
       overscroll-behavior: contain;
+    }
+
+    #workzone:fullscreen #selectedLotAnalysisPanel,
+    #workzone:fullscreen #polygonComparisonPreview,
+    #workzone:-webkit-full-screen #selectedLotAnalysisPanel,
+    #workzone:-webkit-full-screen #polygonComparisonPreview,
+    #workzone:-moz-full-screen #selectedLotAnalysisPanel,
+    #workzone:-moz-full-screen #polygonComparisonPreview {
+      display: none !important;
     }
   </style>
 {% endblock %}
@@ -61,17 +75,20 @@
 {% endblock %}
 
 {% block content %}
-<div id="workzone" class="w-full bg-transparent min-h-screen">
+<div id="workzone" class="w-full bg-transparent">
   <div class="w-full px-0 py-0 space-y-4">
     <header class="flex w-full flex-col gap-3 sm:flex-row sm:items-center" style="justify-content:flex-end">
       <div class="flex flex-wrap items-center gap-2" style="margin-left:auto;justify-content:flex-end">
-        <button id="upload-trigger"
-                class="inline-flex items-center rounded-lg bg-white dark:bg-gray-800 px-3 py-2 text-xs font-medium text-gray-700 dark:text-gray-300 shadow-sm ring-1 ring-gray-200 dark:ring-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700">
-          Subir ortofoto
-        </button>
         <button id="open-media-picker"
                 class="inline-flex items-center rounded-lg bg-gray-900 dark:bg-gray-100 px-3 py-2 text-xs font-semibold text-white dark:text-gray-900 shadow-sm hover:bg-gray-800 dark:hover:bg-gray-200">
           Seleccionar desde Media
+        </button>
+        <button id="topLotComparisonBtn" type="button" disabled
+                class="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-white shadow-sm disabled:cursor-not-allowed"
+                style="background-color:#64748b;color:#ffffff;opacity:1;"
+                title="Se necesitan al menos dos lotes guardados">
+          <i class="fas fa-columns" aria-hidden="true"></i>
+          Comparar lotes
         </button>
         <div class="flex items-center gap-2 text-xs">
           <span class="text-gray-500 dark:text-gray-400">Vista:</span>
@@ -119,6 +136,16 @@
                 ⌖
               </span>
               Seleccionar
+            </button>
+            <button id="editPolygonBtn"
+                    class="inline-flex items-center rounded-md bg-white dark:bg-gray-700 px-3 py-1.5 text-xs font-medium text-gray-400 dark:text-gray-500 shadow-md ring-1 ring-gray-200 dark:ring-gray-600 transition-colors disabled:cursor-not-allowed disabled:opacity-60" disabled>
+              <span class="mr-2 inline-flex h-6 w-6 items-center justify-center rounded-md bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 text-xs"><i class="fas fa-pen"></i></span>
+              <span class="edit-polygon-label">Modificar</span>
+            </button>
+            <button id="deletePolygonBtn"
+                    class="inline-flex items-center rounded-md bg-white dark:bg-gray-700 px-3 py-1.5 text-xs font-medium text-gray-400 dark:text-gray-500 shadow-md ring-1 ring-gray-200 dark:ring-gray-600 transition-colors disabled:cursor-not-allowed disabled:opacity-60" disabled>
+              <span class="mr-2 inline-flex h-6 w-6 items-center justify-center rounded-md bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-400 text-xs"><i class="fas fa-trash-alt"></i></span>
+              Eliminar
             </button>
             <button id="resetMapBtn"
                     class="inline-flex items-center rounded-md bg-white dark:bg-gray-700 px-3 py-1.5 text-xs font-medium text-gray-800 dark:text-gray-100 shadow-md ring-1 ring-gray-200 dark:ring-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">
@@ -179,20 +206,20 @@
           </div>
         </div>
 
-        <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500 dark:text-gray-400">
-          <div id="method-box" class="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2 text-xs text-gray-600 dark:text-gray-400 shadow-sm">
-            Método: <span id="method-value">--</span>
-          </div>
-          <div id="status" class="text-xs text-gray-500 dark:text-gray-400" aria-live="polite">Sube una imagen para analizar</div>
+        <div class="hidden" aria-hidden="true" style="display:none !important;visibility:hidden !important;height:0 !important;overflow:hidden !important;">
+          <div id="method-box" style="display:none !important;">Método: <span id="method-value">--</span></div>
+          <div id="status" style="display:none !important;" aria-live="polite">Sube una imagen para analizar</div>
         </div>
 
         {# Codex: vista previa nutricional, aislada de la lógica principal #}
-        <section id="polygonComparisonPreview" class="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 shadow-sm">
+        <details id="polygonComparisonPreview" class="agrovista-collapsible rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 shadow-sm" style="display:none !important;">
+          <summary class="flex cursor-pointer items-center justify-between gap-3 text-sm font-semibold text-gray-900 dark:text-gray-100">
+            <span><i class="fas fa-balance-scale mr-2 text-emerald-700"></i>Vista previa nutricional</span>
+            <i class="collapsible-chevron fas fa-chevron-down text-xs text-gray-500" aria-hidden="true"></i>
+          </summary>
+          <div class="mt-3">
           <div class="mb-3 flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h2 class="text-sm font-semibold text-gray-900 dark:text-gray-100"><i class="fas fa-balance-scale mr-2 text-emerald-700"></i>Vista previa nutricional</h2>
-              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Selecciona un objetivo y dibuja uno o más polígonos para ver sus datos calculados.</p>
-            </div>
+            <div><p class="text-xs text-gray-500 dark:text-gray-400">Selecciona un objetivo y dibuja uno o más polígonos para ver sus datos calculados.</p></div>
             <div class="min-w-[240px]">
               <label for="polygonComparisonObjective" class="mb-1 block text-xs font-semibold text-gray-600 dark:text-gray-400">Objetivo</label>
               <select id="polygonComparisonObjective" class="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 py-1.5 px-3 text-sm shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500">
@@ -207,11 +234,12 @@
           </div>
           <div id="polygonComparisonHint" class="rounded-xl bg-gray-50 dark:bg-gray-700 px-3 py-2 text-xs text-gray-500 dark:text-gray-400">Dibuja un polígono para ver aquí la comparación previa.</div>
           <div id="polygonComparisonCards" class="mt-3 space-y-3 overflow-y-auto pr-2" style="max-height: 760px;"></div>
-        </section>
+          </div>
+        </details>
 
         <div id="lotComparisonModal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="lotComparisonTitle" style="position:fixed;inset:0;width:100vw;height:100vh;z-index:2147483000;background:rgba(17,24,39,.72);padding:24px;box-sizing:border-box;">
           <div data-close-lot-comparison style="position:absolute;inset:0;z-index:0;"></div>
-          <div class="flex flex-col overflow-hidden rounded-lg bg-white shadow-2xl dark:bg-gray-900" style="position:absolute;z-index:1;left:50%;top:50%;transform:translate(-50%,-50%);width:min(1400px,calc(100vw - 48px));height:min(860px,calc(100vh - 48px));margin:0;background:#fff;">
+          <div class="flex flex-col overflow-hidden rounded-lg bg-white shadow-2xl dark:bg-gray-900" style="position:absolute;z-index:1;left:50%;top:50%;transform:translate(-50%,-50%);width:min(1180px,calc(100vw - 40px));max-height:calc(100vh - 40px);margin:0;background:#f8fafc;">
             <header class="flex shrink-0 items-center justify-between gap-4 border-b border-gray-200 px-4 py-3 dark:border-gray-700 sm:px-6">
               <div>
                 <h2 id="lotComparisonTitle" class="text-base font-semibold text-gray-900 dark:text-gray-100">Comparación de lotes</h2>
@@ -221,7 +249,7 @@
                 <i class="fas fa-times" aria-hidden="true"></i>
               </button>
             </header>
-            <div id="lotComparisonContent" class="min-h-0 flex-1 overflow-auto p-4 sm:p-6"></div>
+            <div id="lotComparisonContent" class="min-h-0 flex-1 overflow-auto p-3 sm:p-4"></div>
           </div>
         </div>
       </div>
@@ -258,28 +286,13 @@
           </div>
         </section>
 
-        <section class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 shadow-sm">
-          <div class="mb-3 flex items-center justify-between">
-             <h2 class="text-sm font-semibold text-gray-800 dark:text-gray-200"><i class="fas fa-seedling mr-2"></i>Lotes dibujados</h2>
-            <span class="rounded-full bg-emerald-50 dark:bg-emerald-900/30 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
-              <span id="lotsCount">0</span> lotes
-            </span>
-          </div>
-
-          <ul id="lotsList" class="space-y-2 text-sm">
-            <li class="text-xs italic text-gray-400 dark:text-gray-500">
-              Dibuja un polígono en el mapa para registrar el primer lote.
-            </li>
-          </ul>
-        </section>
-
-        <section class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 shadow-sm">
-          <div class="mb-3 flex items-center justify-between">
-             <h2 class="text-sm font-semibold text-gray-800 dark:text-gray-200"><i class="fas fa-chart-line mr-2"></i>Análisis del lote seleccionado</h2>
-            <span id="activeLotName" class="text-xs text-gray-500 dark:text-gray-400">Sin lote seleccionado</span>
-          </div>
-
-          <div class="space-y-3">
+        <details id="selectedLotAnalysisPanel" class="agrovista-collapsible rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 shadow-sm">
+          <summary class="flex cursor-pointer items-center justify-between gap-3">
+            <span class="text-sm font-semibold text-gray-800 dark:text-gray-200"><i class="fas fa-chart-line mr-2"></i>Análisis del lote seleccionado</span>
+            <span id="activeLotName" class="ml-auto text-right text-xs text-gray-500 dark:text-gray-400">Sin lote seleccionado</span>
+            <i class="collapsible-chevron fas fa-chevron-down text-xs text-gray-500" aria-hidden="true"></i>
+          </summary>
+          <div class="mt-3 space-y-3">
             <div>
               <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">
                 Fecha de análisis suelo/foliar
@@ -405,7 +418,7 @@
               Selecciona un polígono para ver sus índices y vincular un análisis de laboratorio.
             </p>
           </div>
-        </section>
+        </details>
 
         <section class="hidden rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/70 dark:bg-emerald-900/20 p-4 shadow-sm space-y-3">
           <h2 class="text-sm font-semibold text-emerald-900 dark:text-emerald-300">
@@ -619,6 +632,7 @@
   {{ super() }}
   <script src="/js/leaflet.js"></script>
   <script src="/js/leaflet.draw.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <script>
   // --- Media Picker Modal Styles ---
   (function(){
@@ -721,6 +735,8 @@
       drawPolygonBtn: document.getElementById("drawPolygonBtn"),
       drawRectangleBtn: document.getElementById("drawRectangleBtn"),
       selectPolygonBtn: document.getElementById("selectPolygonBtn"),
+      editPolygonBtn: document.getElementById("editPolygonBtn"),
+      deletePolygonBtn: document.getElementById("deletePolygonBtn"),
       resetMapBtn: document.getElementById("resetMapBtn"),
       nutrientsBox: document.getElementById("nutrients-box"),
       nutrientsList: document.getElementById("nutrients-list"),
@@ -795,6 +811,7 @@
     let currentVertices = null;
     let currentVerticesRaster = null;
     let activeLayerId = null;
+    let editingLayerId = null;
     let lotCounter = 0;
     const lotState = new Map();
     let commonAnalyses = [];
@@ -1063,6 +1080,22 @@
     const polygonStyleNormal = { color: '#0066cc', weight: 2, opacity: 0.7, fillOpacity: 0.2 };
     const polygonStyleActive = { color: '#22c55e', weight: 3, opacity: 1, fillOpacity: 0.35 };
 
+    function updatePolygonActionButtons(){
+      const hasActiveLayer = activeLayerId !== null && !!drawnItems.getLayer(activeLayerId);
+      [el.editPolygonBtn, el.deletePolygonBtn].forEach(button => {
+        if(!button){ return; }
+        button.disabled = !hasActiveLayer;
+        button.classList.toggle("text-gray-400", !hasActiveLayer);
+        button.classList.toggle("dark:text-gray-500", !hasActiveLayer);
+        button.classList.toggle("text-gray-800", hasActiveLayer);
+        button.classList.toggle("dark:text-gray-100", hasActiveLayer);
+        button.classList.toggle("hover:bg-gray-50", hasActiveLayer);
+        button.classList.toggle("dark:hover:bg-gray-600", hasActiveLayer);
+      });
+      const label = el.editPolygonBtn?.querySelector(".edit-polygon-label");
+      if(label){ label.textContent = editingLayerId !== null ? "Guardar cambios" : "Modificar"; }
+    }
+
     function setActiveLayer(layer){
       const entry = ensureLotEntry(layer);
       // Restaurar estilo normal al layer anterior
@@ -1085,6 +1118,7 @@
         setText(el.activeLotName, "Sin lote seleccionado");
       }
       renderLotsList();
+      updatePolygonActionButtons();
     }
 
     function renderLotsList(){
@@ -1242,7 +1276,8 @@
       for(const lot of rows){
         if(!lot){ continue; }
         const value = lot.id;
-        const label = lot.name || `Lote ${lot.id}`;
+        const objectiveLabel = lot.is_objective ? "⭐ Objetivo · " : "";
+        const label = objectiveLabel + (lot.name || `Lote ${lot.id}`);
         const selected = selectedId && Number(selectedId) === Number(value) ? " selected" : "";
         options.push(`<option value="${value}"${selected}>${label}</option>`);
       }
@@ -1276,7 +1311,8 @@
       for(const lot of foliarState.lots){
         if(!lot){ continue; }
         const farmName = farmMap.get(Number(lot.farm_id)) || "Finca";
-        const label = `${farmName} · ${lot.name || `Lote ${lot.id}`}`;
+        const objectiveLabel = lot.is_objective ? "⭐ Objetivo · " : "";
+        const label = `${farmName} · ${objectiveLabel}${lot.name || `Lote ${lot.id}`}`;
         options.push(`<option value=\"${lot.id}\">${label}</option>`);
       }
       el.compareLotSelect.innerHTML = options.join("");
@@ -1577,6 +1613,54 @@
       await updateStatsForLayer(layer);
       return entry.areaStats || null;
     }
+
+    window.getSavedPolygonMineralRows = async function(){
+      if(typeof lotState === "undefined" || !lotState || typeof lotState.values !== "function"){ return []; }
+      const entriesByLot = new Map();
+      Array.from(lotState.values()).forEach(entry => {
+        if(!entry || entry.linkedLotId == null || entry.linkedLotId === ""){ return; }
+        const lotId = String(entry.linkedLotId);
+        const layer = drawnItems && drawnItems.getLayer ? drawnItems.getLayer(entry.id) : null;
+        const area = layer ? Number(computeAreaHaForLayer(layer)) || 0 : 0;
+        const score = (entry.areaStats && Array.isArray(entry.areaStats.nutrients) && entry.areaStats.nutrients.length ? 1000 : 0) + area;
+        const current = entriesByLot.get(lotId);
+        if(!current || score > current.score){ entriesByLot.set(lotId, {entry, score}); }
+      });
+      const entries = Array.from(entriesByLot.values()).map(item => item.entry);
+      const rows = [];
+      for(const entry of entries){
+        const stats = await ensureAreaStatsForEntry(entry);
+        if(!stats || !Array.isArray(stats.nutrients) || !stats.nutrients.length){ continue; }
+        const lot = (foliarState.lots || []).find(item => Number(item && item.id) === Number(entry.linkedLotId));
+        if(!lot || !lot.geometry || !lot.media_asset_id){ continue; }
+        const nutrientsInfo = {};
+        const row = {
+          id: "polygon-" + String(lot.id),
+          is_polygon_calculation: true,
+          common_analysis_date: new Date().toISOString().split("T")[0],
+          farm_id: lot.farm_id,
+          farm_name: getFarmNameById(lot.farm_id) || "Finca",
+          lot_id: lot.id,
+          lot_name: lot.name || entry.linkedLotName || entry.name || ("Lote " + lot.id),
+          protein: stats.protein != null ? stats.protein : stats.protein_average,
+          yield_estimate: stats.bromatologia && (stats.bromatologia.aforo_ua_ha || stats.bromatologia.aforo),
+        };
+        stats.nutrients.forEach(nutrient => {
+          const nutrientId = Number(nutrient && nutrient.nutrient_id);
+          const value = Number(nutrient && nutrient.target_value);
+          if(!Number.isFinite(nutrientId) || !Number.isFinite(value)){ return; }
+          row["nutrient_" + nutrientId] = value;
+          nutrientsInfo[String(nutrientId)] = {
+            name: nutrient.nutrient_name || nutrient.nutrient_symbol || "Nutriente",
+            symbol: nutrient.nutrient_symbol || nutrient.nutrient_name || "",
+            unit: nutrient.nutrient_unit || "",
+          };
+        });
+        row.nutrients_info = nutrientsInfo;
+        rows.push(row);
+      }
+      return rows;
+    };
 
     function toggleNewLotFields(force){
       if(!el.analysisNewLotFields || !el.analysisCreateLotToggle){
@@ -2839,6 +2923,8 @@
       lotState.clear();
       lotCounter = 0;
       activeLayerId = null;
+      editingLayerId = null;
+      updatePolygonActionButtons();
       renderLotsList();
       setText(el.activeLotName, "Sin lote seleccionado");
       currentVertices = null;
@@ -2952,7 +3038,8 @@
           }
         }
         setStatus(mppX != null ? `Escala automática: ~${mppX} m/px` : "Escala en píxeles (mpp no disponible)");
-        await restoreDraftPolygons();
+        resetMapState(true);
+        window.resetLotReferenceForAsset?.();
         drawnItems.eachLayer(layer => { if(layer instanceof L.Polygon || layer instanceof L.Rectangle){ updateAreaForLayer(layer); } });
       }catch(e){
         setStatus("Error al procesar el archivo");
@@ -2971,7 +3058,7 @@
         }else{
           throw new Error("Selección inválida");
         }
-        const assetName = payload?.asset?.original_name || payload?.asset?.name || payload?.meta?.filename || payload?.file?.name;
+        const assetName = payload?.asset?.display_name || payload?.asset?.original_name || payload?.asset?.name || payload?.meta?.filename || payload?.file?.name;
         if(assetName){
           updateAssetLabels(assetName);
         }
@@ -2991,7 +3078,8 @@
           }
         }
         setStatus(mppX != null ? `Escala automática: ~${mppX} m/px` : "Escala en píxeles (mpp no disponible)");
-        await restoreDraftPolygons();
+        resetMapState(true);
+        window.resetLotReferenceForAsset?.();
         drawnItems.eachLayer(layer => { if(layer instanceof L.Polygon || layer instanceof L.Rectangle){ updateAreaForLayer(layer); } });
       }catch(e){ setStatus("Error al procesar el archivo"); }
     });
@@ -3203,6 +3291,7 @@
         setActiveLayer(layer);
         await updateStatsForLayer(layer);
         toggleKmzButton();
+        window.prepareLotReferenceForNewPolygon?.(layer);
         window.updateLotReferenceSaveState?.();
         saveDraftPolygons();
       }
@@ -3549,6 +3638,60 @@
         setStatus('Haz clic sobre un polígono para ver sus índices.');
       });
     }
+    if(el.editPolygonBtn){
+      el.editPolygonBtn.addEventListener('click', async () => {
+        const layer = activeLayerId !== null ? drawnItems.getLayer(activeLayerId) : null;
+        if(!layer || !layer.editing){ return; }
+        if(editingLayerId === activeLayerId){
+          layer.editing.disable();
+          editingLayerId = null;
+          const key = getLayerKey(layer);
+          if(key !== null){ areaStatsCache.delete(key); }
+          await updateStatsForLayer(layer);
+          saveDraftPolygons();
+          window.updateLotReferenceSaveState?.();
+          setStatus('Cambios del poligono guardados.');
+        }else{
+          if(editingLayerId !== null){ drawnItems.getLayer(editingLayerId)?.editing?.disable(); }
+          editingLayerId = activeLayerId;
+          layer.editing.enable();
+          setStatus('Mueve los vertices y pulsa Guardar cambios.');
+        }
+        updatePolygonActionButtons();
+      });
+    }
+    if(el.deletePolygonBtn){
+      el.deletePolygonBtn.addEventListener('click', async () => {
+        const layer = activeLayerId !== null ? drawnItems.getLayer(activeLayerId) : null;
+        if(!layer){ return; }
+        const entry = lotState.get(activeLayerId);
+        const linkedLotId = window.getLinkedLotIdForPolygon?.(layer) || null;
+        const result = window.Swal ? await Swal.fire({
+          icon: 'warning', title: 'Eliminar poligono',
+          text: linkedLotId
+            ? 'Se eliminara del mapa y se desligara permanentemente del lote guardado.'
+            : 'Se quitara del mapa y del borrador local.',
+          showCancelButton: true, confirmButtonText: 'Si, eliminar',
+          cancelButtonText: 'Cancelar', confirmButtonColor: '#e11d48', reverseButtons: true
+        }) : { isConfirmed: window.confirm('Eliminar este poligono?') };
+        if(!result.isConfirmed){ return; }
+        if(window.unlinkPolygonFromLot && !(await window.unlinkPolygonFromLot(layer))){ return; }
+        const key = activeLayerId;
+        layer.editing?.disable();
+        drawnItems.removeLayer(layer);
+        lotState.delete(key);
+        areaStatsCache.delete(key);
+        activeLayerId = null;
+        editingLayerId = null;
+        renderLotsList();
+        updatePolygonActionButtons();
+        revertToImageMeta();
+        saveDraftPolygons();
+        toggleKmzButton();
+        window.updateLotReferenceSaveState?.();
+        setStatus((entry?.name || 'Poligono') + ' eliminado.');
+      });
+    }
     if(el.resetMapBtn){
       el.resetMapBtn.addEventListener('click', () => {
         resetMapState(true);
@@ -3565,8 +3708,11 @@
       const contextFarmEl = document.getElementById('contextFarm');
 
       let lotGeometryMap = {};
+      let lotObjectiveMap = {};
       let currentLotPolygon = null;
+      const farmLotPolygons = new Map();
       let selectedLotId = null;
+      let pendingNewPolygon = null;
 
       if (!lotSelector) return;
 
@@ -3608,8 +3754,10 @@
         // Usar window.currentFarmId como fuente de verdad (establecido por farm picker o analysisFarmSelect)
         const farmId = window.currentFarmId;
         selectedLotId = null;
-        removeLotPolygon();
+        pendingNewPolygon = null;
+        clearFarmLotPolygons();
         lotGeometryMap = {};
+        lotObjectiveMap = {};
         lotSelector.value = '';
         if (!farmId) {
           lotSelector.innerHTML = '<option value="">-- Sin finca seleccionada --</option>';
@@ -3629,16 +3777,25 @@
         .then(lots => {
           lotSelector.innerHTML = '<option value="">-- Seleccionar lote --</option>';
           lotGeometryMap = {};
+          lotObjectiveMap = {};
           (lots || []).forEach(function(lot) {
             var opt = document.createElement('option');
             opt.value = lot.id;
-            const hasGeometry = lot.geometry && lot.geometry.trim() !== '';
+            const currentAssetId = Number(imageMeta?.media_asset_id);
+            const belongsToCurrentImage = currentAssetId > 0 && Number(lot.media_asset_id) === currentAssetId;
+            const hasGeometry = belongsToCurrentImage && lot.geometry && lot.geometry.trim() !== '';
             const icon = hasGeometry ? '📍' : '○';
-            opt.textContent = icon + ' ' + lot.name + ' (' + lot.area + ' ha)';
+            const baseLabel = icon + ' ' + lot.name + ' (' + lot.area + ' ha)';
+            const isObjective = hasGeometry && !!lot.is_objective;
+            opt.textContent = (isObjective ? '⭐ OBJETIVO · ' : '') + baseLabel;
+            opt.dataset.baseLabel = baseLabel;
             opt.dataset.hasGeometry = hasGeometry ? '1' : '0';
+            opt.dataset.isObjective = isObjective ? '1' : '0';
+            lotObjectiveMap[lot.id] = isObjective;
             lotSelector.appendChild(opt);
             if (hasGeometry) {
               lotGeometryMap[lot.id] = lot.geometry;
+              drawLotPolygon(lot.geometry, lot.id, false, lot.name);
             }
           });
           updateSaveButtonState();
@@ -3650,7 +3807,6 @@
       }
 
       lotSelector.addEventListener('change', function() {
-        removeLotPolygon();
         selectedLotId = this.value;
 
         if (!selectedLotId) {
@@ -3660,15 +3816,21 @@
         }
 
         if (lotGeometryMap[selectedLotId]) {
-          drawLotPolygon(lotGeometryMap[selectedLotId]);
+          currentLotPolygon = farmLotPolygons.get(Number(selectedLotId)) || null;
+          if (currentLotPolygon) {
+            setActiveLayer(currentLotPolygon);
+            updateStatsForLayer(currentLotPolygon);
+            if (currentLotPolygon.getBounds?.().isValid()) map.fitBounds(currentLotPolygon.getBounds(), { padding: [50, 50] });
+          }
           lotStatus.innerHTML = '✓ <strong>Polígono del lote cargado</strong><br><span class="text-xs">Mostrado en naranja punteado. Dibuja un nuevo polígono para reemplazarlo.</span>';
         } else {
+          currentLotPolygon = null;
           lotStatus.innerHTML = '○ <strong>Este lote no tiene límites definidos aún</strong><br><span class="text-xs">Dibuja un polígono en el mapa para asociarlo a este lote.</span>';
         }
         updateSaveButtonState();
       });
 
-      function drawLotPolygon(geojsonStr) {
+      function drawLotPolygon(geojsonStr, lotId = null, shouldFit = true, lotName = null) {
         try {
           var geoJsonObj = JSON.parse(geojsonStr);
           // Extraer coordenadas del GeoJSON (formato: [lng, lat])
@@ -3688,29 +3850,53 @@
           }
 
           // Crear polígono funcional y agregarlo a drawnItems (no solo al mapa)
-          currentLotPolygon = L.polygon(coords, {
+          const layer = L.polygon(coords, {
             color: '#ff6600',
             weight: 3,
             opacity: 0.8,
             fillOpacity: 0.15,
             dashArray: '5, 5'
           });
-          drawnItems.addLayer(currentLotPolygon);
-
-          // Hacerlo funcional: registrar en lotState y activarlo
-          ensureLotEntry(currentLotPolygon);
-          setActiveLayer(currentLotPolygon);
-          wireArea(currentLotPolygon);
-          updateStatsForLayer(currentLotPolygon);
-
-          // Centrar mapa en el polígono
-          if (currentLotPolygon.getBounds && currentLotPolygon.getBounds().isValid()) {
-            map.fitBounds(currentLotPolygon.getBounds(), { padding: [50, 50] });
+          drawnItems.addLayer(layer);
+          const entry = ensureLotEntry(layer);
+          if (entry) {
+            entry.linkedLotId = lotId ? Number(lotId) : null;
+            entry.linkedLotName = lotName || entry.linkedLotName;
+            if (lotName) entry.name = lotName;
+          }
+          wireArea(layer);
+          if (lotId) {
+            farmLotPolygons.set(Number(lotId), layer);
+            layer.on('click', function() {
+              currentLotPolygon = layer;
+              selectedLotId = String(lotId);
+              lotSelector.value = String(lotId);
+              updateSaveButtonState();
+            });
+          }
+          if (shouldFit) {
+            currentLotPolygon = layer;
+            setActiveLayer(layer);
+            updateStatsForLayer(layer);
+            if (layer.getBounds && layer.getBounds().isValid()) map.fitBounds(layer.getBounds(), { padding: [50, 50] });
           }
         } catch(e) {
           lotStatus.textContent = '❌ Error al cargar polígono: ' + (e.message || '');
           console.error('GeoJSON parse error:', e);
         }
+      }
+
+      function clearFarmLotPolygons() {
+        farmLotPolygons.forEach(function(layer) {
+          const key = getLayerKey(layer);
+          drawnItems.removeLayer(layer);
+          if (key !== null) { lotState.delete(key); areaStatsCache.delete(key); }
+        });
+        farmLotPolygons.clear();
+        currentLotPolygon = null;
+        activeLayerId = null;
+        renderLotsList();
+        updatePolygonActionButtons();
       }
 
       function removeLotPolygon() {
@@ -3724,7 +3910,55 @@
             activeLayerId = null;
             setText(el.activeLotName, "Sin lote seleccionado");
           }
+          if (selectedLotId) farmLotPolygons.delete(Number(selectedLotId));
           currentLotPolygon = null;
+        }
+      }
+
+      function getLinkedLotIdForPolygon(layer) {
+        if (!layer || layer !== currentLotPolygon || !selectedLotId) return null;
+        return Number(selectedLotId);
+      }
+
+      async function unlinkPolygonFromLot(layer) {
+        const lotId = getLinkedLotIdForPolygon(layer);
+        if (!lotId) return true;
+        try {
+          const response = await fetch('/api/foliage/lots/', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() || '' },
+            credentials: 'include',
+            body: JSON.stringify({ id: lotId, geometry: null, is_objective: false })
+          });
+          const body = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(body?.description || body?.error || body?.message || 'No se pudo desligar el poligono');
+
+          lotGeometryMap[String(lotId)] = null;
+          farmLotPolygons.delete(lotId);
+          lotObjectiveMap[String(lotId)] = false;
+          const option = Array.from(lotSelector.options).find(item => Number(item.value) === lotId);
+          if (option) {
+            option.dataset.hasGeometry = '0';
+            option.dataset.isObjective = '0';
+            option.dataset.baseLabel = (option.dataset.baseLabel || option.textContent).replace(/^📍/, '○');
+            option.textContent = option.dataset.baseLabel;
+          }
+          const storedLot = foliarState.lots.find(item => Number(item?.id) === lotId);
+          if (storedLot) {
+            storedLot.geometry = null;
+            storedLot.media_asset_id = null;
+            storedLot.is_objective = false;
+          }
+          renderLotOptions(window.currentFarmId);
+          renderCompareLotOptions();
+          currentLotPolygon = null;
+          lotStatus.textContent = 'Poligono desligado del lote correctamente.';
+          updateSaveButtonState();
+          return true;
+        } catch (error) {
+          if (window.Swal) await Swal.fire({ icon: 'error', title: 'No se pudo eliminar', text: error.message || 'No se pudo desligar el poligono del lote.', confirmButtonText: 'Aceptar' });
+          else alert('Error al desligar el poligono: ' + (error.message || ''));
+          return false;
         }
       }
 
@@ -3733,9 +3967,9 @@
 
         const hasLotSelected = !!selectedLotId;
         const lotHasGeometry = hasLotSelected && lotGeometryMap[selectedLotId];
-        const hasPolygonDrawn = window.drawnItems && window.drawnItems.getLayers && window.drawnItems.getLayers().some(function(layer) {
-          return (layer instanceof L.Polygon || layer instanceof L.Rectangle) && layer !== currentLotPolygon;
-        });
+        const hasPolygonDrawn = !!(
+          pendingNewPolygon && window.drawnItems && window.drawnItems.hasLayer(pendingNewPolygon)
+        );
 
         // Resetear clases de color (remover clases de color anteriores)
         savePolygonBtn.classList.remove('bg-blue-600', 'hover:bg-blue-700', 'bg-amber-600', 'bg-emerald-600');
@@ -3778,37 +4012,93 @@
         }
       }
 
-      savePolygonBtn.addEventListener('click', function() {
+      savePolygonBtn.addEventListener('click', async function() {
         if (!selectedLotId) {
-          alert('Selecciona un lote primero');
+          if (window.Swal) await Swal.fire({ icon: 'info', title: 'Selecciona un lote', text: 'Elige primero el lote donde guardarás el polígono.' });
+          else alert('Selecciona un lote primero');
           return;
         }
 
-        // Buscar polígono dibujado en el mapa
+        // Guardar exclusivamente el polígono recién dibujado. Nunca tomar
+        // otro lote ya vinculado como candidato implícito.
         var drawnLayers = [];
-        if (window.drawnItems) {
-          window.drawnItems.eachLayer(function(layer) {
-            if ((layer instanceof L.Polygon || layer instanceof L.Rectangle) && layer !== currentLotPolygon) {
-              drawnLayers.push(layer);
-            }
-          });
+        if (pendingNewPolygon && window.drawnItems && window.drawnItems.hasLayer(pendingNewPolygon)) {
+          drawnLayers.push(pendingNewPolygon);
         }
 
         if (drawnLayers.length === 0) {
-          alert('Dibuja un polígono primero');
+          if (window.Swal) await Swal.fire({ icon: 'info', title: 'Dibuja un polígono', text: 'Crea o selecciona el polígono que deseas guardar.' });
+          else alert('Dibuja un polígono primero');
           return;
         }
 
         var geojsonStr = JSON.stringify(drawnLayers[0].toGeoJSON());
+        const selectedOption = lotSelector.options[lotSelector.selectedIndex];
+        const selectedLotName = selectedOption?.dataset.baseLabel || selectedOption?.textContent || 'este lote';
+        const selectedIsObjective = lotObjectiveMap[String(selectedLotId)] === true || selectedOption?.dataset.isObjective === '1';
+        const hasOtherObjective = Object.entries(lotObjectiveMap).some(function(entry) {
+          return entry[1] === true && Number(entry[0]) !== Number(selectedLotId);
+        });
+        let isObjective = selectedIsObjective;
+        if(window.Swal){
+          const safeLotName = selectedLotName.replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'})[ch]);
+          let decision;
+          if(selectedIsObjective){
+            decision = await Swal.fire({
+              icon: 'question', title: '¿Guardar cambios del lote?',
+              html: 'Se actualizará el polígono de <strong>' + safeLotName + '</strong> y continuará como lote objetivo.',
+              showCancelButton: true,
+              confirmButtonText: 'Guardar lote', cancelButtonText: 'Cancelar',
+              confirmButtonColor: '#2563eb'
+            });
+            if(!decision.isConfirmed){ return; }
+            isObjective = true;
+          }else if(hasOtherObjective){
+            decision = await Swal.fire({
+              icon: 'question', title: '¿Guardar lote?',
+              html: 'Esta finca ya tiene un lote objetivo. El polígono de <strong>' + safeLotName + '</strong> se guardará como lote normal.',
+              showCancelButton: true,
+              confirmButtonText: 'Guardar lote', cancelButtonText: 'Cancelar',
+              confirmButtonColor: '#2563eb'
+            });
+            if(!decision.isConfirmed){ return; }
+            isObjective = false;
+          }else{
+            decision = await Swal.fire({
+              icon: 'question', title: '¿Guardar como lote objetivo?',
+              html: 'El polígono de <strong>' + safeLotName + '</strong> será la referencia para comparar los demás lotes.',
+              showDenyButton: true, showCancelButton: true,
+              confirmButtonText: 'Sí, como objetivo',
+              denyButtonText: 'Guardar como lote normal', cancelButtonText: 'Cancelar',
+              confirmButtonColor: '#059669', denyButtonColor: '#2563eb', reverseButtons: true
+            });
+            if(decision.isDismissed){ return; }
+            isObjective = decision.isConfirmed;
+          }
+        }else if(selectedIsObjective){
+          if(!window.confirm('¿Guardar los cambios del lote objetivo "' + selectedLotName + '"?')) return;
+          isObjective = true;
+        }else if(hasOtherObjective){
+          if(!window.confirm('La finca ya tiene un lote objetivo. ¿Guardar "' + selectedLotName + '" como lote normal?')) return;
+          isObjective = false;
+        }else{
+          isObjective = window.confirm(
+            '¿Deseas guardar "' + selectedLotName + '" como el LOTE OBJETIVO?\n\n' +
+            'El lote objetivo representa el mejor lote del terreno y será la referencia para comparar los demás.\n\n' +
+            'Aceptar: guardarlo como objetivo.\nCancelar: guardarlo como lote normal.'
+          );
+        }
 
-        // PUT request to update lot with geometry
+        // PUT request to update lot with geometry and its comparison role
         fetch('/api/foliage/lots/', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() || '' },
           credentials: 'include',
           body: JSON.stringify({
             id: parseInt(selectedLotId),
-            geometry: geojsonStr
+            geometry: geojsonStr,
+            media_asset_id: imageMeta?.media_asset_id || null,
+            is_objective: isObjective
           })
         })
         .then(async r => {
@@ -3818,20 +4108,93 @@
         })
         .then(function(savedLot) {
           if (!savedLot.geometry) throw new Error('El servidor no confirmó la geometría guardada');
-          alert('✓ Polígono guardado exitosamente');
+          if(!window.Swal) alert(isObjective
+            ? '✓ Polígono guardado y definido como lote objetivo'
+            : '✓ Polígono guardado como lote normal');
           lotGeometryMap[selectedLotId] = savedLot.geometry;
+          const savedOption = Array.from(lotSelector.options).find(option => Number(option.value) === Number(selectedLotId));
+          if(savedOption){
+            const labelWithoutIcon = (savedOption.dataset.baseLabel || savedOption.textContent || selectedLotName)
+              .replace(/^⭐ OBJETIVO · /, '')
+              .replace(/^[○📍]\s*/, '');
+            savedOption.dataset.baseLabel = '📍 ' + labelWithoutIcon;
+            savedOption.dataset.hasGeometry = '1';
+          }
+if(window.Swal) Swal.fire({
+            icon: 'success', title: 'Polígono guardado',
+            text: isObjective ? 'Se definió como lote objetivo.' : 'Se guardó como lote normal.',
+            confirmButtonText: 'Aceptar'
+          });
+          const savedIsObjective = !!savedLot.is_objective;
+          if(savedIsObjective){
+            Object.keys(lotObjectiveMap).forEach(function(id) { lotObjectiveMap[id] = false; });
+          }
+          lotObjectiveMap[selectedLotId] = savedIsObjective;
+          Array.from(lotSelector.options).forEach(function(option) {
+            if (!option.value) return;
+            const isSavedOption = Number(option.value) === Number(selectedLotId);
+            const objective = savedIsObjective
+              ? isSavedOption
+              : (isSavedOption ? false : lotObjectiveMap[String(option.value)] === true);
+            option.dataset.isObjective = objective ? '1' : '0';
+            option.textContent = (objective ? '⭐ OBJETIVO · ' : '') + (option.dataset.baseLabel || option.textContent.replace(/^⭐ OBJETIVO · /, ''));
+          });
+          const storedLot = foliarState.lots.find(function(lot) { return Number(lot.id) === Number(selectedLotId); });
+          if(savedIsObjective){
+            foliarState.lots.forEach(function(lot) {
+              if (Number(lot.farm_id) === Number(window.currentFarmId)) lot.is_objective = false;
+            });
+          }
+          if (storedLot) {
+            storedLot.geometry = savedLot.geometry;
+            storedLot.media_asset_id = savedLot.media_asset_id;
+            storedLot.is_objective = savedIsObjective;
+          }
+          renderLotOptions(window.currentFarmId);
+          renderCompareLotOptions();
+          const polygonJustSaved = pendingNewPolygon;
+          pendingNewPolygon = null;
+          if (polygonJustSaved && drawnItems.hasLayer(polygonJustSaved)) {
+            const pendingId = getLayerKey(polygonJustSaved);
+            drawnItems.removeLayer(polygonJustSaved);
+            if (pendingId !== null) lotState.delete(pendingId);
+          }
           removeLotPolygon();
-          drawLotPolygon(savedLot.geometry);
-          lotStatus.textContent = '✓ Polígono guardado en lote';
+          drawLotPolygon(savedLot.geometry, selectedLotId, true, savedLot.name || selectedLotName);
+          lotStatus.textContent = savedLot.is_objective
+            ? '⭐ Polígono guardado · Este es el lote objetivo de la finca'
+            : '✓ Polígono guardado en lote normal';
         })
         .catch(function(err) {
-          alert('❌ Error al guardar: ' + (err.message || ''));
+          if (window.Swal) Swal.fire({ icon: 'error', title: 'No se pudo guardar', text: err.message || 'Ocurrió un error al guardar el polígono.', confirmButtonText: 'Aceptar' });
+          else alert('Error al guardar: ' + (err.message || ''));
         });
       });
 
       // Exponer globalmente para que sea accesible desde selectFarmFromPicker y analysisFarmSelect
       window.loadLotsForCurrentFarm = loadLotsForCurrentFarm;
+      window.prepareLotReferenceForNewPolygon = function(layer) {
+        pendingNewPolygon = layer || null;
+        selectedLotId = null;
+        lotSelector.value = '';
+        currentLotPolygon = null;
+        lotStatus.textContent = 'Polígono nuevo listo. Selecciona el lote donde deseas guardarlo.';
+        updateSaveButtonState();
+      };
       window.updateLotReferenceSaveState = updateSaveButtonState;
+      window.getLinkedLotIdForPolygon = getLinkedLotIdForPolygon;
+      window.unlinkPolygonFromLot = unlinkPolygonFromLot;
+      window.resetLotReferenceForAsset = function() {
+        window.currentFarmId = null;
+        if (farmSelector) farmSelector.value = '';
+        selectedLotId = null;
+        clearFarmLotPolygons();
+        lotGeometryMap = {};
+        lotObjectiveMap = {};
+        lotSelector.innerHTML = '<option value="">-- Sin finca seleccionada --</option>';
+        lotStatus.textContent = 'Selecciona una finca para cargar los polígonos de esta ortofoto';
+        updateSaveButtonState();
+      };
 
       // Intentar cargar lotes inicialmente (si hay farm_id disponible)
       // El ndvi_tool.js debe establecer window.currentFarmId
@@ -3845,6 +4208,7 @@
     const hint = document.getElementById("polygonComparisonHint");
     const cards = document.getElementById("polygonComparisonCards");
     const comparisonButton = document.getElementById("openLotComparisonBtn");
+    const topComparisonButton = document.getElementById("topLotComparisonBtn");
     const comparisonModal = document.getElementById("lotComparisonModal");
     const comparisonContent = document.getElementById("lotComparisonContent");
     const comparisonSubtitle = document.getElementById("lotComparisonSubtitle");
@@ -3892,6 +4256,20 @@
       if(id != null && id !== ""){ return "id:" + String(id); }
       return symbol || name || "";
     }
+    function getComparableLotEntries(){
+      if(typeof lotState === "undefined" || !lotState || typeof lotState.values !== "function"){ return []; }
+      const entriesByLot = new Map();
+      Array.from(lotState.values()).forEach(entry => {
+        if(!entry || entry.linkedLotId == null || entry.linkedLotId === "" || !Number.isFinite(Number(entry.linkedLotId))){ return; }
+        const lotId = String(entry.linkedLotId);
+        const layer = drawnItems && drawnItems.getLayer ? drawnItems.getLayer(entry.id) : null;
+        const area = layer ? Number(computeAreaHaForLayer(layer)) || 0 : 0;
+        const score = (entry.areaStats && Array.isArray(entry.areaStats.nutrients) && entry.areaStats.nutrients.length ? 1000 : 0) + area;
+        const current = entriesByLot.get(lotId);
+        if(!current || score > current.score){ entriesByLot.set(lotId, {entry, score}); }
+      });
+      return Array.from(entriesByLot.values()).map(item => item.entry);
+    }
     function getPreviewEntries(){
       const entries = [];
       if(typeof lotState !== "undefined" && lotState && typeof lotState.values === "function"){
@@ -3917,6 +4295,11 @@
       const parsed = parseObjectiveValue(select.value);
       const source = parsed.type === "secondary" ? secondaryObjectives : cropObjectives;
       return (source || []).find(item => Number(item && item.id) === Number(parsed.id)) || null;
+    }
+    function isObjectiveEntry(entry){
+      if(!entry || !entry.linkedLotId || typeof foliarState === "undefined" || !foliarState){ return false; }
+      const lot = (foliarState.lots || []).find(item => Number(item && item.id) === Number(entry.linkedLotId));
+      return !!(lot && lot.is_objective);
     }
     function mapTargets(objective){
       const map = new Map();
@@ -4107,17 +4490,29 @@
       return Number.isFinite(number) ? formatNutrientValue(number) + (suffix || "") : "--";
     }
     async function openLotComparison(){
-      const entries = getPreviewEntries().slice(0, 4);
+      let entries = getComparableLotEntries().slice(0, 4);
       const objective = getSelectedObjective();
-      if(!comparisonModal || !comparisonContent || entries.length < 2 || !objective){ return; }
-      const objectiveLabel = select && select.selectedIndex >= 0 ? (select.options[select.selectedIndex].textContent || "").trim() : "Objetivo seleccionado";
+      if(!comparisonModal || !comparisonContent || entries.length < 2){ return; }
+      const objectiveLabel = objective && select && select.selectedIndex >= 0
+        ? (select.options[select.selectedIndex].textContent || "").trim()
+        : "lote objetivo de la finca como referencia";
       comparisonSubtitle.textContent = entries.length + " lotes · " + objectiveLabel;
       comparisonContent.innerHTML = '<div class="flex min-h-[240px] items-center justify-center text-sm text-gray-500"><i class="fas fa-spinner fa-spin mr-2"></i>Calculando comparación...</div>';
       comparisonModal.classList.remove("hidden");
       document.body.classList.add("overflow-hidden");
       comparisonClose && comparisonClose.focus();
       try{
-        const balances = await Promise.all(entries.map(entry => getBalance(entry, buildRows(entry.areaStats || {}, objective), objective)));
+        for(const entry of entries){
+          const stats = await ensureAreaStatsForEntry(entry);
+          if(stats){ entry.areaStats = stats; }
+        }
+        entries = entries.filter(entry => entry.areaStats);
+        if(entries.length < 2){
+          throw new Error("No fue posible calcular los datos de los dos lotes.");
+        }
+        const balances = objective
+          ? await Promise.all(entries.map(entry => getBalance(entry, buildRows(entry.areaStats || {}, objective), objective)))
+          : entries.map(() => null);
         const maps = balances.map(balanceEntryMap);
         const nutrientNames = [];
         const nutrientLabels = new Map();
@@ -4149,28 +4544,41 @@
           const layer = drawnItems ? drawnItems.getLayer(entry.id) : null;
           const areaHa = layer ? computeAreaHaForLayer(layer) : null;
           const fmt = (number, decimals, suffix) => Number.isFinite(Number(number)) ? Number(number).toFixed(decimals) + (suffix || '') : '--';
-          const nutrients = (Array.isArray(stats.nutrients) ? stats.nutrients : []).map(item => '<div class="flex justify-between gap-3 border-b border-gray-100 py-1.5 last:border-0"><span>' + escapeHtml(item.nutrient_name || item.nutrient_symbol || 'Nutriente') + (item.nutrient_symbol ? ' (' + escapeHtml(item.nutrient_symbol) + ')' : '') + '</span><strong class="whitespace-nowrap text-emerald-700">' + comparisonMetric(item.target_value, item.nutrient_unit ? ' ' + item.nutrient_unit : '') + '</strong></div>').join('');
-          const analysis = '<section class="border border-gray-200 bg-white p-4 shadow-sm">'
-            + '<div class="mb-3 flex items-center justify-between"><h3 class="text-sm font-semibold text-gray-900">Resumen del análisis</h3><span class="text-xs font-medium text-gray-500">' + escapeHtml(entry.name || 'Lote') + '</span></div>'
-            + '<div class="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">'
-            + '<div class="bg-gray-50 p-2 text-center text-xs"><span class="block text-gray-500">NDVI</span><strong class="mt-1 block text-sm">' + fmt(primary.ndvi,2) + '</strong></div>'
-            + '<div class="bg-gray-50 p-2 text-center text-xs"><span class="block text-gray-500">VARI</span><strong class="mt-1 block text-sm">' + fmt(primary.vari,2) + '</strong></div>'
-            + '<div class="bg-gray-50 p-2 text-center text-xs"><span class="block text-gray-500">NBI</span><strong class="mt-1 block text-sm">' + fmt(primary.nbi,2) + '</strong></div>'
-            + '<div class="bg-gray-50 p-2 text-center text-xs"><span class="block text-gray-500">Área</span><strong class="mt-1 block text-sm">' + fmt(areaHa,4,' ha') + '</strong></div>'
-            + '<div class="bg-gray-50 p-2 text-center text-xs"><span class="block text-gray-500">Proteína</span><strong class="mt-1 block text-sm">' + fmt(stats.protein != null ? stats.protein : stats.protein_average,2,'%') + '</strong></div>'
-            + '<div class="bg-gray-50 p-2 text-center text-xs"><span class="block text-gray-500">Nitrógeno</span><strong class="mt-1 block text-sm">' + fmt(stats.nitrogen,2,'%') + '</strong></div></div>'
-            + '<div class="mt-3 grid gap-3 lg:grid-cols-2"><div class="border border-gray-200 p-3 text-xs"><h4 class="mb-2 font-semibold">Perfil bromatológico</h4><div class="grid grid-cols-2 gap-x-4 gap-y-1"><span>FDA: <strong>' + fmt(broma.fda_pct,2,'%') + '</strong></span><span>FDN: <strong>' + fmt(broma.fdn_pct,2,'%') + '</strong></span><span>Energía: <strong>' + fmt(broma.energia_mcal,2,' Mcal/kg') + '</strong></span><span>Energía: <strong>' + fmt(broma.energia_mj,2,' MJ/kg') + '</strong></span><span>Energía2: <strong>' + fmt(broma.energia2_mcal,2,' Mcal/kg') + '</strong></span><span>AFORO: <strong>' + fmt(broma.aforo_ua_ha,2,' UA/ha') + '</strong></span></div></div>'
-            + '<div class="border border-gray-200 p-3 text-xs"><h4 class="mb-2 font-semibold">Variables avanzadas</h4><div class="grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-3"><span>VI: <strong>' + fmt(vars.vi,3) + '</strong></span><span>VARI: <strong>' + fmt(vars.vari,3) + '</strong></span><span>GLI: <strong>' + fmt(vars.gli,3) + '</strong></span><span>NGRDI: <strong>' + fmt(vars.ngrdi,3) + '</strong></span><span>ExG: <strong>' + fmt(vars.exg,3) + '</strong></span></div></div></div>'
-            + '<details class="mt-3 border border-gray-200"><summary class="cursor-pointer px-3 py-2 text-xs font-semibold">Nutrientes estimados (' + (Array.isArray(stats.nutrients) ? stats.nutrients.length : 0) + ')</summary><div class="grid gap-x-6 px-3 pb-3 text-xs sm:grid-cols-2 lg:grid-cols-3">' + (nutrients || 'Sin nutrientes calculados.') + '</div></details></section>';
-          return '<section class="border-t-4 border-emerald-600 pt-4 first:border-t-0 first:pt-0"><h2 class="mb-4 text-base font-semibold text-emerald-800">' + escapeHtml(entry.name || ('Lote ' + (index + 1))) + '</h2><div class="space-y-5">' + analysis + '<div class="min-w-0"><h3 class="mb-3 text-sm font-semibold text-gray-900">Balance de Minerales</h3>' + balanceTable(balances[index], entry, objective) + '</div></div></section>';
+          const nutrients = (Array.isArray(stats.nutrients) ? stats.nutrients : []).map(item => '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0;border:1px solid #e2e8f0;border-radius:7px;background:#f8fafc;padding:6px 8px;"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#334155;">' + escapeHtml(item.nutrient_name || item.nutrient_symbol || 'Nutriente') + (item.nutrient_symbol ? ' (' + escapeHtml(item.nutrient_symbol) + ')' : '') + '</span><strong style="flex:none;white-space:nowrap;color:#047857;text-align:right;">' + comparisonMetric(item.target_value, item.nutrient_unit ? ' ' + item.nutrient_unit : '') + '</strong></div>').join('');
+          const metric = (label, value, accent) => '<div style="background:#f8fafc;border:1px solid #eef2f7;border-radius:9px;padding:7px 5px;text-align:center;min-width:0;"><span style="display:block;color:#64748b;font-size:10px;line-height:1.1;">' + label + '</span><strong style="display:block;margin-top:3px;color:' + (accent || '#0f172a') + ';font-size:13px;line-height:1.1;">' + value + '</strong></div>';
+          const objectiveEntry = isObjectiveEntry(entry);
+          const badge = objectiveEntry
+            ? '<i class="fas fa-star" aria-hidden="true"></i> OBJETIVO · REFERENCIA'
+            : '<i class="fas fa-layer-group" aria-hidden="true"></i> LOTE COMPARADO';
+          const analysis = '<div style="padding:12px;">'
+            + '<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;">'
+            + metric('NDVI', fmt(primary.ndvi,2), '#047857')
+            + metric('VARI', fmt(primary.vari,2), '#047857')
+            + metric('NBI', fmt(primary.nbi,2), '#047857')
+            + metric('Área', fmt(areaHa,4,' ha'))
+            + metric('Proteína', fmt(stats.protein != null ? stats.protein : stats.protein_average,2,'%'), '#7c3aed')
+            + metric('Nitrógeno', fmt(stats.nitrogen,2,'%'), '#2563eb') + '</div>'
+            + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:8px;">'
+            + '<section style="border:1px solid #e2e8f0;border-radius:9px;padding:8px;background:#fff;font-size:10px;"><h4 style="font-size:11px;font-weight:700;color:#334155;margin:0 0 6px;"><i class="fas fa-seedling" style="margin-right:5px;color:#64748b;" aria-hidden="true"></i>Perfil bromatológico</h4><div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 8px;color:#475569;"><span>FDA <strong>' + fmt(broma.fda_pct,2,'%') + '</strong></span><span>FDN <strong>' + fmt(broma.fdn_pct,2,'%') + '</strong></span><span>Energía <strong>' + fmt(broma.energia_mcal,2,' Mcal/kg') + '</strong></span><span>Energía <strong>' + fmt(broma.energia_mj,2,' MJ/kg') + '</strong></span><span>Energía2 <strong>' + fmt(broma.energia2_mcal,2,' Mcal/kg') + '</strong></span><span>AFORO <strong>' + fmt(broma.aforo_ua_ha,2,' UA/ha') + '</strong></span></div></section>'
+            + '<section style="border:1px solid #e2e8f0;border-radius:9px;padding:8px;background:#fff;font-size:10px;"><h4 style="font-size:11px;font-weight:700;color:#334155;margin:0 0 6px;"><i class="fas fa-chart-line" style="margin-right:5px;color:#64748b;" aria-hidden="true"></i>Variables avanzadas</h4><div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 8px;color:#475569;"><span>VI <strong>' + fmt(vars.vi,3) + '</strong></span><span>VARI <strong>' + fmt(vars.vari,3) + '</strong></span><span>GLI <strong>' + fmt(vars.gli,3) + '</strong></span><span>NGRDI <strong>' + fmt(vars.ngrdi,3) + '</strong></span><span>ExG <strong>' + fmt(vars.exg,3) + '</strong></span></div></section></div>'
+            + '<details style="margin-top:8px;border:1px solid #e2e8f0;border-radius:9px;background:#fff;"><summary style="cursor:pointer;padding:7px 9px;font-size:10px;font-weight:700;color:#334155;">Nutrientes estimados (' + (Array.isArray(stats.nutrients) ? stats.nutrients.length : 0) + ')</summary><div class="grid grid-cols-1 gap-1.5 px-2 pb-2 text-[10px] sm:grid-cols-2">' + (nutrients || 'Sin nutrientes calculados.') + '</div></details>'
+            + (balances[index] ? '<details style="margin-top:8px;border:1px solid #d1fae5;border-radius:9px;background:#ecfdf5;"><summary style="cursor:pointer;padding:7px 9px;font-size:10px;font-weight:700;color:#047857;">Ver balance de minerales</summary><div style="padding:8px;">' + balanceTable(balances[index], entry, objective) + '</div></details>' : '')
+            + '</div>';
+          const badgeStyle = objectiveEntry
+            ? 'background:#fffbeb;border:1px solid #fde68a;color:#92400e;'
+            : 'background:#f8fafc;border:1px solid #e2e8f0;color:#475569;';
+          return '<article style="min-width:0;overflow:hidden;border:' + (objectiveEntry ? '2px solid #d6a329' : '1px solid #dbe3ec') + ';border-radius:14px;background:#fff;box-shadow:0 4px 14px rgba(15,23,42,.08);">'
+            + '<header style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;background:#fff;color:#0f172a;border-bottom:1px solid #eef2f7;"><h2 style="margin:0;font-size:14px;font-weight:700;">' + escapeHtml(entry.name || ('Lote ' + (index + 1))) + '</h2><span style="white-space:nowrap;border-radius:999px;padding:4px 8px;font-size:9px;font-weight:800;letter-spacing:.02em;' + badgeStyle + '">' + badge + '</span></header>'
+            + analysis + '</article>';
         }).join('');
-        comparisonContent.insertAdjacentHTML('beforeend', '<div><h2 class="text-base font-semibold">Lotes seleccionados</h2><p class="mt-1 text-xs text-gray-500">Se muestran todos los lotes seleccionados con su análisis y balance mineral.</p><div class="mt-5 space-y-10">' + detailPanels + '</div></div>');
+        comparisonContent.insertAdjacentHTML('beforeend', '<div><div class="mb-3 flex flex-wrap items-end justify-between gap-2"><div><h2 class="text-sm font-semibold">Comparación lado a lado</h2><p class="mt-0.5 text-[11px] text-gray-500">Cada columna corresponde a un lote y su análisis.</p></div><span class="text-[11px] text-gray-500">' + entries.length + ' lotes</span></div><div class="grid grid-cols-1 gap-3 lg:grid-cols-2" style="align-items:start;">' + detailPanels + '</div></div>');
       }catch(error){
         console.error('Error preparando comparación de lotes', error);
         comparisonContent.innerHTML = '<div class="border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">No se pudo calcular la comparación de los lotes seleccionados.</div>';
       }
     }
     if(comparisonButton){ comparisonButton.addEventListener("click", openLotComparison); }
+    if(topComparisonButton){ topComparisonButton.addEventListener("click", openLotComparison); }
     if(comparisonClose){ comparisonClose.addEventListener("click", closeLotComparison); }
     if(comparisonModal){ comparisonModal.querySelectorAll("[data-close-lot-comparison]").forEach(node => node.addEventListener("click", closeLotComparison)); }
     document.addEventListener("keydown", event => { if(event.key === "Escape" && comparisonModal && !comparisonModal.classList.contains("hidden")){ closeLotComparison(); } });
@@ -4179,16 +4587,24 @@
       if(!section || !hint || !cards){ return; }
       syncObjectiveOptions();
       const entries = getPreviewEntries();
+      const comparableEntries = getComparableLotEntries();
       const objective = getSelectedObjective();
       if(comparisonButton){
-        const comparableCount = Math.min(entries.length, 4);
-        const canCompare = comparableCount >= 2 && !!objective;
+        const comparableCount = Math.min(comparableEntries.length, 4);
+        const canCompare = comparableCount >= 2;
         comparisonButton.disabled = !canCompare;
-        comparisonButton.title = canCompare ? "Abrir comparación de lotes" : "Se necesitan al menos dos lotes calculados y un objetivo";
+        comparisonButton.title = canCompare ? "Abrir comparación de lotes" : "Se necesitan al menos dos lotes guardados en esta ortofoto";
         const labelNode = comparisonButton.querySelector("span");
         if(labelNode){ labelNode.textContent = comparableCount >= 2 ? "Comparar " + comparableCount + " lotes" : "Comparar lotes (mínimo 2)"; }
         const availability = document.getElementById("lotComparisonAvailability");
-        if(availability){ availability.textContent = canCompare ? "Comparación disponible con el objetivo seleccionado." : (comparableCount < 2 ? "Calcula al menos dos lotes para compararlos." : "Selecciona un objetivo en Vista previa nutricional."); }
+        if(availability){ availability.textContent = canCompare ? "Comparación disponible para los lotes guardados." : "Guarda al menos dos lotes en esta ortofoto para compararlos."; }
+        if(topComparisonButton){
+          topComparisonButton.disabled = !canCompare;
+          topComparisonButton.title = canCompare ? "Comparar lotes contra el objetivo de referencia" : comparisonButton.title;
+          topComparisonButton.style.backgroundColor = canCompare ? "#4338ca" : "#64748b";
+          topComparisonButton.style.color = "#ffffff";
+          topComparisonButton.style.opacity = "1";
+        }
       }      const label = select && select.selectedIndex >= 0 ? (select.options[select.selectedIndex].textContent || '').trim() : '';
       const signature = entries.map(entry => [entry.id, entry.name, !!entry.areaStats].join(':')).join('|') + '::' + (select ? select.value : '');
       if(signature === lastSignature){ return; }
@@ -4211,5 +4627,5 @@
 
   })();
   </script>
-  <script src="/js/mineral-balance-modal.js?v=fast-objectives-20260810" data-comparison-url="{{ url_for('agrovista.comparison_config') }}"></script>
+  <script src="/js/mineral-balance-modal.js?v=polygon-lots-20260820-2" data-comparison-url="{{ url_for('agrovista.comparison_config') }}"></script>
 {% endblock %}

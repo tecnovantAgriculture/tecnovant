@@ -32,6 +32,8 @@ class LotSchema(Schema):
     farm_id = fields.Int(required=True)
     farm_name = fields.Method("get_farm_name", dump_only=True)
     geometry = fields.Str(allow_none=True)  # GeoJSON polygon as string
+    media_asset_id = fields.Int(allow_none=True)
+    is_objective = fields.Bool(load_default=False)
     created_at = fields.DateTime(dump_only=True)
     updated_at = fields.DateTime(dump_only=True)
 
