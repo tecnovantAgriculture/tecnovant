@@ -3138,6 +3138,10 @@
     function wireArea(layer){
       layer.on("click", () => {
         setActiveLayer(layer);
+        const entry = ensureLotEntry(layer);
+        if(!entry?.linkedLotId){
+          window.selectPolygonForLotSave?.(layer);
+        }
         updateStatsForLayer(layer);
       });
     }
@@ -3858,6 +3862,15 @@
       lotSelector.addEventListener('change', function() {
         selectedLotId = this.value;
 
+        // Si hay un polígono nuevo activo, conservarlo como candidato al
+        // seleccionar el lote. Esto evita que el botón quede bloqueado cuando
+        // la selección visual y el estado interno se desincronizan.
+        if (!pendingNewPolygon && activeLayerId !== null) {
+          const activeLayer = drawnItems.getLayer(activeLayerId);
+          const activeEntry = lotState.get(activeLayerId);
+          if (activeLayer && !activeEntry?.linkedLotId) pendingNewPolygon = activeLayer;
+        }
+
         if (!selectedLotId) {
           lotStatus.textContent = 'Selecciona un lote para visualizar su polígono';
           updateSaveButtonState();
@@ -4228,6 +4241,18 @@ if(window.Swal) Swal.fire({
         lotSelector.value = '';
         currentLotPolygon = null;
         lotStatus.textContent = 'Polígono nuevo listo. Selecciona el lote donde deseas guardarlo.';
+        updateSaveButtonState();
+      };
+      window.selectPolygonForLotSave = function(layer) {
+        if (!layer || !drawnItems.hasLayer(layer)) return;
+        const key = getLayerKey(layer);
+        const entry = key !== null ? lotState.get(key) : null;
+        if (entry?.linkedLotId) return;
+        pendingNewPolygon = layer;
+        currentLotPolygon = null;
+        lotStatus.textContent = selectedLotId
+          ? 'Polígono seleccionado y listo para asociar al lote.'
+          : 'Polígono seleccionado. Elige el lote donde deseas guardarlo.';
         updateSaveButtonState();
       };
       window.updateLotReferenceSaveState = updateSaveButtonState;
