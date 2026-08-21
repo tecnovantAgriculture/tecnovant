@@ -142,6 +142,11 @@
               <span class="mr-2 inline-flex h-6 w-6 items-center justify-center rounded-md bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 text-xs"><i class="fas fa-pen"></i></span>
               <span class="edit-polygon-label">Modificar</span>
             </button>
+            <button id="undoPolygonEditBtn"
+                    class="hidden inline-flex items-center rounded-md bg-white dark:bg-gray-700 px-3 py-1.5 text-xs font-medium text-gray-800 dark:text-gray-100 shadow-md ring-1 ring-gray-200 dark:ring-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">
+              <span class="mr-2 inline-flex h-6 w-6 items-center justify-center rounded-md bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-400 text-xs"><i class="fas fa-undo-alt"></i></span>
+              Deshacer modificación
+            </button>
             <button id="deletePolygonBtn"
                     class="inline-flex items-center rounded-md bg-white dark:bg-gray-700 px-3 py-1.5 text-xs font-medium text-gray-400 dark:text-gray-500 shadow-md ring-1 ring-gray-200 dark:ring-gray-600 transition-colors disabled:cursor-not-allowed disabled:opacity-60" disabled>
               <span class="mr-2 inline-flex h-6 w-6 items-center justify-center rounded-md bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-400 text-xs"><i class="fas fa-trash-alt"></i></span>
@@ -736,6 +741,7 @@
       drawRectangleBtn: document.getElementById("drawRectangleBtn"),
       selectPolygonBtn: document.getElementById("selectPolygonBtn"),
       editPolygonBtn: document.getElementById("editPolygonBtn"),
+      undoPolygonEditBtn: document.getElementById("undoPolygonEditBtn"),
       deletePolygonBtn: document.getElementById("deletePolygonBtn"),
       resetMapBtn: document.getElementById("resetMapBtn"),
       nutrientsBox: document.getElementById("nutrients-box"),
@@ -812,6 +818,8 @@
     let currentVerticesRaster = null;
     let activeLayerId = null;
     let editingLayerId = null;
+    let undoEditLayerId = null;
+    let undoEditLatLngs = null;
     let lotCounter = 0;
     const lotState = new Map();
     let commonAnalyses = [];
@@ -1094,6 +1102,17 @@
       });
       const label = el.editPolygonBtn?.querySelector(".edit-polygon-label");
       if(label){ label.textContent = editingLayerId !== null ? "Guardar cambios" : "Modificar"; }
+      if(el.undoPolygonEditBtn){
+        const canUndo = activeLayerId !== null && undoEditLayerId === activeLayerId && !!undoEditLatLngs;
+        el.undoPolygonEditBtn.classList.toggle("hidden", !canUndo);
+        el.undoPolygonEditBtn.disabled = !canUndo;
+      }
+    }
+
+    function clonePolygonLatLngs(latlngs){
+      return latlngs.map(item => Array.isArray(item)
+        ? clonePolygonLatLngs(item)
+        : L.latLng(item.lat, item.lng, item.alt));
     }
 
     function setActiveLayer(layer){
@@ -2924,6 +2943,8 @@
       lotCounter = 0;
       activeLayerId = null;
       editingLayerId = null;
+      undoEditLayerId = null;
+      undoEditLatLngs = null;
       updatePolygonActionButtons();
       renderLotsList();
       setText(el.activeLotName, "Sin lote seleccionado");
@@ -3289,11 +3310,13 @@
         ensureLotEntry(layer);
         wireArea(layer);
         setActiveLayer(layer);
-        await updateStatsForLayer(layer);
-        toggleKmzButton();
+        // Habilitar el flujo de guardado inmediatamente. Los cálculos pueden
+        // tardar en producción y no deben bloquear la asociación con el lote.
         window.prepareLotReferenceForNewPolygon?.(layer);
+        toggleKmzButton();
         window.updateLotReferenceSaveState?.();
         saveDraftPolygons();
+        await updateStatsForLayer(layer);
       }
     });
 
@@ -3654,10 +3677,32 @@
         }else{
           if(editingLayerId !== null){ drawnItems.getLayer(editingLayerId)?.editing?.disable(); }
           editingLayerId = activeLayerId;
+          undoEditLayerId = activeLayerId;
+          undoEditLatLngs = clonePolygonLatLngs(layer.getLatLngs());
           layer.editing.enable();
           setStatus('Mueve los vertices y pulsa Guardar cambios.');
         }
         updatePolygonActionButtons();
+      });
+    }
+    if(el.undoPolygonEditBtn){
+      el.undoPolygonEditBtn.addEventListener('click', async () => {
+        const layer = undoEditLayerId !== null ? drawnItems.getLayer(undoEditLayerId) : null;
+        if(!layer || !undoEditLatLngs){ return; }
+        layer.editing?.disable();
+        layer.setLatLngs(clonePolygonLatLngs(undoEditLatLngs));
+        layer.redraw?.();
+        editingLayerId = null;
+        const key = getLayerKey(layer);
+        if(key !== null){ areaStatsCache.delete(key); }
+        undoEditLayerId = null;
+        undoEditLatLngs = null;
+        setActiveLayer(layer);
+        updateAreaForLayer(layer);
+        saveDraftPolygons();
+        window.updateLotReferenceSaveState?.();
+        setStatus('Se restauró la forma anterior del polígono.');
+        await updateStatsForLayer(layer);
       });
     }
     if(el.deletePolygonBtn){
@@ -3683,6 +3728,10 @@
         areaStatsCache.delete(key);
         activeLayerId = null;
         editingLayerId = null;
+        if(undoEditLayerId === key){
+          undoEditLayerId = null;
+          undoEditLatLngs = null;
+        }
         renderLotsList();
         updatePolygonActionButtons();
         revertToImageMeta();
