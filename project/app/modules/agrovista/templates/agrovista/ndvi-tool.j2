@@ -83,8 +83,8 @@
                 class="inline-flex items-center rounded-lg bg-gray-900 dark:bg-gray-100 px-3 py-2 text-xs font-semibold text-white dark:text-gray-900 shadow-sm hover:bg-gray-800 dark:hover:bg-gray-200">
           Seleccionar desde Media
         </button>
-        <button id="topLotComparisonBtn" type="button" disabled
-                class="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-white shadow-sm disabled:cursor-not-allowed"
+        <button id="topLotComparisonBtn" type="button"
+                class="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-white shadow-sm"
                 style="background-color:#64748b;color:#ffffff;opacity:1;"
                 title="Se necesitan al menos dos lotes guardados">
           <i class="fas fa-columns" aria-hidden="true"></i>
@@ -230,7 +230,7 @@
               <select id="polygonComparisonObjective" class="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-100 py-1.5 px-3 text-sm shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500">
                 <option value="">Selecciona un objetivo</option>
               </select>
-              <button id="openLotComparisonBtn" type="button" disabled class="mt-2 w-full items-center justify-center gap-2 rounded-md px-3 py-2 text-xs font-semibold text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:cursor-not-allowed" style="display:flex;background-color:#047857;color:#ffffff;">
+              <button id="openLotComparisonBtn" type="button" class="mt-2 w-full items-center justify-center gap-2 rounded-md px-3 py-2 text-xs font-semibold text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2" style="display:flex;background-color:#047857;color:#ffffff;">
                 <i class="fas fa-columns" aria-hidden="true"></i>
                 <span>Comparar lotes (mínimo 2)</span>
               </button>
@@ -4038,7 +4038,7 @@
 
         // Caso 1: No hay lote seleccionado
         if (!hasLotSelected) {
-          savePolygonBtn.disabled = true;
+          savePolygonBtn.disabled = false;
           savePolygonBtn.innerHTML = '<i class="fas fa-save mr-2"></i>Guardar polígono en lote';
           savePolygonBtn.classList.add('bg-blue-600', 'hover:bg-blue-700');
           savePolygonBtn.title = 'Selecciona un lote primero';
@@ -4051,7 +4051,7 @@
           savePolygonBtn.classList.add('bg-amber-600');
           savePolygonBtn.classList.remove('hover:bg-blue-700');
           savePolygonBtn.classList.add('hover:bg-amber-700');
-          savePolygonBtn.disabled = !hasPolygonDrawn;
+          savePolygonBtn.disabled = false;
           savePolygonBtn.title = hasPolygonDrawn
             ? '⚠️ Esto sobrescribirá la geometría actual. Confirma al hacer click.'
             : '⚠️ Dibuja un polígono primero para actualizar los límites';
@@ -4069,7 +4069,7 @@
         } else {
           savePolygonBtn.innerHTML = '<i class="fas fa-plus-circle mr-2"></i>Asociar polígono al lote';
           savePolygonBtn.classList.add('bg-blue-600', 'hover:bg-blue-700');
-          savePolygonBtn.disabled = true;
+          savePolygonBtn.disabled = false;
           savePolygonBtn.title = 'Dibuja un polígono en el mapa primero';
         }
       }
@@ -4566,7 +4566,18 @@ if(window.Swal) Swal.fire({
     async function openLotComparison(){
       let entries = getComparableLotEntries().slice(0, 4);
       const objective = getSelectedObjective();
-      if(!comparisonModal || !comparisonContent || entries.length < 2){ return; }
+      if(!comparisonModal || !comparisonContent){ return; }
+      if(entries.length < 2){
+        const message = entries.length === 1
+          ? 'Hay un solo lote guardado en esta ortofoto. Guarde otro polígono en un lote diferente para comparar.'
+          : 'Todavía no hay dos lotes con polígonos guardados en esta ortofoto.';
+        if(window.Swal){
+          await Swal.fire({ icon: 'info', title: 'Comparación no disponible', text: message, confirmButtonText: 'Aceptar' });
+        }else{
+          alert(message);
+        }
+        return;
+      }
       const objectiveLabel = objective && select && select.selectedIndex >= 0
         ? (select.options[select.selectedIndex].textContent || "").trim()
         : "lote objetivo de la finca como referencia";
@@ -4666,14 +4677,14 @@ if(window.Swal) Swal.fire({
       if(comparisonButton){
         const comparableCount = Math.min(comparableEntries.length, 4);
         const canCompare = comparableCount >= 2;
-        comparisonButton.disabled = !canCompare;
-        comparisonButton.title = canCompare ? "Abrir comparación de lotes" : "Se necesitan al menos dos lotes guardados en esta ortofoto";
+        comparisonButton.disabled = false;
+        comparisonButton.title = canCompare ? "Abrir comparación de lotes" : "Pulsa para ver qué falta para comparar";
         const labelNode = comparisonButton.querySelector("span");
         if(labelNode){ labelNode.textContent = comparableCount >= 2 ? "Comparar " + comparableCount + " lotes" : "Comparar lotes (mínimo 2)"; }
         const availability = document.getElementById("lotComparisonAvailability");
         if(availability){ availability.textContent = canCompare ? "Comparación disponible para los lotes guardados." : "Guarda al menos dos lotes en esta ortofoto para compararlos."; }
         if(topComparisonButton){
-          topComparisonButton.disabled = !canCompare;
+          topComparisonButton.disabled = false;
           topComparisonButton.title = canCompare ? "Comparar lotes contra el objetivo de referencia" : comparisonButton.title;
           topComparisonButton.style.backgroundColor = canCompare ? "#4338ca" : "#64748b";
           topComparisonButton.style.color = "#ffffff";
