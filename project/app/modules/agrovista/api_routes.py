@@ -205,9 +205,7 @@ def _protein_from_media(
     if x1 <= x0 or y1 <= y0:
         abort(400, description="invalid area")
 
-    crop_shape = (y1 - y0, x1 - x0)
     shifted_vertices = [(x - x0, y - y0) for x, y in scaled_vertices]
-    mask = polygon_mask(crop_shape, shifted_vertices)
 
     try:
         rgb = read_tif_window_as_linear_rgb(source_path, x0, y0, x1, y1, wb_factors)
@@ -216,6 +214,17 @@ def _protein_from_media(
             "agrovista: TIF window read failed for %s", asset.uuid
         )
         abort(500, description="unable to read image data")
+
+    # La lectura puede reducir ventanas muy grandes. Ajustar el polígono a la
+    # matriz resultante mantiene el cálculo correcto sin crear arreglos enormes.
+    source_width = max(1, x1 - x0)
+    source_height = max(1, y1 - y0)
+    mask_scale_x = rgb.shape[1] / float(source_width)
+    mask_scale_y = rgb.shape[0] / float(source_height)
+    mask_vertices = [
+        (x * mask_scale_x, y * mask_scale_y) for x, y in shifted_vertices
+    ]
+    mask = polygon_mask(rgb.shape[:2], mask_vertices)
 
     vis_cfg = VisibleConfig(
         do_linearize=False,

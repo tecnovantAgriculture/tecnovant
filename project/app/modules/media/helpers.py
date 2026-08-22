@@ -1870,6 +1870,7 @@ def read_tif_window_as_linear_rgb(
     x1: int,
     y1: int,
     wb_factors: Optional[Dict[str, float]] = None,
+    max_pixels: int = 1_500_000,
 ) -> NDArray[np.float32]:
     """Read a pixel BBox from a GeoTIFF as linear float32 RGB in [0, 1].
 
@@ -1885,9 +1886,24 @@ def read_tif_window_as_linear_rgb(
             if np.issubdtype(raw_dtype, np.integer)
             else 1.0
         )
+        window_width = max(1, x1 - x0)
+        window_height = max(1, y1 - y0)
+        pixel_count = window_width * window_height
+        if max_pixels > 0 and pixel_count > max_pixels:
+            scale = (max_pixels / float(pixel_count)) ** 0.5
+            out_width = max(1, int(window_width * scale))
+            out_height = max(1, int(window_height * scale))
+        else:
+            out_width = window_width
+            out_height = window_height
         data = (
-            ds.read([1, 2, 3], window=win).astype(np.float32) / dtype_max
-        )  # (3, H, W)
+            ds.read(
+                [1, 2, 3],
+                window=win,
+                out_shape=(3, out_height, out_width),
+                resampling=Resampling.bilinear,
+            ).astype(np.float32) / dtype_max
+        )  # (3, H, W), acotado para evitar agotar la memoria
 
     rgb = np.moveaxis(data, 0, -1)  # (H, W, 3)
     np.clip(rgb, 0.0, 1.0, out=rgb)
