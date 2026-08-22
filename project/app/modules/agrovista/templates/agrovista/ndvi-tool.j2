@@ -282,6 +282,13 @@
             <div id="lotPolygonStatus" class="text-xs text-gray-500 dark:text-gray-400 italic">
               Selecciona un lote para visualizar su polígono (si existe)
             </div>
+            <div id="importFarmObjectivePanel" class="hidden rounded-lg border border-sky-200 bg-sky-50 p-3 text-xs text-sky-900">
+              <div class="font-semibold"><i class="fas fa-crosshairs mr-1" aria-hidden="true"></i>Polígonos disponibles en otras ortofotos</div>
+              <div id="importFarmObjectiveText" class="mt-1 text-sky-700"></div>
+              <button id="importFarmObjectiveBtn" type="button" class="mt-2 w-full rounded-md bg-sky-700 px-3 py-2 font-semibold text-white hover:bg-sky-800">
+                Confirmar polígonos en esta ortofoto
+              </button>
+            </div>
             <button id="savePolygonToLotBtn"
                     class="w-full inline-flex items-center justify-center rounded-lg bg-blue-600 hover:bg-blue-700 px-3 py-2 text-xs font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-gray-400"
                     disabled
@@ -3759,6 +3766,9 @@
       const lotStatus = document.getElementById('lotPolygonStatus');
       const savePolygonBtn = document.getElementById('savePolygonToLotBtn');
       const contextFarmEl = document.getElementById('contextFarm');
+      const importObjectivePanel = document.getElementById('importFarmObjectivePanel');
+      const importObjectiveText = document.getElementById('importFarmObjectiveText');
+      const importObjectiveBtn = document.getElementById('importFarmObjectiveBtn');
 
       let lotGeometryMap = {};
       let lotObjectiveMap = {};
@@ -3766,6 +3776,7 @@
       const farmLotPolygons = new Map();
       let selectedLotId = null;
       let pendingNewPolygon = null;
+      let transferredPolygons = [];
 
       if (!lotSelector) return;
 
@@ -3808,6 +3819,8 @@
         const farmId = window.currentFarmId;
         selectedLotId = null;
         pendingNewPolygon = null;
+        transferredPolygons = [];
+        importObjectivePanel?.classList.add('hidden');
         clearFarmLotPolygons();
         lotGeometryMap = {};
         lotObjectiveMap = {};
@@ -3827,19 +3840,50 @@
           if (!r.ok) throw new Error(body?.description || body?.error || body?.message || 'La solicitud no pudo completarse');
           return body;
         })
-        .then(lots => {
+        .then(async lots => {
+          const currentAssetId = Number(imageMeta?.media_asset_id);
+          if(currentAssetId > 0){
+            const params = new URLSearchParams({
+              farm_id: String(farmId),
+              media_asset_id: String(currentAssetId),
+              preview_width: String(imageMeta?.width_preview || imageWidth),
+              preview_height: String(imageMeta?.height_preview || imageHeight),
+            });
+            const geoResponse = await fetch('/api/agrovista/lot-asset-geometries?' + params.toString(), { credentials: 'include' });
+            const geoData = await geoResponse.json().catch(() => ({items: []}));
+            if(geoResponse.ok){
+              const byLot = new Map((geoData.items || []).map(item => [Number(item.lot_id), item]));
+              (lots || []).forEach(lot => {
+                const item = byLot.get(Number(lot.id));
+                if(!item){ return; }
+                lot.is_objective = !!item.is_objective;
+                if(item.saved_for_asset){
+                  lot.geometry = item.geometry;
+                  lot.media_asset_id = currentAssetId;
+                }else if(item.transferred){
+                  transferredPolygons.push(item);
+                  lot.geometry = item.geometry;
+                  lot.media_asset_id = currentAssetId;
+                }
+              });
+              if(transferredPolygons.length && importObjectivePanel){
+                importObjectiveText.textContent = transferredPolygons.length + ' polígono(s) de esta finca se ubicaron por coordenadas desde otras ortofotos.';
+                importObjectiveBtn.textContent = 'Confirmar polígonos en esta ortofoto';
+                importObjectivePanel.classList.remove('hidden');
+              }
+            }
+          }
           lotSelector.innerHTML = '<option value="">-- Seleccionar lote --</option>';
           lotGeometryMap = {};
           lotObjectiveMap = {};
           (lots || []).forEach(function(lot) {
             var opt = document.createElement('option');
             opt.value = lot.id;
-            const currentAssetId = Number(imageMeta?.media_asset_id);
             const belongsToCurrentImage = currentAssetId > 0 && Number(lot.media_asset_id) === currentAssetId;
             const hasGeometry = belongsToCurrentImage && lot.geometry && lot.geometry.trim() !== '';
             const icon = hasGeometry ? '📍' : '○';
             const baseLabel = icon + ' ' + lot.name + ' (' + lot.area + ' ha)';
-            const isObjective = hasGeometry && !!lot.is_objective;
+            const isObjective = !!lot.is_objective;
             opt.textContent = (isObjective ? '⭐ OBJETIVO · ' : '') + baseLabel;
             opt.dataset.baseLabel = baseLabel;
             opt.dataset.hasGeometry = hasGeometry ? '1' : '0';
@@ -3942,10 +3986,31 @@
             updateStatsForLayer(layer);
             if (layer.getBounds && layer.getBounds().isValid()) map.fitBounds(layer.getBounds(), { padding: [50, 50] });
           }
+          return layer;
         } catch(e) {
           lotStatus.textContent = '❌ Error al cargar polígono: ' + (e.message || '');
           console.error('GeoJSON parse error:', e);
         }
+      }
+
+      if(importObjectiveBtn){
+        importObjectiveBtn.addEventListener('click', async function(){
+          if(!transferredPolygons.length){ return; }
+          importObjectiveBtn.disabled = true;
+          try{
+            await Promise.all(transferredPolygons.map(item => fetch('/api/agrovista/lot-asset-geometries', {
+              method:'POST', credentials:'include',
+              headers:{'Content-Type':'application/json','X-CSRF-TOKEN':getCsrfToken() || ''},
+              body:JSON.stringify({lot_id:item.lot_id, media_asset_id:imageMeta?.media_asset_id, geometry:item.geometry, preview_width:imageMeta?.width_preview || imageWidth, preview_height:imageMeta?.height_preview || imageHeight, is_objective:!!item.is_objective})
+            }).then(async response => { if(!response.ok){ const body=await response.json().catch(()=>({})); throw new Error(body.description || 'No se pudo guardar un polígono'); } })));
+            importObjectivePanel?.classList.add('hidden');
+            lotStatus.textContent = transferredPolygons.length + ' polígonos confirmados en esta ortofoto.';
+            if(window.Swal){ await Swal.fire({icon:'success',title:'Polígonos ubicados',text:'Los polígonos de la finca quedaron asociados a esta ortofoto.',confirmButtonText:'Aceptar'}); }
+            transferredPolygons = [];
+          }catch(error){
+            if(window.Swal){ await Swal.fire({icon:'error',title:'No se pudieron confirmar',text:error.message || 'Intenta nuevamente.',confirmButtonText:'Aceptar'}); }
+          }finally{ importObjectiveBtn.disabled = false; }
+        });
       }
 
       function clearFarmLotPolygons() {
@@ -3986,11 +4051,11 @@
         const lotId = getLinkedLotIdForPolygon(layer);
         if (!lotId) return true;
         try {
-          const response = await fetch('/api/foliage/lots/', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() || '' },
-            credentials: 'include',
-            body: JSON.stringify({ id: lotId, geometry: null, is_objective: false })
+          const params = new URLSearchParams({farm_id:String(window.currentFarmId), media_asset_id:String(imageMeta?.media_asset_id), lot_id:String(lotId)});
+          const response = await fetch('/api/agrovista/lot-asset-geometries?' + params.toString(), {
+            method: 'DELETE',
+            headers: { 'X-CSRF-TOKEN': getCsrfToken() || '' },
+            credentials: 'include'
           });
           const body = await response.json().catch(() => ({}));
           if (!response.ok) throw new Error(body?.description || body?.error || body?.message || 'No se pudo desligar el poligono');
@@ -4152,14 +4217,16 @@
         }
 
         // PUT request to update lot with geometry and its comparison role
-        fetch('/api/foliage/lots/', {
-          method: 'PUT',
+        fetch('/api/agrovista/lot-asset-geometries', {
+          method: 'POST',
           headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() || '' },
           credentials: 'include',
           body: JSON.stringify({
-            id: parseInt(selectedLotId),
+            lot_id: parseInt(selectedLotId),
             geometry: geojsonStr,
             media_asset_id: imageMeta?.media_asset_id || null,
+            preview_width: imageMeta?.width_preview || imageWidth,
+            preview_height: imageMeta?.height_preview || imageHeight,
             is_objective: isObjective
           })
         })

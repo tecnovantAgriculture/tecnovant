@@ -16,7 +16,7 @@ from sqlalchemy.orm import joinedload, selectinload
 from app.core.controller import check_permission, check_resource_access
 from app.extensions import db
 from app.helpers.csv_handler import CsvHandler
-from app.modules.foliage.models import CommonAnalysis, Nutrient
+from app.modules.foliage.models import CommonAnalysis, Lot, LotAssetGeometry, Nutrient
 from app.modules.media.helpers import (
     PreprocessConfig,
     _media_root,
@@ -339,6 +339,174 @@ def _affine_from_dict(data: dict | None) -> Optional[Affine]:
         )
     except Exception:
         return None
+
+
+
+def _polygon_coordinates(value):
+    try:
+        obj = json.loads(value) if isinstance(value, str) else value
+        if obj.get("type") == "Feature":
+            obj = obj.get("geometry") or {}
+        if obj.get("type") != "Polygon" or not obj.get("coordinates"):
+            raise ValueError
+        coords = obj["coordinates"][0]
+        if len(coords) < 3:
+            raise ValueError
+        return [(float(item[0]), float(item[1])) for item in coords]
+    except (TypeError, ValueError, KeyError, AttributeError, json.JSONDecodeError):
+        abort(400, description="invalid polygon geometry")
+
+
+def _feature_from_coordinates(coords):
+    points = [[float(x), float(y)] for x, y in coords]
+    if points and points[0] != points[-1]:
+        points.append(points[0])
+    return {"type": "Feature", "properties": {}, "geometry": {"type": "Polygon", "coordinates": [points]}}
+
+
+def _preview_geometry_to_wgs84(geometry, asset, preview_width, preview_height):
+    affine = _affine_from_dict(asset.transform)
+    if affine is None or not asset.crs or not asset.width or not asset.height:
+        abort(400, description="orthophoto lacks valid georeference")
+    transformer = Transformer.from_crs(asset.crs, "EPSG:4326", always_xy=True)
+    sx = float(asset.width) / float(preview_width)
+    sy = float(asset.height) / float(preview_height)
+    result = []
+    for x_preview, y_preview in _polygon_coordinates(geometry):
+        col = x_preview * sx
+        row = (float(preview_height) - y_preview) * sy
+        x_map, y_map = affine * (col, row)
+        result.append(transformer.transform(x_map, y_map))
+    return _feature_from_coordinates(result)
+
+
+def _wgs84_geometry_to_preview(geometry, asset, preview_width, preview_height):
+    affine = _affine_from_dict(asset.transform)
+    if affine is None or not asset.crs or not asset.width or not asset.height:
+        abort(400, description="orthophoto lacks valid georeference")
+    inverse = ~affine
+    transformer = Transformer.from_crs("EPSG:4326", asset.crs, always_xy=True)
+    result = []
+    for lon, lat in _polygon_coordinates(geometry):
+        x_map, y_map = transformer.transform(lon, lat)
+        col, row = inverse * (x_map, y_map)
+        x_preview = col * float(preview_width) / float(asset.width)
+        y_preview = float(preview_height) - (row * float(preview_height) / float(asset.height))
+        result.append((x_preview, y_preview))
+    return _feature_from_coordinates(result)
+
+
+def _scoped_farm_lots(farm_id):
+    lots = Lot.query.filter_by(farm_id=farm_id, active=True).all()
+    if lots and not check_resource_access(lots[0].farm, get_jwt()):
+        abort(403, description="forbidden")
+    return lots
+
+
+@api.route("/lot-asset-geometries", methods=["GET", "POST", "DELETE"])
+@jwt_required()
+def lot_asset_geometries():
+    """Guarda y proyecta geometrías de lotes entre ortofotos georreferenciadas."""
+    if request.method == "POST":
+        data = request.get_json(force=True, silent=False) or {}
+        try:
+            lot_id = int(data.get("lot_id"))
+            asset_id = int(data.get("media_asset_id"))
+            preview_width = int(round(float(data.get("preview_width"))))
+            preview_height = int(round(float(data.get("preview_height"))))
+        except (TypeError, ValueError):
+            abort(400, description="invalid identifiers or preview dimensions")
+        if preview_width <= 0 or preview_height <= 0:
+            abort(400, description="invalid preview dimensions")
+        lot = db.session.get(Lot, lot_id)
+        asset = db.session.get(Asset, asset_id)
+        if lot is None or asset is None:
+            abort(404, description="lot or orthophoto not found")
+        if not check_resource_access(lot.farm, get_jwt()):
+            abort(403, description="forbidden")
+        geometry_obj = _feature_from_coordinates(_polygon_coordinates(data.get("geometry")))
+        geographic_obj = _preview_geometry_to_wgs84(geometry_obj, asset, preview_width, preview_height)
+        record = LotAssetGeometry.query.filter_by(lot_id=lot.id, media_asset_id=asset.id).first()
+        if record is None:
+            record = LotAssetGeometry(lot_id=lot.id, media_asset_id=asset.id)
+            db.session.add(record)
+        record.geometry = json.dumps(geometry_obj)
+        record.geographic_geometry = json.dumps(geographic_obj)
+        record.preview_width = preview_width
+        record.preview_height = preview_height
+        is_objective = bool(data.get("is_objective"))
+        if is_objective:
+            Lot.query.filter(Lot.farm_id == lot.farm_id, Lot.id != lot.id).update({"is_objective": False}, synchronize_session=False)
+            lot.is_objective = True
+        elif not lot.is_objective:
+            lot.is_objective = False
+        lot.geometry = record.geometry
+        lot.media_asset_id = asset.id
+        db.session.commit()
+        return jsonify({"id": record.id, "lot_id": lot.id, "lot_name": lot.name, "geometry": record.geometry, "geographic_geometry": record.geographic_geometry, "media_asset_id": asset.id, "is_objective": bool(lot.is_objective)}), 200
+
+    try:
+        farm_id = int(request.args.get("farm_id"))
+        asset_id = int(request.args.get("media_asset_id"))
+    except (TypeError, ValueError):
+        abort(400, description="invalid farm or orthophoto")
+    lots = _scoped_farm_lots(farm_id)
+    asset = db.session.get(Asset, asset_id)
+    if asset is None:
+        abort(404, description="orthophoto not found")
+
+    if request.method == "DELETE":
+        lot_id = request.args.get("lot_id", type=int)
+        lot = next((item for item in lots if item.id == lot_id), None)
+        if lot is None:
+            abort(404, description="lot not found")
+        record = LotAssetGeometry.query.filter_by(lot_id=lot.id, media_asset_id=asset.id).first()
+        if record:
+            db.session.delete(record)
+        if lot.media_asset_id == asset.id:
+            latest = LotAssetGeometry.query.filter(LotAssetGeometry.lot_id == lot.id, LotAssetGeometry.media_asset_id != asset.id).order_by(LotAssetGeometry.updated_at.desc()).first()
+            lot.geometry = latest.geometry if latest else None
+            lot.media_asset_id = latest.media_asset_id if latest else None
+        if not LotAssetGeometry.query.filter(LotAssetGeometry.lot_id == lot.id, LotAssetGeometry.media_asset_id != asset.id).first():
+            lot.is_objective = False
+        db.session.commit()
+        return jsonify({"deleted": True}), 200
+
+    preview_width = request.args.get("preview_width", type=float) or asset.width
+    preview_height = request.args.get("preview_height", type=float) or asset.height
+    items = []
+    created_legacy_records = False
+    for lot in lots:
+        record = LotAssetGeometry.query.filter_by(lot_id=lot.id, media_asset_id=asset.id).first()
+        transferred = False
+        source_asset_name = None
+        if record:
+            geometry_obj = json.loads(record.geometry)
+        elif lot.media_asset_id == asset.id and lot.geometry:
+            geometry_obj = json.loads(lot.geometry)
+            geographic_obj = _preview_geometry_to_wgs84(geometry_obj, asset, preview_width, preview_height)
+            record = LotAssetGeometry(
+                lot_id=lot.id,
+                media_asset_id=asset.id,
+                geometry=json.dumps(geometry_obj),
+                geographic_geometry=json.dumps(geographic_obj),
+                preview_width=int(round(preview_width)),
+                preview_height=int(round(preview_height)),
+            )
+            db.session.add(record)
+            created_legacy_records = True
+        else:
+            source = LotAssetGeometry.query.filter_by(lot_id=lot.id).order_by(LotAssetGeometry.updated_at.desc()).first()
+            if not source:
+                continue
+            geometry_obj = _wgs84_geometry_to_preview(source.geographic_geometry, asset, preview_width, preview_height)
+            transferred = True
+            source_asset = db.session.get(Asset, source.media_asset_id)
+            source_asset_name = source_asset.original_name if source_asset else None
+        items.append({"lot_id": lot.id, "lot_name": lot.name, "geometry": json.dumps(geometry_obj), "is_objective": bool(lot.is_objective), "saved_for_asset": bool(record or lot.media_asset_id == asset.id), "transferred": transferred, "source_asset_name": source_asset_name})
+    if created_legacy_records:
+        db.session.commit()
+    return jsonify({"items": items, "objective_lot_id": next((lot.id for lot in lots if lot.is_objective), None)}), 200
 
 
 @api.route("/polygon-kmz", methods=["POST"])

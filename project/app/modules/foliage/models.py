@@ -145,6 +145,27 @@ class Lot(db.Model):
         return self.farm.organization if self.farm else None
 
 
+class LotAssetGeometry(db.Model):
+    """Geometría de un lote ajustada para una ortofoto específica."""
+
+    __tablename__ = "lot_asset_geometries"
+    id = db.Column(db.Integer, primary_key=True)
+    lot_id = db.Column(db.Integer, db.ForeignKey("lots.id", ondelete="CASCADE"), nullable=False, index=True)
+    media_asset_id = db.Column(db.Integer, db.ForeignKey("media_asset.id", ondelete="CASCADE"), nullable=False, index=True)
+    geometry = db.Column(db.Text, nullable=False)
+    geographic_geometry = db.Column(db.Text, nullable=False)
+    preview_width = db.Column(db.Integer, nullable=False)
+    preview_height = db.Column(db.Integer, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    lot = db.relationship("Lot", backref=db.backref("asset_geometries", cascade="all, delete-orphan"))
+
+    __table_args__ = (
+        db.UniqueConstraint("lot_id", "media_asset_id", name="uq_lot_asset_geometry"),
+    )
+
+
 class Crop(db.Model):
     """Model representing a crop"""
 
