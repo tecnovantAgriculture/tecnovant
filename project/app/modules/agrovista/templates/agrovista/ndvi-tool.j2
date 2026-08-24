@@ -4589,6 +4589,42 @@ if(window.Swal) Swal.fire({
         + '<tr class="bg-emerald-50"><td class="sticky left-0 bg-emerald-50 px-2 py-1.5 font-semibold">Nano (kg/ha)</td>' + entries.map(item => '<td class="px-2 py-1.5 text-center font-semibold text-emerald-800">' + formatNutrientValue(item.nano_kg) + '</td>').join('') + '<td class="px-2 py-1.5 text-center font-bold">' + (balance.total_nano_kg_ha != null ? formatNutrientValue(balance.total_nano_kg_ha) + ' kg/ha' : '--') + '</td></tr></tbody></table></div>'
         + '<p class="mt-3 text-[11px] text-gray-600">Objetivo se expresa en kg/ha con el aforo objetivo y Actual con el aforo actual. La Diferencia solo refleja déficits y Nano es la cantidad estimada del producto a aplicar según su concentración.</p></div>';
     }
+    function compactComparisonBalance(balance, entry, objective){
+      const order=["n","p","k","ca","mg","s","cu","zn","mn","b","mo","fe","si"],symbols={n:"N",p:"P",k:"K",ca:"Ca",mg:"Mg",s:"S",cu:"Cu",zn:"Zn",mn:"Mn",b:"B",mo:"Mo",fe:"Fe",si:"Si"};
+      const items=((balance&&balance.entries)||[]).map(item=>({...item,_key:canonicalNutrientKey({name:item.name,symbol:item.symbol})})).filter(item=>order.includes(item._key)).sort((a,b)=>order.indexOf(a._key)-order.indexOf(b._key));
+      if(!items.length){return '<div class="rounded-lg border bg-white p-3 text-xs text-gray-500">Balance mineral pendiente de datos suficientes.</div>';}
+      const stats=entry.areaStats||{},broma=stats.bromatologia||{},first=(...v)=>{for(const x of v){const n=Number(x);if(Number.isFinite(n)&&n>0){return n;}}return null;};
+      const cards=[["Proteina objetivo",first(objective.protein,objective.protein_average)],["Aforo objetivo",first(balance.aforo_objective,objective.target_value)],["Proteina actual",first(stats.protein,stats.protein_average,broma.proteina_pct)],["Aforo actual",first(broma.aforo_ua_ha,stats.yield_estimate,balance.aforo_actual)]];
+      const sum=key=>items.reduce((total,item)=>total+(Number(item[key])||0),0),cell=value=>formatNutrientValue(value);
+      const row=(label,key,css,total,toggle)=>'<tr '+(toggle?'data-compact-row="'+toggle+'" class="hidden '+css+'"':'class="'+css+'"')+'><th class="sticky left-0 bg-inherit px-1.5 py-1 text-left font-semibold">'+label+'</th>'+items.map(item=>'<td class="px-1 py-1 text-center">'+cell(item[key])+'</td>').join('')+'<td class="px-1 py-1 text-center font-bold">'+(total==null?'--':cell(total))+'</td></tr>';
+      return '<div class="rounded-lg border border-gray-200 bg-white p-2 shadow-sm">'
+        +'<div class="mb-2 flex items-center justify-between gap-2"><h4 class="text-xs font-semibold">Balance de Minerales</h4><div class="flex gap-1.5"><button type="button" data-compact-toggle="grade" class="rounded border border-amber-300 bg-amber-50 px-2 py-1 text-[9px] font-bold text-amber-800">GRADO FORMULA</button><button type="button" data-compact-toggle="nano" class="rounded border border-emerald-300 bg-emerald-50 px-2 py-1 text-[9px] font-bold text-emerald-800">NANO</button></div></div>'
+        +'<div class="mb-2 grid grid-cols-4 divide-x overflow-hidden rounded border text-center text-[9px]">'+cards.map((card,index)=>'<div class="'+(index<2?'bg-gray-50':'bg-gray-100')+' px-1 py-1"><span class="block uppercase text-gray-500">'+card[0]+'</span><strong class="text-xs">'+(card[1]==null?'--':Number(card[1]).toFixed(2))+'</strong></div>').join('')+'</div>'
+        +'<div class="overflow-x-auto"><table class="w-full min-w-[820px] table-fixed text-[9px]"><thead class="bg-gray-50"><tr><th class="sticky left-0 bg-gray-50 px-1.5 py-1 text-left">Concepto</th>'+items.map(item=>'<th class="px-1 py-1">'+symbols[item._key]+'</th>').join('')+'<th class="px-1 py-1">Total</th></tr></thead><tbody>'
+        +row('Objetivo (% / ppm)','objective_raw','bg-indigo-50',null)
+        +row('Objetivo (kg/ha)','objective_kg','bg-indigo-50',sum('objective_kg'))
+        +row('Actual (% / ppm)','actual_raw','bg-sky-50',null)
+        +row('Actual (kg/ha)','actual_kg','bg-sky-50',sum('actual_kg'))
+        +row('Diferencia (kg/ha)','difference_kg','bg-red-50 text-red-600',sum('difference_kg'))
+        +row('Grado formula (%)','grade_pct','bg-yellow-50',sum('grade_pct'),'grade')
+        +row('Nano (kg/ha)','nano_kg','bg-emerald-50 text-emerald-800',balance.total_nano_kg_ha,'nano')
+        +'</tbody></table></div></div>';
+    }
+    function bindCompactBalance(){
+      const comparisonTables=comparisonContent.querySelectorAll('table');
+      const balanceTableNode=comparisonTables[comparisonTables.length-1];
+      const totalRows=balanceTableNode?balanceTableNode.querySelectorAll('tbody tr'):[];
+      [1,3,4,6].forEach(index=>{
+        const cell=totalRows[index]&&totalRows[index].lastElementChild;
+        if(cell&&cell.textContent.trim()!=='--'){cell.textContent=cell.textContent.trim()+' kg/ha';}
+      });
+      const gradeCell=totalRows[5]&&totalRows[5].lastElementChild;
+      if(gradeCell&&gradeCell.textContent.trim()!=='--'){gradeCell.textContent=gradeCell.textContent.trim()+'%';}
+      comparisonContent.querySelectorAll('[data-compact-toggle]').forEach(button=>button.addEventListener('click',()=>{
+        const row=comparisonContent.querySelector('[data-compact-row="'+button.dataset.compactToggle+'"]');
+        if(row){row.classList.toggle('hidden');button.classList.toggle('ring-2');}
+      }));
+    }
     function renderEntry(entry, rows, label){
 
       const id = String(entry.id).replace(/[^a-zA-Z0-9_-]/g, '');
@@ -4630,9 +4666,106 @@ if(window.Swal) Swal.fire({
       const number = Number(value);
       return Number.isFinite(number) ? formatNutrientValue(number) + (suffix || "") : "--";
     }
+    const comparisonNutrients = [["n","N"],["p","P"],["k","K"],["ca","Ca"],["mg","Mg"],["s","S"],["cu","Cu"],["zn","Zn"],["mn","Mn"],["b","B"],["mo","Mo"],["fe","Fe"],["si","Si"]];
+    function comparisonEntryMeta(entry){
+      const stats=entry.areaStats||{}, lot=(foliarState.lots||[]).find(item=>Number(item.id)===Number(entry.linkedLotId));
+      const farm=(foliarState.farms||[]).find(item=>Number(item.id)===Number(lot&&lot.farm_id));
+      return {id:entry.linkedLotId||entry.id,date:stats.analysis_date||stats.date||new Date().toISOString().slice(0,10),farm:stats.farm_name||(farm&&farm.name)||"",lot:(lot&&lot.name)||entry.name||"Lote"};
+    }
+    function comparisonEntryValues(entry){
+      const values=new Map();
+      ((entry.areaStats&&entry.areaStats.nutrients)||[]).forEach(item=>{const key=canonicalNutrientKey(item),value=Number(item.target_value);if(key){values.set(key,Number.isFinite(value)?value:null);}});
+      return values;
+    }
+    function comparisonTableRow(entry,selected,objective){
+      const meta=comparisonEntryMeta(entry),values=comparisonEntryValues(entry),id=String(entry.id).replace(/[^a-zA-Z0-9_-]/g,'');
+      const css=objective?'bg-amber-50 ring-1 ring-inset ring-amber-300':(selected?'bg-emerald-100 ring-1 ring-inset ring-emerald-500':'cursor-pointer hover:bg-emerald-50');
+      return '<tr '+(objective?'':'data-comparison-row="'+id+'"')+' class="'+css+'"><td class="px-2 py-1.5 text-center">'+escapeHtml(meta.id)+'</td><td class="px-2 py-1.5 text-center">'+escapeHtml(meta.date)+'</td><td class="px-2 py-1.5">'+escapeHtml(meta.farm)+'</td><td class="px-2 py-1.5 font-semibold">'+escapeHtml(meta.lot)+'</td>'+comparisonNutrients.map(item=>'<td class="px-2 py-1.5 text-center">'+comparisonMetric(values.get(item[0]))+'</td>').join('')+'</tr>';
+    }
+    function comparisonTable(title,rows,objective){
+      const head='<tr><th class="px-2 py-2">ID</th><th class="px-2 py-2">Fecha</th><th class="px-2 py-2 text-left">Finca</th><th class="px-2 py-2 text-left">Potrero</th>'+comparisonNutrients.map(item=>'<th class="px-2 py-2">'+item[1]+'</th>').join('')+'</tr>';
+      return '<section class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm"><h3 class="border-b px-3 py-2 text-xs font-bold uppercase tracking-wider '+(objective?'text-amber-700':'text-emerald-700')+'">'+title+'</h3><div class="max-h-[190px] overflow-auto"><table class="w-full min-w-[1120px] border-collapse text-[11px]"><thead class="sticky top-0 z-10 bg-gray-100 text-gray-600">'+head+'</thead><tbody class="divide-y">'+rows+'</tbody></table></div></section>';
+    }
+    function comparisonObjective(entry){
+      const stats=entry.areaStats||{},broma=stats.bromatologia||{};
+      return {crop_name:comparisonEntryMeta(entry).lot,protein:stats.protein||stats.protein_average,target_value:broma.aforo_ua_ha||broma.aforo||stats.yield_estimate||stats.aforo_ua_ha||stats.aforo,nutrient_targets:(stats.nutrients||[]).map(item=>({nutrient_name:item.nutrient_name,nutrient_symbol:item.nutrient_symbol,nutrient_unit:item.nutrient_unit,target_value:item.target_value}))};
+    }
+    async function openLotComparisonTables(){
+      let entries=getComparableLotEntries().slice(0,20);
+      if(!comparisonModal||!comparisonContent){return;}
+      if(entries.length<2){const message=entries.length?'Hay un solo lote guardado en esta ortofoto.':'Todavía no hay dos lotes con polígonos guardados en esta ortofoto.';if(window.Swal){await Swal.fire({icon:'info',title:'Comparación no disponible',text:message,confirmButtonText:'Aceptar'});}else{alert(message);}return;}
+      comparisonContent.innerHTML='<div class="flex min-h-[240px] items-center justify-center text-sm text-gray-500"><i class="fas fa-spinner fa-spin mr-2"></i>Preparando comparación...</div>';
+      comparisonModal.classList.remove("hidden");document.body.classList.add("overflow-hidden");
+      try{
+        for(const entry of entries){const stats=await ensureAreaStatsForEntry(entry);if(stats){entry.areaStats=stats;}}
+        entries=entries.filter(entry=>entry.areaStats);
+        const reference=entries.find(isObjectiveEntry);
+        if(!reference){throw new Error('La finca no tiene un lote objetivo con polígono guardado.');}
+        const compared=entries.filter(entry=>entry!==reference);
+        if(!compared.length){throw new Error('No hay otro lote guardado para comparar.');}
+        const objective=comparisonObjective(reference);let selected=compared[0];
+        comparisonSubtitle.textContent=entries.length+' lotes · '+comparisonEntryMeta(reference).lot+' como objetivo';
+        const render=async()=>{
+          comparisonContent.innerHTML='<div class="space-y-3"><div><h2 class="text-sm font-semibold">Comparación de análisis foliares</h2><p class="mt-1 text-[11px] text-gray-500">Seleccione una fila de Foliar para calcularla contra el Objetivo.</p></div>'+comparisonTable('Objetivo',comparisonTableRow(reference,false,true),true)+comparisonTable('Foliar',compared.map(entry=>comparisonTableRow(entry,entry===selected,false)).join(''),false)+'<section class="rounded-xl border border-gray-200 bg-white p-3 shadow-sm"><h3 class="mb-3 text-xs font-bold uppercase tracking-wider text-emerald-700">Balance</h3><div id="lotComparisonBalance" class="p-8 text-center text-xs text-gray-500"><i class="fas fa-spinner fa-spin mr-2"></i>Calculando balance...</div></section></div>';
+          comparisonContent.querySelectorAll('[data-comparison-row]').forEach(row=>row.addEventListener('click',async()=>{selected=compared.find(entry=>String(entry.id).replace(/[^a-zA-Z0-9_-]/g,'')===row.dataset.comparisonRow)||selected;await render();}));
+          const comparisonHeading=comparisonContent.querySelector('h2');
+          if(comparisonHeading){comparisonHeading.textContent='Comparacion de analisis foliares';}
+          if(comparisonHeading&&comparisonHeading.parentElement){comparisonHeading.parentElement.classList.add('hidden');}
+          comparisonSubtitle.textContent=entries.length+' lotes - '+comparisonEntryMeta(reference).lot+' como objetivo';
+          const balance=await getBalance(selected,buildRows(selected.areaStats||{},objective),objective),node=document.getElementById('lotComparisonBalance');
+          if(node){node.outerHTML=compactComparisonBalance(balance,selected,objective);bindCompactBalance();return;}
+          if(node){node.outerHTML=balanceTable(balance,selected,objective);}
+        };
+        await render();
+      }catch(error){console.error('Error preparando comparación de lotes',error);comparisonContent.innerHTML='<div class="border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">'+escapeHtml(error.message||'No se pudo calcular la comparación.')+'</div>';}
+    }
+    async function openFlexibleLotComparison(){
+      let entries=getComparableLotEntries().slice(0,20);
+      if(!comparisonModal||!comparisonContent){return;}
+      if(entries.length<2){if(window.Swal){await Swal.fire({icon:'info',title:'Comparacion no disponible',text:'Se necesitan por lo menos dos lotes guardados.',confirmButtonText:'Aceptar'});}return;}
+      comparisonContent.innerHTML='<div class="p-8 text-center text-sm text-gray-500"><i class="fas fa-spinner fa-spin mr-2"></i>Preparando comparacion...</div>';
+      comparisonModal.classList.remove('hidden');document.body.classList.add('overflow-hidden');
+      try{
+        for(const entry of entries){const stats=await ensureAreaStatsForEntry(entry);if(stats){entry.areaStats=stats;}}
+        entries=entries.filter(entry=>entry.areaStats);
+        if(entries.length<2){throw new Error('No fue posible obtener dos analisis para comparar.');}
+        let reference=entries.find(isObjectiveEntry)||entries[0];
+        let selected=entries.find(entry=>entry!==reference);
+        const render=async()=>{
+          if(selected===reference){selected=entries.find(entry=>entry!==reference);}
+          const objective=comparisonObjective(reference);
+          const objectiveRows=entries.map(entry=>comparisonTableRow(entry,entry===reference,false).replace('data-comparison-row','data-objective-row')).join('');
+          const activeReference=reference;
+          reference=null;
+          const foliarEntries=entries.filter(entry=>entry!==reference);
+          reference=activeReference;
+          const foliarRows=foliarEntries.map(entry=>comparisonTableRow(entry,entry===selected,false)).join('');
+          comparisonContent.innerHTML='<div class="space-y-3">'+comparisonTable('Objetivo',objectiveRows,true)+comparisonTable('Foliar',foliarRows,false)+'<section class="rounded-xl border border-gray-200 bg-white p-2 shadow-sm"><h3 class="mb-2 text-xs font-bold uppercase tracking-wider text-emerald-700">Balance</h3><div id="lotComparisonBalance" class="p-6 text-center text-xs text-gray-500"><i class="fas fa-spinner fa-spin mr-2"></i>Calculando balance...</div></section></div>';
+          comparisonSubtitle.textContent=entries.length+' lotes - '+comparisonEntryMeta(reference).lot+' como objetivo';
+          comparisonContent.querySelectorAll('[data-objective-row]').forEach(row=>row.addEventListener('click',async()=>{
+            reference=entries.find(entry=>String(entry.id).replace(/[^a-zA-Z0-9_-]/g,'')===row.dataset.objectiveRow)||reference;
+            await render();
+          }));
+          comparisonContent.querySelectorAll('[data-comparison-row]').forEach(row=>row.addEventListener('click',async()=>{
+            selected=foliarEntries.find(entry=>String(entry.id).replace(/[^a-zA-Z0-9_-]/g,'')===row.dataset.comparisonRow)||selected;
+            await render();
+          }));
+          const balance=await getBalance(selected,buildRows(selected.areaStats||{},objective),objective);
+          const node=document.getElementById('lotComparisonBalance');
+          if(node){node.outerHTML=compactComparisonBalance(balance,selected,objective);bindCompactBalance();}
+        };
+        await render();
+      }catch(error){
+        console.error('Error preparando comparacion flexible',error);
+        comparisonContent.innerHTML='<div class="border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">'+escapeHtml(error.message||'No se pudo calcular la comparacion.')+'</div>';
+      }
+    }
     async function openLotComparison(){
+      return openFlexibleLotComparison();
+      return openLotComparisonTables();
       let entries = getComparableLotEntries().slice(0, 4);
       const objective = getSelectedObjective();
+      return openFlexibleLotComparison();
       if(!comparisonModal || !comparisonContent){ return; }
       if(entries.length < 2){
         const message = entries.length === 1
