@@ -397,6 +397,29 @@ def _wgs84_geometry_to_preview(geometry, asset, preview_width, preview_height):
     return _feature_from_coordinates(result)
 
 
+def _geometry_fits_asset(geometry, asset, tolerance=2.0):
+    """Indica si el polígono geográfico está completamente cubierto por el TIF."""
+    affine = _affine_from_dict(asset.transform)
+    if affine is None or not asset.crs or not asset.width or not asset.height:
+        return False
+    try:
+        inverse = ~affine
+        transformer = Transformer.from_crs("EPSG:4326", asset.crs, always_xy=True)
+        coordinates = _polygon_coordinates(geometry)
+        if len(coordinates) < 3:
+            return False
+        for lon, lat in coordinates:
+            x_map, y_map = transformer.transform(lon, lat)
+            col, row = inverse * (x_map, y_map)
+            if col < -tolerance or row < -tolerance:
+                return False
+            if col > float(asset.width) + tolerance or row > float(asset.height) + tolerance:
+                return False
+        return True
+    except Exception:
+        return False
+
+
 def _scoped_farm_lots(farm_id):
     lots = Lot.query.filter_by(farm_id=farm_id, active=True).all()
     if lots and not check_resource_access(lots[0].farm, get_jwt()):
@@ -533,6 +556,50 @@ def list_lot_asset_calculations():
     lot_map = {lot.id: lot for lot in lots}
     if not lot_map:
         return jsonify({"items": []}), 200
+
+    existing_records = LotAssetGeometry.query.filter(LotAssetGeometry.lot_id.in_(lot_map)).all()
+    existing_keys = {(record.lot_id, record.media_asset_id) for record in existing_records}
+    source_by_lot = {}
+    for record in existing_records:
+        if record.geographic_geometry and record.lot_id not in source_by_lot:
+            source_by_lot[record.lot_id] = record.geographic_geometry
+
+    if source_by_lot:
+        candidate_assets = (
+            Asset.query
+            .filter(
+                Asset.ext.in_(["tif", "tiff"]),
+                Asset.is_geo.is_(True),
+                Asset.width.isnot(None),
+                Asset.height.isnot(None),
+                Asset.crs.isnot(None),
+                Asset.transform.isnot(None),
+            )
+            .all()
+        )
+        created_records = False
+        for asset in candidate_assets:
+            for lot_id, geographic_geometry in source_by_lot.items():
+                if (lot_id, asset.id) in existing_keys:
+                    continue
+                if not _geometry_fits_asset(geographic_geometry, asset):
+                    continue
+                preview_geometry = _wgs84_geometry_to_preview(
+                    geographic_geometry, asset, asset.width, asset.height
+                )
+                db.session.add(LotAssetGeometry(
+                    lot_id=lot_id,
+                    media_asset_id=asset.id,
+                    geometry=json.dumps(preview_geometry),
+                    geographic_geometry=geographic_geometry,
+                    preview_width=asset.width,
+                    preview_height=asset.height,
+                ))
+                existing_keys.add((lot_id, asset.id))
+                created_records = True
+        if created_records:
+            db.session.commit()
+
     records = (
         LotAssetGeometry.query
         .filter(LotAssetGeometry.lot_id.in_(lot_map))
