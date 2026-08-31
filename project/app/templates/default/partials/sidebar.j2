@@ -12,7 +12,7 @@
 } %}
 
 {# La gestion de accesos solo esta disponible para los roles autorizados por la API. #}
-{% if rol == "administrator" or rol == "reseller" %}
+{% if rol == "administrator" or rol == "reseller" or rol == "org_admin" %}
     {% set sidebar_menu = {
         "menu": sidebar_menu.menu + [
             {"name": "Usuarios", "url": url_for('core.amd_users'), "icon": icon_users},

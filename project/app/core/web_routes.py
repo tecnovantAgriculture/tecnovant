@@ -2806,6 +2806,8 @@ def amd_users():
     Página: Renderiza la vista de usuarios
     """
     user_id = get_jwt_identity()
+    claims = get_jwt()
+    user_management_client_only = claims.get("rol") == RoleEnum.ORG_ADMIN.value
     context = {
         "dashboard": True,
         "title": "Gestión de usuarios",
@@ -2829,6 +2831,7 @@ def amd_users():
             "dashboard/users.j2",
             items=items,
             org_dict=org_dict,
+            user_management_client_only=user_management_client_only,
             **context,
             request=request,
         ),

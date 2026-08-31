@@ -535,7 +535,7 @@ class UserView(MethodView):
 
     decorators = [jwt_required()]
 
-    @check_permission(required_roles=["administrator", "reseller"])
+    @check_permission(required_roles=["administrator", "reseller", "org_admin"])
     def get(self, user_id=None):
         """
         Obtiene una lista de usuarios o un usuario específico.
@@ -550,7 +550,7 @@ class UserView(MethodView):
             return self._get_user(user_id)
         return self._get_user_list()
 
-    @check_permission(required_roles=["administrator", "reseller"])
+    @check_permission(required_roles=["administrator", "reseller", "org_admin"])
     def post(self):
         """
         Crea un nuevo usuario.
@@ -566,7 +566,7 @@ class UserView(MethodView):
 
         return self._create_user(data)
 
-    @check_permission(resource_owner_check=True)
+    @check_permission(required_roles=["administrator", "reseller", "org_admin"])
     def put(self, user_id):
         """
         Actualiza un usuario existente.
@@ -583,7 +583,7 @@ class UserView(MethodView):
 
         return self._update_user(user_id, data)
 
-    @check_permission(resource_owner_check=True)
+    @check_permission(required_roles=["administrator", "reseller", "org_admin"])
     def delete(self, user_id=None):
         """
         Elimina un usuario existente.
@@ -594,7 +594,7 @@ class UserView(MethodView):
         Returns:
             JSON: Mensaje de confirmación.
         """
-        data = request.get_json()
+        data = request.get_json(silent=True)
         if data and "ids" in data:
             return self._delete_user(user_ids=data["ids"])
         if user_id:
@@ -619,8 +619,16 @@ class UserView(MethodView):
             users = []
             for org in reseller_package.organizations:
                 users.extend(org.users)
+        elif user_role == RoleEnum.ORG_ADMIN.value:
+            manager = User.query.get_or_404(user_id)
+            users_by_id = {}
+            for organization in manager.organizations.all():
+                for managed_user in organization.users:
+                    if managed_user.active and managed_user.role == RoleEnum.ORG_VIEWER:
+                        users_by_id[managed_user.id] = managed_user
+            users = list(users_by_id.values())
         else:
-            raise Forbidden("Only administrators and resellers can list users.")
+            raise Forbidden("Only authorized managers can list users.")
 
         return jsonify([self._serialize_user(user) for user in users]), 200
 
@@ -631,6 +639,20 @@ class UserView(MethodView):
         if not self._has_access(user, claims):
             raise Forbidden("You do not have access to this user.")
         return jsonify(self._serialize_user(user)), 200
+
+    @staticmethod
+    def _organization_ids_for_user(user_id):
+        manager = User.query.get(user_id)
+        return {org.id for org in manager.organizations.all()} if manager else set()
+
+    def _org_admin_can_manage(self, target_user, claims):
+        if claims.get("rol") != RoleEnum.ORG_ADMIN.value:
+            return False
+        if target_user.role != RoleEnum.ORG_VIEWER:
+            return False
+        manager_org_ids = self._organization_ids_for_user(claims.get("id"))
+        target_org_ids = {org.id for org in target_user.organizations.all()}
+        return bool(manager_org_ids.intersection(target_org_ids))
 
     def _create_user(self, data):
         """Crea un nuevo usuario con los datos proporcionados."""
@@ -648,6 +670,17 @@ class UserView(MethodView):
         role = ROLE_MAP.get(data["role"].lower())
         if role is None:
             raise BadRequest("Invalid role.")
+        claims = get_jwt()
+        if claims.get("rol") == RoleEnum.ORG_ADMIN.value:
+            if role != RoleEnum.ORG_VIEWER:
+                raise Forbidden("Organization administrators can only create client users.")
+            try:
+                organization_id = int(data.get("organization_id"))
+            except (TypeError, ValueError):
+                raise BadRequest("A valid client organization is required.")
+            if organization_id not in self._organization_ids_for_user(claims.get("id")):
+                raise Forbidden("You can only create users in your own organization.")
+            data["organization_id"] = organization_id
         user = User(
             username=data["username"],
             email=data["email"],
@@ -665,6 +698,9 @@ class UserView(MethodView):
     def _update_user(self, user_id, data):
         """Actualiza los datos de un usuario existente."""
         user = User.query.get_or_404(user_id)
+        claims = get_jwt()
+        if claims.get("rol") == RoleEnum.ORG_ADMIN.value and not self._org_admin_can_manage(user, claims):
+            raise Forbidden("You can only edit client users in your organization.")
         if "username" in data and data["username"] != user.username:
             if User.query.filter_by(username=data["username"]).first():
                 raise BadRequest("Username already exists.")
@@ -685,16 +721,22 @@ class UserView(MethodView):
             "org_viewer": RoleEnum.ORG_VIEWER,
         }
         if "role" in data:
-            claims = get_jwt()
+            role = ROLE_MAP.get(data["role"].lower())
+            if role is None:
+                raise BadRequest("Invalid role.")
             if claims.get("rol") == RoleEnum.ADMINISTRATOR.value:
-                role = ROLE_MAP.get(data["role"].lower())
-                if role is None:
-                    raise BadRequest("Invalid role.")
                 user.role = role
+            elif claims.get("rol") == RoleEnum.ORG_ADMIN.value and role == RoleEnum.ORG_VIEWER:
+                user.role = RoleEnum.ORG_VIEWER
             else:
-                raise Forbidden("Only administrators can change roles.")
+                raise Forbidden("You cannot assign this role.")
         if "organization_id" in data:
-            organization_id = data["organization_id"]
+            try:
+                organization_id = int(data["organization_id"])
+            except (TypeError, ValueError):
+                raise BadRequest("Invalid client organization.")
+            if claims.get("rol") == RoleEnum.ORG_ADMIN.value and organization_id not in self._organization_ids_for_user(claims.get("id")):
+                raise Forbidden("You can only assign your own organization.")
             user = User.query.get(user_id)
             if user:
                 # Desasignar organización anterior si corresponde
@@ -708,41 +750,34 @@ class UserView(MethodView):
         return jsonify(self._serialize_user(user)), 200
 
     def _delete_user(self, user_id=None, user_ids=None):
-        """Elimina un usuario marcándolo como inactivo."""
+        """Desactiva usuarios respetando el alcance del administrador actual."""
         claims = get_jwt()
-
         if user_id and user_ids:
             raise BadRequest("Solo se puede especificar user_id o user_ids, no ambos.")
-
-        if user_id:
-            user = User.query.get_or_404(user_id)
-            user.active = False  # no se borra al usuario, solo se inactiva.
-            db.session.commit()
-            return jsonify({"message": "User deleted successfully"}), 200
-
-        if user_ids:
-            deleted_users = []
-            for user_id in user_ids:
-                user = User.query.get(user_id)
-                if not user:
-                    continue
-                user.active = False
-                deleted_users.append(user.username)
-                db.session.commit()
-                deleted_users_str = ", ".join(deleted_users)
-            return (
-                jsonify({"message": f"Users {deleted_users_str} deleted successfully"}),
-                200,
-            )
-
+        target_ids = [user_id] if user_id else list(user_ids or [])
+        if not target_ids:
+            raise BadRequest("Missing user_id.")
+        deleted_users = []
+        for target_id in target_ids:
+            user = User.query.get(target_id)
+            if not user or not user.active:
+                continue
+            if str(user.id) == str(claims.get("id")):
+                raise Forbidden("You cannot delete your own user.")
+            actor_role = claims.get("rol")
+            allowed = actor_role == RoleEnum.ADMINISTRATOR.value
+            if actor_role == RoleEnum.RESELLER.value:
+                allowed = self._has_access(user, claims)
+            elif actor_role == RoleEnum.ORG_ADMIN.value:
+                allowed = self._org_admin_can_manage(user, claims)
+            if not allowed:
+                raise Forbidden("You cannot delete this user.")
+            user.active = False
+            deleted_users.append(user.username)
         if not deleted_users:
-            return (
-                jsonify(
-                    {"error": "No users were deleted due to permission restrictions"}
-                ),
-                403,
-            )
-
+            raise Forbidden("No users were deleted due to permission restrictions.")
+        db.session.commit()
+        return jsonify({"message": f"Users {', '.join(deleted_users)} deleted successfully"}), 200
     def _has_access(self, user, claims):
         """Verifica si el usuario actual tiene acceso al recurso."""
         user_role = claims.get("rol")
@@ -754,10 +789,12 @@ class UserView(MethodView):
             reseller_package = ResellerPackage.query.filter_by(
                 reseller_id=user_id
             ).first()
-            return any(
+            return bool(reseller_package) and any(
                 org.id in [o.id for o in reseller_package.organizations]
                 for org in user.organizations
             )
+        if user_role == RoleEnum.ORG_ADMIN.value:
+            return self._org_admin_can_manage(user, claims)
         return user_id == user.id
 
     def _serialize_user(self, user):
