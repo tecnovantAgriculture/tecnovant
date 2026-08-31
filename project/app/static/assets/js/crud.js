@@ -32,6 +32,7 @@
     var csvDownloadUrl = CFG.csvDownloadUrl || null;
     var showSelectBox = CFG.showSelectBox !== undefined ? CFG.showSelectBox : true;
     var showViewButton = CFG.showViewButton !== undefined ? CFG.showViewButton : false;
+    var useSweetAlert = CFG.useSweetAlert === true;
 
     /* ------------------------------------------------------------------ */
     /*  State                                                               */
@@ -382,6 +383,27 @@
         window.location.replace(refreshUrl.toString());
     }
 
+    async function showCrudAlert(icon, title, text) {
+        if (useSweetAlert && typeof window.Swal !== 'undefined') {
+            return window.Swal.fire({
+                icon: icon,
+                title: title,
+                text: text || '',
+                confirmButtonText: 'Aceptar',
+                confirmButtonColor: '#059669'
+            });
+        }
+        alert(text ? title + '\n' + text : title);
+    }
+
+    async function responseMessage(response, fallback) {
+        try {
+            var result = await response.clone().json();
+            return result.message || result.msg || result.error || fallback;
+        } catch (error) {
+            return fallback;
+        }
+    }
     /**
      * Save or update an entity.
      */
@@ -428,13 +450,14 @@
             }
 
             if (response.ok) {
+                await showCrudAlert('success', currentAction === 'edit' ? 'Usuario actualizado' : 'Usuario creado', currentAction === 'edit' ? 'Los cambios se guardaron correctamente.' : 'El usuario fue creado correctamente.');
                 refreshViewFromServer();
             } else {
-                alert('Error al guardar el ' + entityNameLower);
+                await showCrudAlert('error', 'No fue posible guardar', await responseMessage(response, 'Revisa los datos e intenta nuevamente.'));
             }
         } catch (error) {
             console.error('Error:', error);
-            alert('Error al guardar el ' + entityNameLower);
+            await showCrudAlert('error', 'No fue posible guardar', 'Ocurrió un error al guardar el ' + entityNameLower + '.');
         }
     }
 
@@ -456,13 +479,14 @@
             });
 
             if (response.ok) {
-                location.reload();
+                await showCrudAlert('success', 'Usuario eliminado', 'El usuario fue eliminado correctamente.');
+                refreshViewFromServer();
             } else {
-                alert('Error al eliminar el ' + entityNameLower);
+                await showCrudAlert('error', 'No fue posible eliminar', await responseMessage(response, 'No se pudo eliminar el usuario.'));
             }
         } catch (error) {
             console.error('Error:', error);
-            alert('Error al eliminar el ' + entityNameLower);
+            await showCrudAlert('error', 'No fue posible eliminar', 'Ocurrió un error al eliminar el ' + entityNameLower + '.');
         }
     }
 

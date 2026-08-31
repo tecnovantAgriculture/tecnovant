@@ -674,13 +674,10 @@ class UserView(MethodView):
         if claims.get("rol") == RoleEnum.ORG_ADMIN.value:
             if role != RoleEnum.ORG_VIEWER:
                 raise Forbidden("Organization administrators can only create client users.")
-            try:
-                organization_id = int(data.get("organization_id"))
-            except (TypeError, ValueError):
-                raise BadRequest("A valid client organization is required.")
-            if organization_id not in self._organization_ids_for_user(claims.get("id")):
-                raise Forbidden("You can only create users in your own organization.")
-            data["organization_id"] = organization_id
+            manager_org_ids = sorted(self._organization_ids_for_user(claims.get("id")))
+            if not manager_org_ids:
+                raise Forbidden("Your account is not assigned to a client organization.")
+            data["organization_id"] = manager_org_ids[0]
         user = User(
             username=data["username"],
             email=data["email"],

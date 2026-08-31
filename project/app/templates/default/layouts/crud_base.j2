@@ -449,8 +449,12 @@ text_color, bg_color, badge_neutral %}
         csvUploadUrl: {{ csv_upload_url | default(none) | tojson }} || null,
         csvDownloadUrl: {{ csv_download_url | default(none) | tojson }} || null,
         showSelectBox: {{ 'true' if (show_select_box | default(false)) else 'false' }},
-        showViewButton: {{ 'true' if (show_view_button | default(false)) else 'false' }}
+        showViewButton: {{ 'true' if (show_view_button | default(false)) else 'false' }},
+        useSweetAlert: {{ 'true' if (crud_use_sweetalert | default(false)) else 'false' }}
     };
 </script>
+{% if crud_use_sweetalert|default(false) %}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+{% endif %}
 <script src="/js/crud.js"></script>
 {% endblock %}
