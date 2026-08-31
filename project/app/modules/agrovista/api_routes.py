@@ -448,19 +448,58 @@ def _preview_geometry_fits_dimensions(geometry, width, height, tolerance=2.0):
 
 
 def _legacy_lot_geographic_geometry(lot):
+    """Recupera el GPS legado eligiendo la escala que coincide con más ortofotos."""
     if not lot.geometry or not lot.media_asset_id:
         return None
     legacy_asset = db.session.get(Asset, lot.media_asset_id)
     if legacy_asset is None:
         return None
-    legacy_width, legacy_height = _asset_legacy_preview_dimensions(legacy_asset)
-    if legacy_width <= 0 or legacy_height <= 0:
-        return None
     legacy_geometry = json.loads(lot.geometry)
-    geographic = _preview_geometry_to_wgs84(
-        legacy_geometry, legacy_asset, legacy_width, legacy_height
+    max_dimensions = {
+        int(current_app.config.get("MEDIA_PREVIEW_MAX_DIM", 2048) or 2048),
+        int(current_app.config.get("MEDIA_DISPLAY_MAX_DIM", 4096) or 4096),
+        2048,
+        4096,
+        max(int(legacy_asset.width or 0), int(legacy_asset.height or 0)),
+    }
+    dimensions = []
+    for max_dim in max_dimensions:
+        if max_dim <= 0 or not legacy_asset.width or not legacy_asset.height:
+            continue
+        if max(legacy_asset.width, legacy_asset.height) <= max_dim:
+            width, height = int(legacy_asset.width), int(legacy_asset.height)
+        else:
+            scale = float(max(legacy_asset.width, legacy_asset.height)) / float(max_dim)
+            width = max(1, int(round(float(legacy_asset.width) / scale)))
+            height = max(1, int(round(float(legacy_asset.height) / scale)))
+        if (width, height) not in dimensions:
+            dimensions.append((width, height))
+    candidate_assets = (
+        Asset.query
+        .filter(
+            Asset.ext.in_(["tif", "tiff"]),
+            Asset.is_geo.is_(True),
+            Asset.width.isnot(None),
+            Asset.height.isnot(None),
+            Asset.crs.isnot(None),
+            Asset.transform.isnot(None),
+        )
+        .all()
     )
-    return legacy_asset, legacy_geometry, geographic, legacy_width, legacy_height
+    best = None
+    best_score = -1
+    for legacy_width, legacy_height in dimensions:
+        try:
+            geographic = _preview_geometry_to_wgs84(
+                legacy_geometry, legacy_asset, legacy_width, legacy_height
+            )
+        except Exception:
+            continue
+        score = sum(1 for candidate in candidate_assets if _geometry_fits_asset(geographic, candidate))
+        if score > best_score:
+            best = (legacy_asset, legacy_geometry, geographic, legacy_width, legacy_height)
+            best_score = score
+    return best
 
 
 def _scoped_farm_lots(farm_id):
