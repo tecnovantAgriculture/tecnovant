@@ -420,17 +420,47 @@ def _geometry_fits_asset(geometry, asset, tolerance=2.0):
         return False
 
 
-def _asset_display_dimensions(asset):
+def _asset_legacy_preview_dimensions(asset):
     """Reconstruye las dimensiones usadas por la vista Leaflet de un TIF legado."""
     width = int(asset.width or 0)
     height = int(asset.height or 0)
     if width <= 0 or height <= 0:
         return width, height
-    max_dim = int(current_app.config.get("MEDIA_DISPLAY_MAX_DIM", 4096) or 4096)
+    max_dim = int(current_app.config.get("MEDIA_PREVIEW_MAX_DIM", 2048) or 2048)
     if max_dim <= 0 or max(width, height) <= max_dim:
         return width, height
     scale = float(max(width, height)) / float(max_dim)
     return max(1, int(round(width / scale))), max(1, int(round(height / scale)))
+
+
+def _preview_geometry_fits_dimensions(geometry, width, height, tolerance=2.0):
+    try:
+        coordinates = _polygon_coordinates(geometry)
+        if len(coordinates) < 3:
+            return False
+        return all(
+            -tolerance <= float(x) <= float(width) + tolerance
+            and -tolerance <= float(y) <= float(height) + tolerance
+            for x, y in coordinates
+        )
+    except Exception:
+        return False
+
+
+def _legacy_lot_geographic_geometry(lot):
+    if not lot.geometry or not lot.media_asset_id:
+        return None
+    legacy_asset = db.session.get(Asset, lot.media_asset_id)
+    if legacy_asset is None:
+        return None
+    legacy_width, legacy_height = _asset_legacy_preview_dimensions(legacy_asset)
+    if legacy_width <= 0 or legacy_height <= 0:
+        return None
+    legacy_geometry = json.loads(lot.geometry)
+    geographic = _preview_geometry_to_wgs84(
+        legacy_geometry, legacy_asset, legacy_width, legacy_height
+    )
+    return legacy_asset, legacy_geometry, geographic, legacy_width, legacy_height
 
 
 def _scoped_farm_lots(farm_id):
@@ -521,9 +551,32 @@ def lot_asset_geometries():
         source_asset_name = None
         if record:
             geometry_obj = json.loads(record.geometry)
+            if not _preview_geometry_fits_dimensions(geometry_obj, preview_width, preview_height):
+                legacy = _legacy_lot_geographic_geometry(lot)
+                if legacy is None:
+                    continue
+                _, _, geographic_obj, _, _ = legacy
+                repaired_geometry = _wgs84_geometry_to_preview(
+                    geographic_obj, asset, preview_width, preview_height
+                )
+                if not _preview_geometry_fits_dimensions(repaired_geometry, preview_width, preview_height):
+                    continue
+                geometry_obj = repaired_geometry
+                record.geometry = json.dumps(geometry_obj)
+                record.geographic_geometry = json.dumps(geographic_obj)
+                record.preview_width = int(round(preview_width))
+                record.preview_height = int(round(preview_height))
+                record.calculation_data = None
+                record.calculated_at = None
+                created_legacy_records = True
         elif lot.media_asset_id == asset.id and lot.geometry:
-            geometry_obj = json.loads(lot.geometry)
-            geographic_obj = _preview_geometry_to_wgs84(geometry_obj, asset, preview_width, preview_height)
+            legacy = _legacy_lot_geographic_geometry(lot)
+            if legacy is None:
+                continue
+            _, _, geographic_obj, _, _ = legacy
+            geometry_obj = _wgs84_geometry_to_preview(
+                geographic_obj, asset, preview_width, preview_height
+            )
             record = LotAssetGeometry(
                 lot_id=lot.id,
                 media_asset_id=asset.id,
@@ -537,28 +590,37 @@ def lot_asset_geometries():
         else:
             source = LotAssetGeometry.query.filter_by(lot_id=lot.id).order_by(LotAssetGeometry.updated_at.desc()).first()
             if not source and lot.geometry and lot.media_asset_id:
-                legacy_asset = db.session.get(Asset, lot.media_asset_id)
-                if legacy_asset is not None:
-                    legacy_width, legacy_height = _asset_display_dimensions(legacy_asset)
-                    if legacy_width > 0 and legacy_height > 0:
-                        legacy_geometry = json.loads(lot.geometry)
-                        legacy_geographic = _preview_geometry_to_wgs84(
-                            legacy_geometry, legacy_asset, legacy_width, legacy_height
-                        )
-                        source = LotAssetGeometry(
-                            lot_id=lot.id,
-                            media_asset_id=legacy_asset.id,
-                            geometry=json.dumps(legacy_geometry),
-                            geographic_geometry=json.dumps(legacy_geographic),
-                            preview_width=legacy_width,
-                            preview_height=legacy_height,
-                        )
-                        db.session.add(source)
-                        db.session.flush()
-                        created_legacy_records = True
+                legacy = _legacy_lot_geographic_geometry(lot)
+                if legacy is not None:
+                    legacy_asset, legacy_geometry, legacy_geographic, legacy_width, legacy_height = legacy
+                    source = LotAssetGeometry(
+                        lot_id=lot.id,
+                        media_asset_id=legacy_asset.id,
+                        geometry=json.dumps(legacy_geometry),
+                        geographic_geometry=json.dumps(legacy_geographic),
+                        preview_width=legacy_width,
+                        preview_height=legacy_height,
+                    )
+                    db.session.add(source)
+                    db.session.flush()
+                    created_legacy_records = True
             if not source:
                 continue
             geometry_obj = _wgs84_geometry_to_preview(source.geographic_geometry, asset, preview_width, preview_height)
+            if not _preview_geometry_fits_dimensions(geometry_obj, preview_width, preview_height):
+                legacy = _legacy_lot_geographic_geometry(lot)
+                if legacy is None:
+                    continue
+                _, _, repaired_geographic, _, _ = legacy
+                geometry_obj = _wgs84_geometry_to_preview(
+                    repaired_geographic, asset, preview_width, preview_height
+                )
+                if not _preview_geometry_fits_dimensions(geometry_obj, preview_width, preview_height):
+                    continue
+                source.geographic_geometry = json.dumps(repaired_geographic)
+                source.calculation_data = None
+                source.calculated_at = None
+                created_legacy_records = True
             transferred = True
             source_asset = db.session.get(Asset, source.media_asset_id)
             source_asset_name = source_asset.original_name if source_asset else None
