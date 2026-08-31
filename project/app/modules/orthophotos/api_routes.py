@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import date
+
 from flask import current_app, jsonify, request
 from flask_jwt_extended import get_jwt_identity
 
@@ -102,6 +104,13 @@ def upload_photos():
     mission_id = request.form.get("mission_id", type=int)
     mission_name = (request.form.get("mission_name") or "").strip()
     upload_session_id = (request.form.get("upload_session_id") or "").strip()
+    foliar_date_raw = (request.form.get("foliar_date") or "").strip()
+    orthophoto_date_raw = (request.form.get("orthophoto_date") or "").strip()
+    try:
+        foliar_date = date.fromisoformat(foliar_date_raw) if foliar_date_raw else None
+        orthophoto_date = date.fromisoformat(orthophoto_date_raw) if orthophoto_date_raw else None
+    except ValueError:
+        return jsonify({"success": False, "message": "Las fechas foliar y de ortofoto no son válidas."}), 400
     organization_id = request.form.get("organization_id", type=int)
     farm_id = request.form.get("farm_id", type=int)
     lot_id = request.form.get("lot_id", type=int)
@@ -141,6 +150,8 @@ def upload_photos():
             organization_id=organization_id if has_location else None,
             farm_id=farm.id if has_location else None,
             lot_id=lot.id if has_location else None,
+            foliar_date=foliar_date,
+            orthophoto_date=orthophoto_date,
         )
         if upload_session_id:
             mission.upload_token = upload_session_id

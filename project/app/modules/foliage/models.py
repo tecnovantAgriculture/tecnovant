@@ -154,6 +154,8 @@ class LotAssetGeometry(db.Model):
     media_asset_id = db.Column(db.Integer, db.ForeignKey("media_asset.id", ondelete="CASCADE"), nullable=False, index=True)
     geometry = db.Column(db.Text, nullable=False)
     geographic_geometry = db.Column(db.Text, nullable=False)
+    calculation_data = db.Column(db.JSON, nullable=True)
+    calculated_at = db.Column(db.DateTime, nullable=True)
     preview_width = db.Column(db.Integer, nullable=False)
     preview_height = db.Column(db.Integer, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)

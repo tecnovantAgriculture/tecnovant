@@ -415,6 +415,16 @@
           <label for="orth-mission-name">Nombre de la mision</label>
           <input id="orth-mission-name" maxlength="160" required placeholder="Ej: Vuelo lote norte julio 2026">
         </div>
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div class="orth-field">
+            <label for="orth-foliar-date">Fecha foliar</label>
+            <input id="orth-foliar-date" type="date" required>
+          </div>
+          <div class="orth-field">
+            <label for="orth-orthophoto-date">Fecha ortofoto</label>
+            <input id="orth-orthophoto-date" type="date" required>
+          </div>
+        </div>
         <div class="orth-field">
           <label for="orth-files">Imagenes</label>
           <input id="orth-files" class="orth-file-input" type="file" name="files" accept=".jpg,.jpeg,.png,.tif,.tiff,image/jpeg,image/png,image/tiff" multiple required>
@@ -444,6 +454,13 @@
               <div class="orth-mission-name">{{ mission.name }}</div>
               {% if mission.folder_path %}<div class="orth-muted"><i class="fas fa-folder"></i> {{ mission.folder_path }}</div>{% endif %}
               {% if mission.description %}<div class="orth-muted">{{ mission.description }}</div>{% endif %}
+              {% if mission.foliar_date or mission.orthophoto_date %}
+                <div class="orth-muted">
+                  {% if mission.foliar_date %}<span>Fecha foliar: {{ mission.foliar_date.strftime('%d/%m/%Y') }}</span>{% endif %}
+                  {% if mission.foliar_date and mission.orthophoto_date %} · {% endif %}
+                  {% if mission.orthophoto_date %}<span>Fecha ortofoto: {{ mission.orthophoto_date.strftime('%d/%m/%Y') }}</span>{% endif %}
+                </div>
+              {% endif %}
             </td>
             <td>{{ mission.photos|length }}</td>
             <td>
@@ -549,6 +566,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const farmSelect = document.getElementById('orth-farm');
   const lotSelect = document.getElementById('orth-lot');
   const missionNameInput = document.getElementById('orth-mission-name');
+  const foliarDateInput = document.getElementById('orth-foliar-date');
+  const orthophotoDateInput = document.getElementById('orth-orthophoto-date');
   const filesInput = document.getElementById('orth-files');
   const newClientWrap = document.getElementById('orth-new-client-wrap');
   const newClientInput = document.getElementById('orth-new-client');
@@ -580,6 +599,10 @@ document.addEventListener('DOMContentLoaded', () => {
   fillSelect(clientSelect, locations, 'Selecciona un cliente', canCreateClients);
   openUpload.addEventListener('click', () => {
     missionNameInput.value = `Mision ${new Date().toLocaleString('es-CO')}`;
+    const now = new Date();
+    const today = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+    foliarDateInput.value = today;
+    orthophotoDateInput.value = today;
     resetNewFields();
     uploadDialog.showModal();
   });
@@ -644,6 +667,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const formData = new FormData();
         formData.append('files', file);
         formData.append('mission_name', missionNameInput.value.trim());
+        formData.append('foliar_date', foliarDateInput.value);
+        formData.append('orthophoto_date', orthophotoDateInput.value);
         formData.append('upload_session_id', uploadSessionId);
         formData.append('organization_id', locationIds.organization);
         formData.append('farm_id', locationIds.farm);

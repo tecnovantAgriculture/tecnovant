@@ -45,6 +45,11 @@
     if (parsed == null) return "0";
     return parsed.toFixed(digits == null ? 2 : digits).replace(/\.00$/, "").replace(/(\.\d*[1-9])0+$/, "$1");
   }
+  function fmtFixed(value, digits) {
+    const parsed = number(value);
+    if (parsed == null) return "0";
+    return parsed.toFixed(digits == null ? 3 : digits);
+  }
   function csrf() {
     return document.querySelector('meta[name="csrf-token"]')?.content || document.querySelector('input[name="csrf_token"]')?.value || "";
   }
@@ -245,7 +250,7 @@
     const rows = state.leaf;
     document.getElementById("mineral-foliar-body").innerHTML = rows.length ? rows.map(item => {
       const common = commonFor(item), selected = String(state.selectedLeaf?.id ?? "") === String(item.id);
-      return `<tr data-leaf-id="${item.id}" class="cursor-pointer hover:bg-sky-50 ${selected ? "bg-sky-100 ring-1 ring-inset ring-sky-500" : ""}"><td class="px-2 py-1.5 text-center">${item.id}</td><td class="px-2 py-1.5 text-center">${esc(common.date || item.common_analysis_date || "")}</td><td class="px-2 py-1.5">${esc(common.farm_name || item.farm_name || "")}</td><td class="px-2 py-1.5">${esc(common.lot_name || item.lot_name || "")}</td>${nutrients.map(n => `<td class="px-2 py-1.5 text-center">${fmt(item[`nutrient_${n.id}`], 3)}</td>`).join("")}</tr>`;
+      return `<tr data-leaf-id="${item.id}" class="cursor-pointer hover:bg-sky-50 ${selected ? "bg-sky-100 ring-1 ring-inset ring-sky-500" : ""}"><td class="px-2 py-1.5 text-center">${item.id}</td><td class="px-2 py-1.5 text-center">${esc(common.date || item.common_analysis_date || "")}</td><td class="px-2 py-1.5">${esc(common.farm_name || item.farm_name || "")}</td><td class="px-2 py-1.5">${esc(common.lot_name || item.lot_name || "")}</td>${nutrients.map(n => `<td class="px-2 py-1.5 text-center">${fmtFixed(item[`nutrient_${n.id}`], 3)}</td>`).join("")}</tr>`;
     }).join("") : `<tr><td colspan="${nutrients.length + 4}" class="p-5 text-center text-gray-500">${state.loadingLeaf ? "Cargando análisis foliares…" : "No hay análisis foliares para este filtro."}</td></tr>`;
   }
 

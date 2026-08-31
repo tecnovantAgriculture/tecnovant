@@ -701,6 +701,21 @@
     let imageMeta = null;
     let statsRequestToken = 0;
 
+    function getOrthophotoDateLabel(meta = imageMeta){
+      const monthNames = ['ENE','FEB','MAR','ABR','MAY','JUN','JUL','AGO','SEP','OCT','NOV','DIC'];
+      const sourceName = String(meta?.original_name || meta?.display_name || meta?.filename || meta?.name || '').replace(/\.[^.]+$/, '');
+      const named = sourceName.match(/(?:^|\D)(\d{1,2})[-_](ENE|FEB|MAR|ABR|MAY|JUN|JUL|AGO|SEP|OCT|NOV|DIC)[-_](\d{4})(?:\D|$)/i);
+      if(named){ return named[1].padStart(2, '0') + '-' + named[2].toUpperCase() + '-' + named[3]; }
+      const numeric = sourceName.match(/(?:^|\D)(\d{1,2})[-_](\d{1,2})[-_](\d{4})(?:\D|$)/);
+      if(numeric){
+        const month = monthNames[Number(numeric[2]) - 1];
+        if(month){ return numeric[1].padStart(2, '0') + '-' + month + '-' + numeric[3]; }
+      }
+      const iso = String(meta?.orthophoto_date || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if(iso){ return iso[3] + '-' + monthNames[Number(iso[2]) - 1] + '-' + iso[1]; }
+      return sourceName || 'Sin fecha de ortofoto';
+    }
+
     /* ---------- DOM ---------- */
     const el = {
       workzone: document.getElementById("workzone"),
@@ -1040,6 +1055,7 @@
         lotState.set(key, {
           id: key,
           name: `Lote ${lotCounter}`,
+          colorIndex: lotCounter - 1,
           stats: null,
           areaStats: null,
           linkedLotId: null,
@@ -1092,8 +1108,16 @@
       }
     }
 
-    const polygonStyleNormal = { color: '#0066cc', weight: 2, opacity: 0.7, fillOpacity: 0.2 };
-    const polygonStyleActive = { color: '#22c55e', weight: 3, opacity: 1, fillOpacity: 0.35 };
+    const polygonInactiveColors = ['#16a34a', '#f97316', '#9333ea', '#0891b2', '#db2777'];
+    const polygonStyleActive = { color: '#2563eb', fillColor: '#2563eb', weight: 3, opacity: 1, fillOpacity: 0.3, dashArray: null };
+
+    function polygonInactiveStyle(layer){
+      const entry = ensureLotEntry(layer);
+      const color = layer?._inactivePolygonColor
+        || polygonInactiveColors[(entry?.colorIndex || 0) % polygonInactiveColors.length];
+      if(layer){ layer._inactivePolygonColor = color; }
+      return { color, fillColor: color, weight: 2, opacity: 0.82, fillOpacity: 0.2 };
+    }
 
     function updatePolygonActionButtons(){
       const hasActiveLayer = activeLayerId !== null && !!drawnItems.getLayer(activeLayerId);
@@ -1128,7 +1152,7 @@
       if(activeLayerId !== null){
         const prevLayer = drawnItems.getLayer(activeLayerId);
         if(prevLayer && typeof prevLayer.setStyle === "function"){
-          prevLayer.setStyle(polygonStyleNormal);
+          prevLayer.setStyle(polygonInactiveStyle(prevLayer));
         }
       }
       // Aplicar estilo activo al nuevo layer
@@ -1641,53 +1665,96 @@
     }
 
     window.getSavedPolygonMineralRows = async function(){
-      if(typeof lotState === "undefined" || !lotState || typeof lotState.values !== "function"){ return []; }
-      const entriesByLot = new Map();
-      Array.from(lotState.values()).forEach(entry => {
-        if(!entry || entry.linkedLotId == null || entry.linkedLotId === ""){ return; }
-        const lotId = String(entry.linkedLotId);
-        const layer = drawnItems && drawnItems.getLayer ? drawnItems.getLayer(entry.id) : null;
-        const area = layer ? Number(computeAreaHaForLayer(layer)) || 0 : 0;
-        const score = (entry.areaStats && Array.isArray(entry.areaStats.nutrients) && entry.areaStats.nutrients.length ? 1000 : 0) + area;
-        const current = entriesByLot.get(lotId);
-        if(!current || score > current.score){ entriesByLot.set(lotId, {entry, score}); }
-      });
-      const entries = Array.from(entriesByLot.values()).map(item => item.entry);
-      const rows = [];
-      for(const entry of entries){
-        const stats = await ensureAreaStatsForEntry(entry);
-        if(!stats || !Array.isArray(stats.nutrients) || !stats.nutrients.length){ continue; }
-        const lot = (foliarState.lots || []).find(item => Number(item && item.id) === Number(entry.linkedLotId));
-        if(!lot || !lot.geometry || !lot.media_asset_id){ continue; }
-        const nutrientsInfo = {};
-        const row = {
-          id: "polygon-" + String(lot.id),
-          is_polygon_calculation: true,
-          common_analysis_date: new Date().toISOString().split("T")[0],
-          farm_id: lot.farm_id,
-          farm_name: getFarmNameById(lot.farm_id) || "Finca",
-          lot_id: lot.id,
-          lot_name: lot.name || entry.linkedLotName || entry.name || ("Lote " + lot.id),
-          protein: stats.protein != null ? stats.protein : stats.protein_average,
-          yield_estimate: stats.bromatologia && (stats.bromatologia.aforo_ua_ha || stats.bromatologia.aforo),
-        };
-        stats.nutrients.forEach(nutrient => {
-          const nutrientId = Number(nutrient && nutrient.nutrient_id);
-          const value = Number(nutrient && nutrient.target_value);
-          if(!Number.isFinite(nutrientId) || !Number.isFinite(value)){ return; }
-          row["nutrient_" + nutrientId] = value;
-          nutrientsInfo[String(nutrientId)] = {
-            name: nutrient.nutrient_name || nutrient.nutrient_symbol || "Nutriente",
-            symbol: nutrient.nutrient_symbol || nutrient.nutrient_name || "",
-            unit: nutrient.nutrient_unit || "",
+      const farmId = Number(window.currentFarmId);
+      if(!Number.isFinite(farmId) || farmId <= 0){ return []; }
+      try{
+        const response = await fetch('/api/agrovista/lot-asset-calculations?farm_id=' + encodeURIComponent(farmId), {credentials:'include'});
+        const payload = await response.json().catch(() => ({items:[]}));
+        if(!response.ok){ throw new Error(payload.description || payload.message || 'No se pudo cargar el historial'); }
+        const items = payload.items || [];
+        for(const item of items){
+          if(item.calculation_data){ continue; }
+          try{
+            const geometry = typeof item.geometry === 'string' ? JSON.parse(item.geometry) : item.geometry;
+            const ring = geometry && geometry.type === 'Polygon' && Array.isArray(geometry.coordinates) ? geometry.coordinates[0] : null;
+            const previewWidth = Number(item.preview_width);
+            const previewHeight = Number(item.preview_height);
+            const widthFull = Number(item.width_full) || previewWidth;
+            const heightFull = Number(item.height_full) || previewHeight;
+            if(!ring || ring.length < 3 || !previewWidth || !previewHeight || !item.media_asset_id){ continue; }
+            const scaleX = widthFull / previewWidth;
+            const scaleY = heightFull / previewHeight;
+            const vertices = ring.map(coord => [Number(coord[0]) * scaleX, (previewHeight - Number(coord[1])) * scaleY]);
+            const calcResponse = await fetch(ENDPOINTS.protein, {
+              method: 'POST',
+              credentials: 'include',
+              headers: {'Content-Type':'application/json', 'X-CSRF-TOKEN':getCsrfToken() || ''},
+              body: JSON.stringify({
+                id: item.asset_uuid,
+                media_asset_id: item.media_asset_id,
+                source: 'media',
+                visible_method: 'combined',
+                width_preview: previewWidth,
+                height_preview: previewHeight,
+                width_full: widthFull,
+                height_full: heightFull,
+                scale_x: scaleX,
+                scale_y: scaleY,
+                coords_full_res: true,
+                vertices: vertices,
+              }),
+            });
+            const stats = await calcResponse.json().catch(() => ({}));
+            if(!calcResponse.ok){ throw new Error(stats.description || 'No se pudo calcular la ortofoto'); }
+            stats.orthophoto_date = stats.orthophoto_date || getOrthophotoDateLabel({original_name:item.orthophoto_name});
+            stats.orthophoto_name = stats.orthophoto_name || item.orthophoto_name || '';
+            const saveResponse = await fetch('/api/agrovista/lot-asset-geometries/calculation', {
+              method: 'POST',
+              credentials: 'include',
+              headers: {'Content-Type':'application/json', 'X-CSRF-TOKEN':getCsrfToken() || ''},
+              body: JSON.stringify({lot_id:item.lot_id, media_asset_id:item.media_asset_id, calculation_data:stats}),
+            });
+            if(!saveResponse.ok){ throw new Error('No se pudo guardar el análisis calculado'); }
+            item.calculation_data = stats;
+          }catch(calculationError){
+            console.warn('No se pudo completar un análisis histórico de ortofoto', calculationError, item);
+          }
+        }
+        return items.map(item => {
+          const stats = item.calculation_data || {};
+          const nutrientsInfo = {};
+          const row = {
+            id: 'polygon-' + String(item.id),
+            is_polygon_calculation: true,
+            media_asset_id: item.media_asset_id,
+            orthophoto_name: item.orthophoto_name || '',
+            common_analysis_date: stats.orthophoto_date || getOrthophotoDateLabel({original_name:item.orthophoto_name}),
+            farm_id: item.farm_id,
+            farm_name: getFarmNameById(item.farm_id) || 'Finca',
+            lot_id: item.lot_id,
+            lot_name: item.lot_name || ('Lote ' + item.lot_id),
+            protein: stats.protein != null ? stats.protein : stats.protein_average,
+            yield_estimate: stats.bromatologia && (stats.bromatologia.aforo_ua_ha || stats.bromatologia.aforo),
           };
-        });
-        row.nutrients_info = nutrientsInfo;
-        rows.push(row);
+          (Array.isArray(stats.nutrients) ? stats.nutrients : []).forEach(nutrient => {
+            const nutrientId = Number(nutrient && nutrient.nutrient_id);
+            const value = Number(nutrient && nutrient.target_value);
+            if(!Number.isFinite(nutrientId) || !Number.isFinite(value)){ return; }
+            row['nutrient_' + nutrientId] = value;
+            nutrientsInfo[String(nutrientId)] = {
+              name: nutrient.nutrient_name || nutrient.nutrient_symbol || 'Nutriente',
+              symbol: nutrient.nutrient_symbol || nutrient.nutrient_name || '',
+              unit: nutrient.nutrient_unit || '',
+            };
+          });
+          row.nutrients_info = nutrientsInfo;
+          return row;
+        }).filter(row => Object.keys(row.nutrients_info).length);
+      }catch(error){
+        console.warn('No se pudo cargar el historial de cálculos por ortofoto', error);
+        return [];
       }
-      return rows;
     };
-
     function toggleNewLotFields(force){
       if(!el.analysisNewLotFields || !el.analysisCreateLotToggle){
         return;
@@ -3087,6 +3154,7 @@
           throw new Error("Selección inválida");
         }
         const assetName = payload?.asset?.display_name || payload?.asset?.original_name || payload?.asset?.name || payload?.meta?.filename || payload?.file?.name;
+        if(meta && assetName){ meta.original_name = assetName; }
         if(assetName){
           updateAssetLabels(assetName);
         }
@@ -3216,7 +3284,7 @@
           const layer = L.geoJSON(item.geojson).getLayers()[0];
           if(!layer){ continue; }
           if(typeof layer.setStyle === "function"){
-            layer.setStyle(polygonStyleNormal);
+            layer.setStyle(polygonInactiveStyle(layer));
           }
           drawnItems.addLayer(layer);
           const entry = ensureLotEntry(layer);
@@ -3235,6 +3303,28 @@
       }
     }
 
+    async function persistAreaStatsForLayer(layer, data){
+      const entry = ensureLotEntry(layer);
+      const assetId = Number(imageMeta?.media_asset_id);
+      const lotId = Number(entry?.linkedLotId);
+      if(!entry || entry.calculationPersisted || !Number.isFinite(assetId) || !Number.isFinite(lotId)){ return; }
+      try{
+        const response = await fetch('/api/agrovista/lot-asset-geometries/calculation', {
+          method: 'POST',
+          credentials: 'include',
+          headers: {'Content-Type':'application/json', 'X-CSRF-TOKEN':getCsrfToken() || ''},
+          body: JSON.stringify({lot_id:lotId, media_asset_id:assetId, calculation_data:data}),
+        });
+        if(!response.ok){
+          const body = await response.json().catch(() => ({}));
+          throw new Error(body.description || body.message || 'No se pudo guardar el cálculo');
+        }
+        entry.calculationPersisted = true;
+      }catch(error){
+        console.warn('No se pudo guardar el cálculo del lote para esta ortofoto', error);
+      }
+    }
+
     async function updateStatsForLayer(layer){
       updateAreaForLayer(layer);
       if(!imageId){ return; }
@@ -3247,6 +3337,7 @@
           entry.stats = getPrimaryStatsFromData(cached);
           entry.areaStats = cloneAreaStats(cached);
         }
+        await persistAreaStatsForLayer(layer, cached);
         renderLotsList();
         if(el.analysisCreateLotToggle && el.analysisCreateLotToggle.checked){
           updateLotAreaInput(false);
@@ -3271,6 +3362,8 @@
       }
       try{
         const data = await fetchAreaStats(verts, true);
+        data.orthophoto_date = getOrthophotoDateLabel();
+        data.orthophoto_name = imageMeta?.original_name || imageMeta?.display_name || imageMeta?.filename || imageMeta?.name || '';
         if(token !== statsRequestToken) return;
         applyAreaStats(data);
         if(layerKey !== null){
@@ -3282,6 +3375,7 @@
           entry.areaStats = cloneAreaStats(data);
           entry.computing = false;
         }
+        await persistAreaStatsForLayer(layer, data);
         renderLotsList();
         if(el.analysisCreateLotToggle && el.analysisCreateLotToggle.checked){
           updateLotAreaInput(false);
@@ -3334,7 +3428,11 @@
     map.on(L.Draw.Event.EDITED, (e)=>{
       e.layers.eachLayer(layer => {
         const k = getLayerKey(layer);
-        if(k !== null){ areaStatsCache.delete(k); }
+        if(k !== null){
+          areaStatsCache.delete(k);
+          const editedEntry = lotState.get(k);
+          if(editedEntry){ editedEntry.calculationPersisted = false; }
+        }
         if(layer instanceof L.Polygon || layer instanceof L.Rectangle){
           updateStatsForLayer(layer);
         }
@@ -3756,6 +3854,7 @@
       el.resetMapBtn.addEventListener('click', () => {
         resetMapState(true);
         clearDraftPolygons();
+        window.resetLotReferenceForAsset?.();
       });
     }
 
@@ -3857,6 +3956,7 @@
                 const item = byLot.get(Number(lot.id));
                 if(!item){ return; }
                 lot.is_objective = !!item.is_objective;
+                lot.calculation_data = item.calculation_data || null;
                 if(item.saved_for_asset){
                   lot.geometry = item.geometry;
                   lot.media_asset_id = currentAssetId;
@@ -3874,6 +3974,7 @@
             }
           }
           lotSelector.innerHTML = '<option value="">-- Seleccionar lote --</option>';
+          const layersToCalculate = [];
           lotGeometryMap = {};
           lotObjectiveMap = {};
           (lots || []).forEach(function(lot) {
@@ -3892,10 +3993,18 @@
             lotSelector.appendChild(opt);
             if (hasGeometry) {
               lotGeometryMap[lot.id] = lot.geometry;
-              drawLotPolygon(lot.geometry, lot.id, false, lot.name);
+              const loadedLayer = drawLotPolygon(lot.geometry, lot.id, false, lot.name, lot.calculation_data);
+              if(loadedLayer){ layersToCalculate.push(loadedLayer); }
             }
           });
           updateSaveButtonState();
+          if(layersToCalculate.length){
+            setStatus('Calculando automáticamente los polígonos de la finca…');
+            for(const layer of layersToCalculate){
+              await updateStatsForLayer(layer);
+            }
+            setStatus(layersToCalculate.length + ' polígonos calculados y disponibles en Foliar.');
+          }
         })
         .catch(err => {
           lotStatus.textContent = '❌ Error al cargar lotes: ' + (err.message || '');
@@ -3936,7 +4045,7 @@
         updateSaveButtonState();
       });
 
-      function drawLotPolygon(geojsonStr, lotId = null, shouldFit = true, lotName = null) {
+      function drawLotPolygon(geojsonStr, lotId = null, shouldFit = true, lotName = null, savedCalculation = null) {
         try {
           var geoJsonObj = JSON.parse(geojsonStr);
           // Extraer coordenadas del GeoJSON (formato: [lng, lat])
@@ -3958,17 +4067,26 @@
           // Crear polígono funcional y agregarlo a drawnItems (no solo al mapa)
           const layer = L.polygon(coords, {
             color: '#ff6600',
+            fillColor: '#ff6600',
             weight: 3,
             opacity: 0.8,
             fillOpacity: 0.15,
             dashArray: '5, 5'
           });
+          layer._inactivePolygonColor = '#ff6600';
           drawnItems.addLayer(layer);
           const entry = ensureLotEntry(layer);
           if (entry) {
             entry.linkedLotId = lotId ? Number(lotId) : null;
             entry.linkedLotName = lotName || entry.linkedLotName;
             if (lotName) entry.name = lotName;
+            if (savedCalculation && typeof savedCalculation === 'object') {
+              entry.stats = getPrimaryStatsFromData(savedCalculation);
+              entry.areaStats = cloneAreaStats(savedCalculation);
+              entry.calculationPersisted = true;
+              const key = getLayerKey(layer);
+              if (key !== null) areaStatsCache.set(key, savedCalculation);
+            }
           }
           wireArea(layer);
           if (lotId) {
@@ -4003,8 +4121,12 @@
               headers:{'Content-Type':'application/json','X-CSRF-TOKEN':getCsrfToken() || ''},
               body:JSON.stringify({lot_id:item.lot_id, media_asset_id:imageMeta?.media_asset_id, geometry:item.geometry, preview_width:imageMeta?.width_preview || imageWidth, preview_height:imageMeta?.height_preview || imageHeight, is_objective:!!item.is_objective})
             }).then(async response => { if(!response.ok){ const body=await response.json().catch(()=>({})); throw new Error(body.description || 'No se pudo guardar un polígono'); } })));
+            for(const item of transferredPolygons){
+              const layer = farmLotPolygons.get(Number(item.lot_id));
+              if(layer){ await updateStatsForLayer(layer); }
+            }
             importObjectivePanel?.classList.add('hidden');
-            lotStatus.textContent = transferredPolygons.length + ' polígonos confirmados en esta ortofoto.';
+            lotStatus.textContent = transferredPolygons.length + ' polígonos confirmados y calculados en esta ortofoto.';
             if(window.Swal){ await Swal.fire({icon:'success',title:'Polígonos ubicados',text:'Los polígonos de la finca quedaron asociados a esta ortofoto.',confirmButtonText:'Aceptar'}); }
             transferredPolygons = [];
           }catch(error){
@@ -4329,6 +4451,10 @@ if(window.Swal) Swal.fire({
         window.currentFarmId = null;
         if (farmSelector) farmSelector.value = '';
         selectedLotId = null;
+        pendingNewPolygon = null;
+        currentLotPolygon = null;
+        transferredPolygons = [];
+        importObjectivePanel?.classList.add('hidden');
         clearFarmLotPolygons();
         lotGeometryMap = {};
         lotObjectiveMap = {};
@@ -4400,16 +4526,23 @@ if(window.Swal) Swal.fire({
     function getComparableLotEntries(){
       if(typeof lotState === "undefined" || !lotState || typeof lotState.values !== "function"){ return []; }
       const entriesByLot = new Map();
+      const drawnEntries = [];
       Array.from(lotState.values()).forEach(entry => {
-        if(!entry || entry.linkedLotId == null || entry.linkedLotId === "" || !Number.isFinite(Number(entry.linkedLotId))){ return; }
-        const lotId = String(entry.linkedLotId);
+        if(!entry){ return; }
         const layer = drawnItems && drawnItems.getLayer ? drawnItems.getLayer(entry.id) : null;
-        const area = layer ? Number(computeAreaHaForLayer(layer)) || 0 : 0;
+        if(!layer){ return; }
+        const isLinked = entry.linkedLotId != null && entry.linkedLotId !== "" && Number.isFinite(Number(entry.linkedLotId));
+        if(!isLinked){
+          drawnEntries.push(entry);
+          return;
+        }
+        const lotId = String(entry.linkedLotId);
+        const area = Number(computeAreaHaForLayer(layer)) || 0;
         const score = (entry.areaStats && Array.isArray(entry.areaStats.nutrients) && entry.areaStats.nutrients.length ? 1000 : 0) + area;
         const current = entriesByLot.get(lotId);
         if(!current || score > current.score){ entriesByLot.set(lotId, {entry, score}); }
       });
-      return Array.from(entriesByLot.values()).map(item => item.entry);
+      return Array.from(entriesByLot.values()).map(item => item.entry).concat(drawnEntries);
     }
     function getPreviewEntries(){
       const entries = [];
@@ -4670,7 +4803,7 @@ if(window.Swal) Swal.fire({
     function comparisonEntryMeta(entry){
       const stats=entry.areaStats||{}, lot=(foliarState.lots||[]).find(item=>Number(item.id)===Number(entry.linkedLotId));
       const farm=(foliarState.farms||[]).find(item=>Number(item.id)===Number(lot&&lot.farm_id));
-      return {id:entry.linkedLotId||entry.id,date:stats.analysis_date||stats.date||new Date().toISOString().slice(0,10),farm:stats.farm_name||(farm&&farm.name)||"",lot:(lot&&lot.name)||entry.name||"Lote"};
+      return {id:entry.linkedLotId||entry.id,date:stats.orthophoto_date||stats.analysis_date||stats.date||getOrthophotoDateLabel(),farm:stats.farm_name||(farm&&farm.name)||"",lot:(lot&&lot.name)||entry.name||"Lote"};
     }
     function comparisonEntryValues(entry){
       const values=new Map();
@@ -4722,7 +4855,7 @@ if(window.Swal) Swal.fire({
     async function openFlexibleLotComparison(){
       let entries=getComparableLotEntries().slice(0,20);
       if(!comparisonModal||!comparisonContent){return;}
-      if(entries.length<2){if(window.Swal){await Swal.fire({icon:'info',title:'Comparacion no disponible',text:'Se necesitan por lo menos dos lotes guardados.',confirmButtonText:'Aceptar'});}return;}
+      if(entries.length<2){if(window.Swal){await Swal.fire({icon:'info',title:'Comparacion no disponible',text:'Se necesitan por lo menos dos polígonos calculados, guardados o recién dibujados.',confirmButtonText:'Aceptar'});}return;}
       comparisonContent.innerHTML='<div class="p-8 text-center text-sm text-gray-500"><i class="fas fa-spinner fa-spin mr-2"></i>Preparando comparacion...</div>';
       comparisonModal.classList.remove('hidden');document.body.classList.add('overflow-hidden');
       try{
@@ -4882,7 +5015,7 @@ if(window.Swal) Swal.fire({
         const labelNode = comparisonButton.querySelector("span");
         if(labelNode){ labelNode.textContent = comparableCount >= 2 ? "Comparar " + comparableCount + " lotes" : "Comparar lotes (mínimo 2)"; }
         const availability = document.getElementById("lotComparisonAvailability");
-        if(availability){ availability.textContent = canCompare ? "Comparación disponible para los lotes guardados." : "Guarda al menos dos lotes en esta ortofoto para compararlos."; }
+        if(availability){ availability.textContent = canCompare ? "Comparación disponible para los polígonos calculados." : "Dibuja o carga al menos dos polígonos para compararlos."; }
         if(topComparisonButton){
           topComparisonButton.disabled = false;
           topComparisonButton.title = canCompare ? "Comparar lotes contra el objetivo de referencia" : comparisonButton.title;
@@ -4912,5 +5045,5 @@ if(window.Swal) Swal.fire({
 
   })();
   </script>
-  <script src="/js/mineral-balance-modal.js?v=polygon-lots-20260820-2" data-comparison-url="{{ url_for('agrovista.comparison_config') }}"></script>
+  <script src="/js/mineral-balance-modal.js?v=foliar-fixed-3-decimals-20260830" data-comparison-url="{{ url_for('agrovista.comparison_config') }}"></script>
 {% endblock %}

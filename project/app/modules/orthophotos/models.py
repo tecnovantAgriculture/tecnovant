@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import secrets
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, JSON, String, Text
+from sqlalchemy import Date, DateTime, Float, ForeignKey, Integer, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.extensions import db
@@ -19,6 +19,8 @@ class OrthophotoMission(db.Model):
     )
     name: Mapped[str] = mapped_column(String(160), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
+    foliar_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    orthophoto_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     organization_id: Mapped[int | None] = mapped_column(
         ForeignKey("organizations.id", ondelete="SET NULL"), index=True
     )

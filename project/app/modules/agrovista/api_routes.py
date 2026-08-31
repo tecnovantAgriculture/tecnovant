@@ -2,6 +2,7 @@ import io
 import json
 import math
 import zipfile
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -434,6 +435,8 @@ def lot_asset_geometries():
         record.geographic_geometry = json.dumps(geographic_obj)
         record.preview_width = preview_width
         record.preview_height = preview_height
+        record.calculation_data = None
+        record.calculated_at = None
         is_objective = bool(data.get("is_objective"))
         if is_objective:
             Lot.query.filter(Lot.farm_id == lot.farm_id, Lot.id != lot.id).update({"is_objective": False}, synchronize_session=False)
@@ -503,10 +506,85 @@ def lot_asset_geometries():
             transferred = True
             source_asset = db.session.get(Asset, source.media_asset_id)
             source_asset_name = source_asset.original_name if source_asset else None
-        items.append({"lot_id": lot.id, "lot_name": lot.name, "geometry": json.dumps(geometry_obj), "is_objective": bool(lot.is_objective), "saved_for_asset": bool(record or lot.media_asset_id == asset.id), "transferred": transferred, "source_asset_name": source_asset_name})
+            record = LotAssetGeometry(
+                lot_id=lot.id,
+                media_asset_id=asset.id,
+                geometry=json.dumps(geometry_obj),
+                geographic_geometry=source.geographic_geometry,
+                preview_width=int(round(preview_width)),
+                preview_height=int(round(preview_height)),
+            )
+            db.session.add(record)
+            created_legacy_records = True
+        items.append({"lot_id": lot.id, "lot_name": lot.name, "geometry": json.dumps(geometry_obj), "is_objective": bool(lot.is_objective), "saved_for_asset": bool(record or lot.media_asset_id == asset.id), "transferred": transferred, "source_asset_name": source_asset_name, "calculation_data": record.calculation_data if record else None, "calculated_at": record.calculated_at.isoformat() if record and record.calculated_at else None})
     if created_legacy_records:
         db.session.commit()
     return jsonify({"items": items, "objective_lot_id": next((lot.id for lot in lots if lot.is_objective), None)}), 200
+
+
+@api.route("/lot-asset-calculations", methods=["GET"])
+@jwt_required()
+def list_lot_asset_calculations():
+    """Lista el historial calculado de una finca, separado por ortofoto."""
+    farm_id = request.args.get("farm_id", type=int)
+    if not farm_id:
+        abort(400, description="farm_id is required")
+    lots = _scoped_farm_lots(farm_id)
+    lot_map = {lot.id: lot for lot in lots}
+    if not lot_map:
+        return jsonify({"items": []}), 200
+    records = (
+        LotAssetGeometry.query
+        .filter(LotAssetGeometry.lot_id.in_(lot_map))
+        .order_by(LotAssetGeometry.calculated_at.desc(), LotAssetGeometry.id.desc())
+        .all()
+    )
+    items = []
+    for record in records:
+        asset = db.session.get(Asset, record.media_asset_id)
+        lot = lot_map.get(record.lot_id)
+        items.append({
+            "id": record.id,
+            "lot_id": record.lot_id,
+            "lot_name": lot.name if lot else "Lote",
+            "farm_id": farm_id,
+            "media_asset_id": record.media_asset_id,
+            "asset_uuid": asset.uuid if asset else "",
+            "orthophoto_name": asset.original_name if asset else "",
+            "geometry": record.geometry,
+            "preview_width": record.preview_width,
+            "preview_height": record.preview_height,
+            "width_full": asset.width if asset else None,
+            "height_full": asset.height if asset else None,
+            "calculation_data": record.calculation_data,
+            "calculated_at": record.calculated_at.isoformat() if record.calculated_at else None,
+        })
+    return jsonify({"items": items}), 200
+
+
+@api.route("/lot-asset-geometries/calculation", methods=["POST"])
+@jwt_required()
+def save_lot_asset_calculation():
+    """Persiste el cálculo de un lote para una ortofoto específica."""
+    data = request.get_json(force=True, silent=False) or {}
+    try:
+        lot_id = int(data.get("lot_id"))
+        asset_id = int(data.get("media_asset_id"))
+    except (TypeError, ValueError):
+        abort(400, description="invalid lot or orthophoto")
+    calculation = data.get("calculation_data")
+    if not isinstance(calculation, dict):
+        abort(400, description="invalid calculation data")
+    lot = db.session.get(Lot, lot_id)
+    if lot is None or not check_resource_access(lot.farm, get_jwt()):
+        abort(404, description="lot not found")
+    record = LotAssetGeometry.query.filter_by(lot_id=lot_id, media_asset_id=asset_id).first()
+    if record is None:
+        abort(404, description="polygon is not saved for this orthophoto")
+    record.calculation_data = calculation
+    record.calculated_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({"saved": True, "calculated_at": record.calculated_at.isoformat()}), 200
 
 
 @api.route("/polygon-kmz", methods=["POST"])
