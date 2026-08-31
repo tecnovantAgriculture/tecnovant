@@ -2686,6 +2686,72 @@
 
       let isOpen = false;
       let onPick = async (_payload)=>{};
+      const pendingAssetKey = 'agrovista:pending-display-asset';
+      const displayWatchers = new Map();
+
+      function delay(ms){
+        return new Promise(resolve => setTimeout(resolve, ms));
+      }
+
+      async function notifyDisplayReady(asset, displayMeta){
+        let selectNow = true;
+        if(window.Swal){
+          const result = await Swal.fire({
+            icon: 'success',
+            title: 'Ortofoto lista',
+            text: `${asset.original_name || asset.name || 'La ortofoto'} ya puede visualizarse en el mapa.`,
+            confirmButtonText: 'Seleccionar ahora',
+            showCancelButton: true,
+            cancelButtonText: 'Después',
+          });
+          selectNow = !!result.isConfirmed;
+        }else{
+          selectNow = window.confirm('La ortofoto ya está lista. ¿Deseas seleccionarla ahora?');
+        }
+        if(selectNow){
+          await onPick({meta:displayMeta, asset});
+          _loadAnalysisLayersLazy(asset.id);
+        }
+      }
+
+      async function watchDisplayUntilReady(asset){
+        if(!asset || !asset.id || displayWatchers.has(String(asset.id))){ return; }
+        const watcher = (async () => {
+          try{
+            localStorage.setItem(pendingAssetKey, JSON.stringify(asset));
+          }catch(_){ /* localStorage puede estar restringido */ }
+          for(let attempt = 0; attempt < 720; attempt += 1){
+            await delay(attempt === 0 ? 5000 : 10000);
+            try{
+              const response = await fetch(ENDPOINTS.displayInfo(asset.id), {credentials:'include', cache:'no-store'});
+              if(response.status === 202){ continue; }
+              if(!response.ok){ throw new Error(await response.text()); }
+              const displayMeta = await response.json();
+              try{ localStorage.removeItem(pendingAssetKey); }catch(_){}
+              await notifyDisplayReady(asset, displayMeta);
+              return;
+            }catch(error){
+              console.warn('No se pudo consultar el estado de la ortofoto', error);
+            }
+          }
+          if(window.Swal){
+            await Swal.fire({
+              icon:'warning',
+              title:'La ortofoto continúa procesándose',
+              text:'El proceso está tardando más de lo esperado. Puedes volver a seleccionarla desde Medios más tarde.',
+              confirmButtonText:'Aceptar',
+            });
+          }
+        })().finally(() => displayWatchers.delete(String(asset.id)));
+        displayWatchers.set(String(asset.id), watcher);
+      }
+
+      setTimeout(() => {
+        try{
+          const pendingAsset = JSON.parse(localStorage.getItem(pendingAssetKey) || 'null');
+          if(pendingAsset && pendingAsset.id){ watchDisplayUntilReady(pendingAsset); }
+        }catch(_){ /* sin espera guardada */ }
+      }, 1000);
 
       function hide(){
         isOpen = false;
@@ -2714,9 +2780,19 @@
           // Phase 1 — fast: only display PNG dimensions from DB (< 200ms).
           const dispResp = await fetch(ENDPOINTS.displayInfo(asset.id), { credentials: 'include' });
           if(dispResp.status === 202){
-            setStatus('Ortofoto guardada. La vista del mapa sigue procesandose en segundo plano. Actualiza e intenta seleccionarla en unos momentos.');
-            alert('La ortofoto quedo guardada, pero la vista del mapa aun se esta generando. Intenta seleccionarla en unos momentos.');
+            setStatus('Ortofoto guardada. La vista del mapa se está generando en segundo plano. Te avisaremos cuando esté lista.');
             hide();
+            watchDisplayUntilReady(asset);
+            if(window.Swal){
+              await Swal.fire({
+                icon:'info',
+                title:'Ortofoto en procesamiento',
+                text:'Puedes continuar trabajando. Te avisaremos cuando la vista del mapa esté lista.',
+                confirmButtonText:'Entendido',
+              });
+            }else{
+              alert('La ortofoto se está procesando. Te avisaremos cuando esté lista.');
+            }
             return;
           }
           if(!dispResp.ok){

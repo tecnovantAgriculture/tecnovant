@@ -420,6 +420,19 @@ def _geometry_fits_asset(geometry, asset, tolerance=2.0):
         return False
 
 
+def _asset_display_dimensions(asset):
+    """Reconstruye las dimensiones usadas por la vista Leaflet de un TIF legado."""
+    width = int(asset.width or 0)
+    height = int(asset.height or 0)
+    if width <= 0 or height <= 0:
+        return width, height
+    max_dim = int(current_app.config.get("MEDIA_DISPLAY_MAX_DIM", 4096) or 4096)
+    if max_dim <= 0 or max(width, height) <= max_dim:
+        return width, height
+    scale = float(max(width, height)) / float(max_dim)
+    return max(1, int(round(width / scale))), max(1, int(round(height / scale)))
+
+
 def _scoped_farm_lots(farm_id):
     lots = Lot.query.filter_by(farm_id=farm_id, active=True).all()
     if lots and not check_resource_access(lots[0].farm, get_jwt()):
@@ -523,6 +536,26 @@ def lot_asset_geometries():
             created_legacy_records = True
         else:
             source = LotAssetGeometry.query.filter_by(lot_id=lot.id).order_by(LotAssetGeometry.updated_at.desc()).first()
+            if not source and lot.geometry and lot.media_asset_id:
+                legacy_asset = db.session.get(Asset, lot.media_asset_id)
+                if legacy_asset is not None:
+                    legacy_width, legacy_height = _asset_display_dimensions(legacy_asset)
+                    if legacy_width > 0 and legacy_height > 0:
+                        legacy_geometry = json.loads(lot.geometry)
+                        legacy_geographic = _preview_geometry_to_wgs84(
+                            legacy_geometry, legacy_asset, legacy_width, legacy_height
+                        )
+                        source = LotAssetGeometry(
+                            lot_id=lot.id,
+                            media_asset_id=legacy_asset.id,
+                            geometry=json.dumps(legacy_geometry),
+                            geographic_geometry=json.dumps(legacy_geographic),
+                            preview_width=legacy_width,
+                            preview_height=legacy_height,
+                        )
+                        db.session.add(source)
+                        db.session.flush()
+                        created_legacy_records = True
             if not source:
                 continue
             geometry_obj = _wgs84_geometry_to_preview(source.geographic_geometry, asset, preview_width, preview_height)
