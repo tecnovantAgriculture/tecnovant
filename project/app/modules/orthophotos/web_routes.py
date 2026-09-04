@@ -687,7 +687,9 @@ def select_mission_orthophoto(mission_id: int):
                 filename=f"{mission.name}-ortofoto.tif",
                 content_type="image/tiff",
             )
-            asset, created = MediaController().save_local_upload(upload)
+            asset, created = MediaController().save_local_upload(
+                upload, organization_id=mission.organization_id
+            )
         metadata = dict(asset.exif) if isinstance(asset.exif, dict) else {}
         metadata.update({
             "orthophoto_mission_id": mission.id,

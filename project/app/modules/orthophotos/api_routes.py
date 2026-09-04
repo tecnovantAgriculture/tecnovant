@@ -170,7 +170,9 @@ def upload_photos():
         if not file or not getattr(file, "filename", None):
             continue
         try:
-            asset, _created = ctrl.save_local_upload(file)
+            asset, _created = ctrl.save_local_upload(
+                file, organization_id=mission.organization_id
+            )
             photo = OrthophotoPhoto(
                 mission_id=mission.id,
                 asset_id=asset.id,

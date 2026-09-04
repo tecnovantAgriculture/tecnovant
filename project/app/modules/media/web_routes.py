@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 
 from flask import (
+    abort,
     current_app,
     flash,
     redirect,
@@ -27,6 +28,11 @@ from app.core.controller import login_required
 from app.helpers.dashboard_helpers import get_dashboard_menu
 
 from . import media as web
+from .access import (
+    accessible_asset_for_storage_key,
+    accessible_asset_query,
+    default_upload_organization_id,
+)
 from .controller import MediaController
 from .helpers import _media_root, friendly_preprocess_error
 from .models import Asset, AssetType, AssetVariant, StorageLocation
@@ -38,13 +44,13 @@ from .tasks import enqueue_preprocess_asset
 
 def _cloud_storage_redirect_for_key(key: str):
     normalized_key = key.replace("\\", "/")
-    asset = Asset.query.filter_by(storage_key=key).first()
+    asset = accessible_asset_for_storage_key(key)
     if asset and asset.storage == StorageLocation.GCS.value:
         return redirect(public_or_signed_url(key))
-    variant = AssetVariant.query.filter_by(storage_key=key).first()
+    variant = next((item for item in asset.variants if item.storage_key == key), None) if asset else None
     if variant and variant.storage == StorageLocation.GCS.value:
         return redirect(public_or_signed_url(key))
-    if normalized_key.startswith("display/") and gcs_enabled():
+    if asset and normalized_key.startswith("display/") and gcs_enabled():
         return redirect(public_or_signed_url(normalized_key))
     return None
 def _parse_allowed_types(raw: str | None) -> set[str]:
@@ -69,7 +75,7 @@ def _fetch_assets_for_library(
 ):
     """Obtiene la paginación de activos aplicando los filtros indicados."""
 
-    query = Asset.query
+    query = accessible_asset_query()
     if q:
         like = f"%{q}%"
         query = query.filter(Asset.original_name.ilike(like))
@@ -160,7 +166,7 @@ def library():
 @login_required
 def element(objective_id: int):
     """Vista: Detalle de un activo multimedia."""
-    asset = Asset.query.options(selectinload(Asset.variants)).get_or_404(objective_id)
+    asset = accessible_asset_query().options(selectinload(Asset.variants)).filter_by(id=objective_id).first_or_404()
     thumb_variant = next(
         (variant for variant in asset.variants if variant.kind == "gallery"), None
     )
@@ -251,7 +257,7 @@ def element(objective_id: int):
 @login_required
 def element_reprocess(objective_id: int):
     """Re-encolar el procesamiento en background para un activo."""
-    asset = Asset.query.get_or_404(objective_id)
+    asset = accessible_asset_query().filter_by(id=objective_id).first_or_404()
     cache_rel_dir = os.path.join("cache", asset.uuid)
     cache_abs_dir = os.path.join(_media_root(), cache_rel_dir)
     os.makedirs(cache_abs_dir, exist_ok=True)
@@ -319,7 +325,9 @@ def upload_local():
             )
         try:
             ctrl = MediaController()
-            asset, created = ctrl.save_local_upload(file)
+            asset, created = ctrl.save_local_upload(
+                file, organization_id=default_upload_organization_id()
+            )
             enqueue_preprocess_asset(asset.id)
             flash(
                 (
@@ -423,6 +431,8 @@ def serve_file(key: str):
     :status 200: Archivo servido con MIME type automático
     :status 404: Archivo no encontrado o path traversal detectado
     """
+    if not accessible_asset_for_storage_key(key):
+        abort(404)
     # Serve strictly under the media root. Passing the full key to
     # send_from_directory lets safe_join reject any traversal (404).
     cloud_redirect = _cloud_storage_redirect_for_key(key)
@@ -444,6 +454,8 @@ def download_file(key: str):
     :status 200: Archivo descargado como attachment
     :status 404: Archivo no encontrado
     """
+    if not accessible_asset_for_storage_key(key):
+        abort(404)
     cloud_redirect = _cloud_storage_redirect_for_key(key)
     if cloud_redirect is not None:
         return cloud_redirect

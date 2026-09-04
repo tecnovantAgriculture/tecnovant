@@ -35,6 +35,9 @@ class Asset(db.Model):
     __tablename__ = "media_asset"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    organization_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     uuid: Mapped[str] = mapped_column(
         String(36), unique=True, nullable=False, index=True
     )
@@ -55,11 +58,16 @@ class Asset(db.Model):
     mpp: Mapped[Optional[float]] = mapped_column(Float)
     exif: Mapped[Optional[dict]] = mapped_column(JSON)
     variants = relationship("AssetVariant", cascade="all, delete-orphan")
+    organization = relationship("Organization")
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False
     )
 
-    __table_args__ = (UniqueConstraint("sha256", "size_bytes", name="uq_asset_dedup"),)
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id", "sha256", "size_bytes", name="uq_asset_org_dedup"
+        ),
+    )
 
 
 class AssetVariant(db.Model):

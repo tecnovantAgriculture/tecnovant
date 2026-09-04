@@ -37,7 +37,9 @@ class MediaController:
     detalles del sistema de ficheros ni las transformaciones realizadas.
     """
 
-    def save_local_upload(self, file: FileStorage) -> Tuple[Asset, bool]:
+    def save_local_upload(
+        self, file: FileStorage, organization_id: int | None = None
+    ) -> Tuple[Asset, bool]:
         """Guardar un archivo recibido vía formulario dentro del almacenamiento local.
 
         El proceso valida la presencia de un nombre de archivo, garantiza que el
@@ -82,7 +84,11 @@ class MediaController:
                 raise ValueError(validation_error)
 
         existing_asset = (
-            Asset.query.filter_by(sha256=digest, size_bytes=size_bytes)
+            Asset.query.filter_by(
+                organization_id=organization_id,
+                sha256=digest,
+                size_bytes=size_bytes,
+            )
             .order_by(Asset.id.desc())
             .first()
         )
@@ -121,6 +127,7 @@ class MediaController:
         )
 
         asset = Asset(
+            organization_id=organization_id,
             uuid=os.path.splitext(os.path.basename(abs_path))[0],
             original_name=filename,
             ext=ext.lstrip("."),

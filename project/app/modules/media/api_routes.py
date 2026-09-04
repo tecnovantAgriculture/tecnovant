@@ -16,6 +16,7 @@ from app.core.controller import api_login_required, check_permission
 from app.extensions import db
 
 from . import media_api as api
+from .access import accessible_asset_query, default_upload_organization_id
 from .controller import MediaController
 from .helpers import (
     PreprocessConfig,
@@ -41,7 +42,7 @@ def ping():
 @check_permission(required_roles=["administrator", "reseller"])
 def reprocess_asset(uuid: str):
     """Encolar reprocesamiento de un asset en background thread."""
-    asset = Asset.query.filter_by(uuid=uuid).first_or_404()
+    asset = accessible_asset_query().filter_by(uuid=uuid).first_or_404()
     app = current_app._get_current_object()
 
     # Limpiar cache existente para forzar reprocesamiento limpio
@@ -78,7 +79,7 @@ def reprocess_asset(uuid: str):
 @api_login_required
 def get_preprocess_status(uuid: str):
     """Obtener estado detallado del preprocesamiento de un asset."""
-    asset = Asset.query.filter_by(uuid=uuid).first_or_404()
+    asset = accessible_asset_query().filter_by(uuid=uuid).first_or_404()
 
     cache_dir = _resolve_cache_dir(current_app._get_current_object(), asset.uuid)
     processing_flag = cache_dir / ".processing"
@@ -143,7 +144,7 @@ def list_assets():
     """Listar los metadatos de los activos registrados ordenados por fecha."""
 
     items = (
-        Asset.query.options(selectinload(Asset.variants))
+        accessible_asset_query().options(selectinload(Asset.variants))
         .order_by(Asset.created_at.desc())
         .all()
     )
@@ -196,7 +197,9 @@ def upload_local_api():
     file = request.files["file"]
     try:
         ctrl = MediaController()
-        asset, created = ctrl.save_local_upload(file)
+        asset, created = ctrl.save_local_upload(
+            file, organization_id=default_upload_organization_id()
+        )
         enqueue_preprocess_asset(asset.id)
         status = 201 if created else 200
         return (
@@ -241,6 +244,7 @@ def delete_asset(asset_id: int):
     """Eliminar un activo existente identificado por su ID numérico."""
 
     try:
+        accessible_asset_query().filter_by(id=asset_id).first_or_404()
         ctrl = MediaController()
         ok = ctrl.delete_asset(asset_id)
         if not ok:
@@ -275,7 +279,7 @@ def asset_display_info(asset_id: int):
 
     from app.modules.agrovista.services.display_assets import _resolve_display_dir
 
-    asset = Asset.query.get_or_404(asset_id)
+    asset = accessible_asset_query().filter_by(id=asset_id).first_or_404()
     if asset.storage not in {StorageLocation.LOCAL.value, StorageLocation.GCS.value}:
         return jsonify({"message": "Almacenamiento de asset no soportado."}), 400
 
@@ -374,7 +378,7 @@ def asset_agrovista_meta(asset_id: int):
     - Clave de caché (NPZ) para que Agrovista calcule NDVI aprox y estadísticas.
     """
 
-    asset = Asset.query.get_or_404(asset_id)
+    asset = accessible_asset_query().filter_by(id=asset_id).first_or_404()
     if asset.storage not in {StorageLocation.LOCAL.value, StorageLocation.GCS.value}:
         return (
             jsonify({"message": "Almacenamiento de asset no soportado en este flujo."}),
