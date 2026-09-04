@@ -738,7 +738,14 @@ def dashboard():
     # Count only GEOTIFF assets that are available in the platform
     from app.modules.media.models import Asset, AssetType
 
-    images_processed = Asset.query.filter(
+    media_query = Asset.query
+    if not is_platform_admin:
+        media_query = (
+            Asset.query.filter(Asset.organization_id.in_(org_ids))
+            if org_ids
+            else Asset.query.filter(Asset.id.is_(None))
+        )
+    images_processed = media_query.filter(
         Asset.asset_type == AssetType.GEOTIFF.value
     ).count()
 
@@ -803,14 +810,12 @@ def dashboard():
     from app.modules.media.models import Asset, AssetType
 
     recent_image_analyses = []
-    recent_assets = []
-    if is_platform_admin:
-        recent_assets = (
-            Asset.query.filter(Asset.asset_type == AssetType.GEOTIFF.value)
-            .order_by(Asset.created_at.desc())
-            .limit(3)
-            .all()
-        )
+    recent_assets = (
+        media_query.filter(Asset.asset_type == AssetType.GEOTIFF.value)
+        .order_by(Asset.created_at.desc())
+        .limit(3)
+        .all()
+    )
     for asset in recent_assets:
         recent_image_analyses.append(
             {
