@@ -94,6 +94,8 @@ def upgrade():
                 metadata = json.loads(row.exif)
             except (TypeError, ValueError):
                 metadata = {}
+        if not isinstance(metadata, dict):
+            metadata = {}
         mission_id = str(metadata.get("orthophoto_mission_id") or "")
         organization_id = missions.get(mission_id)
         if organization_id is not None:
