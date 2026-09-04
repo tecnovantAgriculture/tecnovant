@@ -4895,7 +4895,7 @@ if(window.Swal) Swal.fire({
       const sum=key=>items.reduce((total,item)=>total+(Number(item[key])||0),0),cell=value=>formatNutrientValue(value);
       const row=(label,key,css,total,toggle)=>'<tr '+(toggle?'data-compact-row="'+toggle+'" class="hidden '+css+'"':'class="'+css+'"')+'><th class="sticky left-0 bg-inherit px-1.5 py-1 text-left font-semibold">'+label+'</th>'+items.map(item=>'<td class="px-1 py-1 text-center">'+cell(item[key])+'</td>').join('')+'<td class="px-1 py-1 text-center font-bold">'+(total==null?'--':cell(total))+'</td></tr>';
       return '<div class="rounded-lg border border-gray-200 bg-white p-2 shadow-sm">'
-        +'<div class="mb-2 flex items-center justify-between gap-2"><h4 class="text-xs font-semibold">Balance de Minerales</h4><div class="flex gap-1.5"><button type="button" data-compact-toggle="grade" class="rounded border border-amber-300 bg-amber-50 px-2 py-1 text-[9px] font-bold text-amber-800">GRADO FORMULA</button><button type="button" data-compact-toggle="nano" class="rounded border border-emerald-300 bg-emerald-50 px-2 py-1 text-[9px] font-bold text-emerald-800">NANO</button></div></div>'
+        +'<div class="mb-2 flex items-center justify-between gap-2"><h4 class="text-xs font-semibold">Balance de Minerales</h4></div>'
         +'<div class="mb-2 grid grid-cols-4 divide-x overflow-hidden rounded border text-center text-[9px]">'+cards.map((card,index)=>'<div class="'+(index<2?'bg-gray-50':'bg-gray-100')+' px-1 py-1"><span class="block uppercase text-gray-500">'+card[0]+'</span><strong class="text-xs">'+(card[1]==null?'--':Number(card[1]).toFixed(2))+'</strong></div>').join('')+'</div>'
         +'<div class="overflow-x-auto"><table class="w-full min-w-[820px] table-fixed text-[9px]"><thead class="bg-gray-50"><tr><th class="sticky left-0 bg-gray-50 px-1.5 py-1 text-left">Concepto</th>'+items.map(item=>'<th class="px-1 py-1">'+symbols[item._key]+'</th>').join('')+'<th class="px-1 py-1">Total</th></tr></thead><tbody>'
         +row('Objetivo (% / ppm)','objective_raw','bg-indigo-50',null)
@@ -4904,7 +4904,8 @@ if(window.Swal) Swal.fire({
         +row('Actual (kg/ha)','actual_kg','bg-sky-50',sum('actual_kg'))
         +row('Diferencia (kg/ha)','difference_kg','bg-red-50 text-red-600',sum('difference_kg'))
         +row('Grado formula (%)','grade_pct','bg-yellow-50',sum('grade_pct'),'grade')
-        +row('Nano (kg/ha)','nano_kg','bg-emerald-50 text-emerald-800',balance.total_nano_kg_ha,'nano')
+        +row('Nano (kg/ha)','nano_kg','bg-emerald-50 text-emerald-800',balance.total_nano_kg_ha)
+        +row('Grado nano (%)','nano_pct','bg-emerald-100 text-emerald-900',100)
         +'</tbody></table></div></div>';
     }
     function bindCompactBalance(){

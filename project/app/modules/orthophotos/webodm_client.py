@@ -195,6 +195,7 @@ class WebODMClient:
         )
         return response.json()
 
+
     def restart_task(
         self,
         project_id: int,

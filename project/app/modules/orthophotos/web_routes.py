@@ -437,9 +437,21 @@ def dashboard():
             flash("Mision creada correctamente.", "success")
             return redirect(redirect_url)
 
-    missions = OrthophotoMission.query.order_by(
-        OrthophotoMission.created_at.desc()
-    ).all()
+    user = User.query.get(user_id)
+    if user and user.is_admin():
+        missions = OrthophotoMission.query.order_by(
+            OrthophotoMission.created_at.desc()
+        ).all()
+    elif client_ids:
+        missions = (
+            OrthophotoMission.query.filter(
+                OrthophotoMission.organization_id.in_(client_ids)
+            )
+            .order_by(OrthophotoMission.created_at.desc())
+            .all()
+        )
+    else:
+        missions = []
     for mission in missions:
         _refresh_processing_status(mission)
     if any(
@@ -505,7 +517,7 @@ def webodm_status():
 @web.route("/dashboard/orthophotos/<int:mission_id>/process", methods=["POST"])
 @login_required
 def process_mission(mission_id: int):
-    mission = OrthophotoMission.query.get_or_404(mission_id)
+    mission = _accessible_mission(mission_id)
     profile = request.form.get("profile", "max_2d")
     if profile not in PROCESSING_PROFILES:
         profile = "max_2d"
@@ -553,7 +565,7 @@ def process_mission(mission_id: int):
 @web.route("/dashboard/orthophotos/<int:mission_id>/webodm", methods=["GET"])
 @login_required
 def open_webodm_task(mission_id: int):
-    mission = OrthophotoMission.query.get_or_404(mission_id)
+    mission = _accessible_mission(mission_id)
     if not mission.webodm_project_id or not mission.webodm_task_id:
         abort(404)
     return redirect(
@@ -703,7 +715,7 @@ def select_mission_orthophoto(mission_id: int):
 @web.route("/dashboard/orthophotos/<int:mission_id>/download/<asset_key>", methods=["GET"])
 @login_required
 def download_mission_asset(mission_id: int, asset_key: str):
-    mission = OrthophotoMission.query.get_or_404(mission_id)
+    mission = _accessible_mission(mission_id)
     if not mission.webodm_project_id or not mission.webodm_task_id:
         abort(404)
     if asset_key not in DOWNLOADABLE_ASSETS:
@@ -767,7 +779,7 @@ def download_mission_asset(mission_id: int, asset_key: str):
 @web.route("/dashboard/orthophotos/<int:mission_id>/delete", methods=["POST"])
 @login_required
 def delete_mission(mission_id: int):
-    mission = OrthophotoMission.query.get_or_404(mission_id)
+    mission = _accessible_mission(mission_id)
     if mission.status in ACTIVE_STATUSES:
         message = "No se puede eliminar una mision mientras esta procesando."
         if request.headers.get("X-Requested-With") == "XMLHttpRequest":

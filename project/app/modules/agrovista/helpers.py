@@ -1129,6 +1129,7 @@ def compute_mineral_balance(
             "difference_kg": None,
             "grade_pct": None,
             "nano_kg": None,
+            "nano_pct": None,
             "_symbol": symbol,
         }
         if targ is not None and act is not None and aforo_val is not None:
@@ -1155,6 +1156,16 @@ def compute_mineral_balance(
                 entry["grade_pct"] = magnitude / total * 100
             grade = NANO_PRODUCT_GRADES.get(entry["_symbol"] or "", DEFAULT_NANO_GRADE)
             entry["nano_kg"] = magnitude / grade
+
+    nano_total = sum(
+        entry["nano_kg"]  # type: ignore[arg-type]
+        for entry in entries
+        if entry["nano_kg"] is not None
+    )
+
+    for entry in entries:
+        if entry["nano_kg"] is not None and nano_total > 0:
+            entry["nano_pct"] = entry["nano_kg"] / nano_total * 100  # type: ignore[operator]
         del entry["_symbol"]
         for key in (
             "objective_raw",
@@ -1164,13 +1175,14 @@ def compute_mineral_balance(
             "difference_kg",
             "grade_pct",
             "nano_kg",
+            "nano_pct",
         ):
             entry[key] = _round(entry[key])  # type: ignore[arg-type]
 
     return {
         "entries": entries,
         "total_kg_ha": _round(total) if total > 0 else None,
-        "total_nano_kg_ha": _round(total) if total > 0 else None,
+        "total_nano_kg_ha": _round(nano_total) if nano_total > 0 else None,
         "aforo_actual_fallback": aforo_actual_fallback,
         "aforo_actual_used": _round(aforo_act_val),
     }
