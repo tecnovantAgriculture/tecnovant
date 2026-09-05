@@ -45,7 +45,9 @@ from .tasks import enqueue_preprocess_asset
 def _cloud_storage_redirect_for_key(key: str):
     normalized_key = key.replace("\\", "/")
     asset = accessible_asset_for_storage_key(key)
-    if asset and asset.storage == StorageLocation.GCS.value:
+    # The owning asset also resolves for generated cache/display keys. Only
+    # the original file inherits its storage; analysis previews remain local.
+    if asset and asset.storage_key == key and asset.storage == StorageLocation.GCS.value:
         return redirect(public_or_signed_url(key))
     variant = next((item for item in asset.variants if item.storage_key == key), None) if asset else None
     if variant and variant.storage == StorageLocation.GCS.value:
@@ -581,4 +583,3 @@ def admin_cleanup():
             cache_dirs=[],
             title="Media Cache Admin",
         )
-
