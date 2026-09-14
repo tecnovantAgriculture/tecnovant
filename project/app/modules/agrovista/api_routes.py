@@ -2,6 +2,7 @@ import io
 import json
 import math
 import zipfile
+import xml.etree.ElementTree as ET
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional
@@ -782,11 +783,128 @@ def save_lot_asset_calculation():
     record = LotAssetGeometry.query.filter_by(lot_id=lot_id, media_asset_id=asset_id).first()
     if record is None:
         abort(404, description="polygon is not saved for this orthophoto")
-    record.calculation_data = calculation
+    existing_calculation = record.calculation_data if isinstance(record.calculation_data, dict) else {}
+    optional_form = existing_calculation.get("_optional_lot_form")
+    record.calculation_data = {**calculation, **({"_optional_lot_form": optional_form} if isinstance(optional_form, dict) else {})}
     record.calculated_at = datetime.utcnow()
     db.session.commit()
     return jsonify({"saved": True, "calculated_at": record.calculated_at.isoformat()}), 200
 
+
+@api.route("/lot-asset-form", methods=["GET", "PUT"])
+@jwt_required()
+def lot_asset_form():
+    """Consulta o guarda datos opcionales para una combinación lote-ortofoto."""
+    source = request.args if request.method == "GET" else (request.get_json(force=True, silent=False) or {})
+    try:
+        lot_id = int(source.get("lot_id"))
+        asset_id = int(source.get("media_asset_id"))
+    except (TypeError, ValueError):
+        abort(400, description="invalid lot or orthophoto")
+    lot = db.session.get(Lot, lot_id)
+    if lot is None or not check_resource_access(lot.farm, get_jwt()):
+        abort(404, description="lot not found")
+    record = LotAssetGeometry.query.filter_by(lot_id=lot_id, media_asset_id=asset_id).first()
+    if record is None:
+        abort(404, description="polygon is not saved for this orthophoto")
+    calculation = record.calculation_data if isinstance(record.calculation_data, dict) else {}
+    if request.method == "GET":
+        return jsonify({"form_data": calculation.get("_optional_lot_form") or {}}), 200
+    submitted = source.get("form_data")
+    if not isinstance(submitted, dict):
+        abort(400, description="invalid form data")
+    allowed = {"entry_date", "exit_date", "rest_days", "paddock", "milk_liters"}
+    cleaned = {}
+    for key in allowed:
+        value = submitted.get(key)
+        if value in (None, ""):
+            cleaned[key] = None
+        elif key in {"entry_date", "exit_date", "paddock"}:
+            cleaned[key] = str(value).strip()[:255 if key == "paddock" else 32]
+        else:
+            try:
+                cleaned[key] = float(value)
+            except (TypeError, ValueError):
+                abort(400, description=f"invalid value for {key}")
+    cleaned["saved_at"] = datetime.utcnow().isoformat()
+    record.calculation_data = {**calculation, "_optional_lot_form": cleaned}
+    db.session.commit()
+    return jsonify({"saved": True, "form_data": cleaned}), 200
+
+
+@api.route("/polygon-import", methods=["POST"])
+@jwt_required()
+def polygon_import():
+    """Importa el primer polígono de un KML/KMZ y lo lleva al preview actual."""
+    uploaded = request.files.get("file")
+    if uploaded is None or not uploaded.filename:
+        abort(400, description="select a KML or KMZ file")
+    suffix = Path(uploaded.filename).suffix.lower()
+    if suffix not in {".kml", ".kmz"}:
+        abort(400, description="only KML and KMZ files are supported")
+    raw = uploaded.read(10 * 1024 * 1024 + 1)
+    if len(raw) > 10 * 1024 * 1024:
+        abort(413, description="file is too large")
+    try:
+        if suffix == ".kmz":
+            with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+                candidates = [name for name in archive.namelist() if name.lower().endswith(".kml")]
+                if not candidates:
+                    abort(400, description="KMZ does not contain a KML file")
+                info = archive.getinfo(candidates[0])
+                if info.file_size > 10 * 1024 * 1024:
+                    abort(413, description="KML inside KMZ is too large")
+                raw = archive.read(info)
+        root = ET.fromstring(raw)
+    except (zipfile.BadZipFile, ET.ParseError, KeyError, OSError):
+        abort(400, description="invalid KML or KMZ file")
+
+    coordinates = None
+    for node in root.findall(".//{*}Polygon/{*}outerBoundaryIs/{*}LinearRing/{*}coordinates"):
+        parsed = []
+        for token in (node.text or "").replace("\n", " ").split():
+            parts = token.split(",")
+            if len(parts) < 2:
+                continue
+            try:
+                lon, lat = float(parts[0]), float(parts[1])
+            except ValueError:
+                continue
+            if math.isfinite(lon) and math.isfinite(lat):
+                parsed.append((lon, lat))
+        if len(parsed) >= 3:
+            coordinates = parsed
+            break
+    if not coordinates:
+        abort(400, description="KML does not contain a valid polygon")
+    if len(coordinates) > 5000:
+        abort(400, description="polygon has too many vertices")
+    if coordinates[0] == coordinates[-1]:
+        coordinates.pop()
+
+    img_id = _validate_id(str(request.form.get("id", "")))
+    asset = _find_media_asset(request.form.get("media_asset_id"), img_id)
+    if asset is None:
+        abort(404, description="asset not found")
+    affine = _affine_from_dict(asset.transform)
+    if affine is None or not asset.crs or not asset.width or not asset.height:
+        abort(400, description="asset lacks georeference")
+    try:
+        preview_width = float(request.form.get("width_preview") or asset.width)
+        preview_height = float(request.form.get("height_preview") or asset.height)
+        transformer = Transformer.from_crs("EPSG:4326", asset.crs, always_xy=True)
+        inverse = ~affine
+        vertices = []
+        for lon, lat in coordinates:
+            x_map, y_map = transformer.transform(lon, lat)
+            col, row = inverse * (x_map, y_map)
+            vertices.append([
+                col * preview_width / float(asset.width),
+                preview_height - (row * preview_height / float(asset.height)),
+            ])
+    except (TypeError, ValueError, ZeroDivisionError):
+        abort(400, description="could not transform polygon coordinates")
+    return jsonify({"vertices": vertices, "count": len(vertices)}), 200
 
 @api.route("/polygon-kmz", methods=["POST"])
 @jwt_required()

@@ -232,6 +232,11 @@
                     class="inline-flex items-center rounded-md bg-white dark:bg-gray-700 px-3 py-1.5 text-xs font-medium text-gray-800 dark:text-gray-100 shadow-md ring-1 ring-gray-200 dark:ring-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors hidden">
               Salir pantalla completa
             </button>
+            <button id="upload-kml-kmz"
+                    class="inline-flex items-center rounded-md bg-white dark:bg-gray-700 px-3 py-1.5 text-xs font-medium text-gray-800 dark:text-gray-100 shadow-md ring-1 ring-gray-200 dark:ring-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">
+              Subir KML/KMZ
+            </button>
+            <input id="kml-kmz-file" type="file" accept=".kml,.kmz,application/vnd.google-earth.kml+xml,application/vnd.google-earth.kmz" class="hidden">
             <button id="download-kmz"
                     class="inline-flex items-center rounded-md bg-white dark:bg-gray-700 px-3 py-1.5 text-xs font-medium text-gray-400 dark:text-gray-400 shadow-md ring-1 ring-gray-200 dark:ring-gray-600 opacity-60 cursor-not-allowed"
                     disabled>
@@ -359,6 +364,7 @@
           <summary class="flex cursor-pointer items-center justify-between gap-3">
             <span class="text-sm font-semibold text-gray-800 dark:text-gray-200"><i class="fas fa-chart-line mr-2"></i>Análisis del lote seleccionado</span>
             <span id="activeLotName" class="ml-auto text-right text-xs text-gray-500 dark:text-gray-400">Sin lote seleccionado</span>
+            <button id="openLotOptionalForm" type="button" class="ml-1 whitespace-nowrap rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100"><i class="fas fa-clipboard-list mr-1"></i>Datos del lote</button>
             <i class="collapsible-chevron fas fa-chevron-down text-xs text-gray-500" aria-hidden="true"></i>
           </summary>
           <div class="mt-3 space-y-3">
@@ -734,6 +740,7 @@
       image:  (id) => `/api/agrovista/image/${id}.png`,
       protein:"/api/agrovista/protein",
       kmz:"/api/agrovista/polygon-kmz",
+      polygonImport:"/api/agrovista/polygon-import",
       mediaMeta:(id) => `/api/media/assets/${id}/agrovista-meta`,
       displayInfo:(id) => `/api/media/assets/${id}/display-info`,
       analysisCrops:"/api/agrovista/analysis-crops",
@@ -811,6 +818,8 @@
       btnFsOut: document.getElementById("exit-fullscreen"),
       btnOpenPicker: document.getElementById("open-media-picker"),
       btnDownloadKmz: document.getElementById("download-kmz"),
+      btnUploadKmlKmz: document.getElementById("upload-kml-kmz"),
+      kmlKmzFile: document.getElementById("kml-kmz-file"),
       previewSelector: document.getElementById("preview-selector"),
       legendPanel: document.getElementById("legendPanel"),
       ndviIndicator: document.getElementById("ndviIndicator"),
@@ -1792,6 +1801,7 @@
             lot_name: item.lot_name || ('Lote ' + item.lot_id),
             protein: stats.protein != null ? stats.protein : stats.protein_average,
             yield_estimate: stats.bromatologia && (stats.bromatologia.aforo_ua_ha || stats.bromatologia.aforo),
+            rest_days: stats._optional_lot_form && stats._optional_lot_form.rest_days,
           };
           (Array.isArray(stats.nutrients) ? stats.nutrients : []).forEach(nutrient => {
             const nutrientId = Number(nutrient && nutrient.nutrient_id);
@@ -3640,7 +3650,50 @@
         }
       });
     }
-    if(el.btnDownloadKmz){
+    if(el.btnUploadKmlKmz && el.kmlKmzFile){
+      el.btnUploadKmlKmz.addEventListener('click', ()=>{
+        if(!imageMeta || !imageMeta.media_asset_id){
+          alert('Selecciona una ortofoto antes de cargar el archivo.');
+          return;
+        }
+        el.kmlKmzFile.click();
+      });
+      el.kmlKmzFile.addEventListener('change', async ()=>{
+        const file=el.kmlKmzFile.files && el.kmlKmzFile.files[0];
+        if(!file) return;
+        el.btnUploadKmlKmz.disabled=true;
+        try{
+          const form=new FormData();
+          form.append('file',file);
+          form.append('id',imageId || String(imageMeta.media_asset_id));
+          form.append('media_asset_id',imageMeta.media_asset_id);
+          form.append('width_preview',imageMeta.width_preview || imageWidth);
+          form.append('height_preview',imageMeta.height_preview || imageHeight);
+          const res=await fetch(ENDPOINTS.polygonImport,{method:'POST',credentials:'include',headers:{'X-CSRF-TOKEN':getCsrfToken() || ''},body:form});
+          const body=await res.json().catch(()=>({}));
+          if(!res.ok) throw new Error(body.description || body.error || 'No se pudo importar el archivo.');
+          const vertices=Array.isArray(body.vertices)?body.vertices:[];
+          if(vertices.length<3) throw new Error('El archivo no contiene un polígono válido.');
+          const layer=L.polygon(vertices.map(point=>[point[1],point[0]]),{color:'#2563eb',fillColor:'#2563eb',weight:3,opacity:0.95,fillOpacity:0.18});
+          drawnItems.addLayer(layer);
+          ensureLotEntry(layer);
+          wireArea(layer);
+          setActiveLayer(layer);
+          window.prepareLotReferenceForNewPolygon?.(layer);
+          window.updateLotReferenceSaveState?.();
+          saveDraftPolygons();
+          map.fitBounds(layer.getBounds(),{padding:[24,24]});
+          await updateStatsForLayer(layer);
+          setStatus('Polígono KML/KMZ cargado correctamente.');
+        }catch(error){
+          console.error(error);
+          alert(error.message || 'Error al cargar el KML/KMZ.');
+        }finally{
+          el.btnUploadKmlKmz.disabled=false;
+          el.kmlKmzFile.value='';
+        }
+      });
+    }    if(el.btnDownloadKmz){
       el.btnDownloadKmz.addEventListener('click', async ()=>{
         const verts = currentVerticesRaster || currentVertices;
         if(!verts || verts.length < 3){
@@ -4035,6 +4088,19 @@
       let currentLotPolygon = null;
       const farmLotPolygons = new Map();
       let selectedLotId = null;
+      window.getAgrovistaLotFormContext = function(){
+        const lotId = Number(selectedLotId);
+        const assetId = Number(imageMeta && imageMeta.media_asset_id);
+        const lot = (foliarState.lots || []).find(function(item){ return Number(item.id) === lotId; });
+        return {
+          lotId: lotId || null,
+          assetId: assetId || null,
+          lotName: (lot && lot.name) || (lotSelector.options[lotSelector.selectedIndex] && lotSelector.options[lotSelector.selectedIndex].textContent) || "",
+          date: (imageMeta && imageMeta.orthophoto_date) || "",
+          dateLabel: getOrthophotoDateLabel(),
+          calculationData: (lot && lot.calculation_data) || {}
+        };
+      };
       let pendingNewPolygon = null;
       let transferredPolygons = [];
 
@@ -4882,7 +4948,7 @@ if(window.Swal) Swal.fire({
         + row('Actual (% · ppm)', 'actual_raw', 'bg-sky-50', null)
         + row('Actual (kg/ha)', 'actual_kg', 'bg-sky-50', actualKgTotal, ' kg/ha')
         + row('Diferencia (kg/ha)', 'difference_kg', 'bg-red-50 text-red-600', diffTotal, ' kg/ha')
-        + row('Grado fórmula (%)', 'grade_pct', 'bg-yellow-50', gradeTotal, '%')
+        + row('Grado tradicional (%)', 'grade_pct', 'bg-yellow-50', gradeTotal, '%')
         + '<tr class="bg-emerald-50"><td class="sticky left-0 bg-emerald-50 px-2 py-1.5 font-semibold">Nano (kg/ha)</td>' + entries.map(item => '<td class="px-2 py-1.5 text-center font-semibold text-emerald-800">' + formatNutrientValue(item.nano_kg) + '</td>').join('') + '<td class="px-2 py-1.5 text-center font-bold">' + (balance.total_nano_kg_ha != null ? formatNutrientValue(balance.total_nano_kg_ha) + ' kg/ha' : '--') + '</td></tr></tbody></table></div>'
         + '<p class="mt-3 text-[11px] text-gray-600">Objetivo se expresa en kg/ha con el aforo objetivo y Actual con el aforo actual. La Diferencia solo refleja déficits y Nano es la cantidad estimada del producto a aplicar según su concentración.</p></div>';
     }
@@ -4903,7 +4969,7 @@ if(window.Swal) Swal.fire({
         +row('Actual (% / ppm)','actual_raw','bg-sky-50',null)
         +row('Actual (kg/ha)','actual_kg','bg-sky-50',sum('actual_kg'))
         +row('Diferencia (kg/ha)','difference_kg','bg-red-50 text-red-600',sum('difference_kg'))
-        +row('Grado formula (%)','grade_pct','bg-yellow-50',sum('grade_pct'),'grade')
+        +row('Grado tradicional (%)','grade_pct','bg-yellow-50',sum('grade_pct'))
         +row('Nano (kg/ha)','nano_kg','bg-emerald-50 text-emerald-800',balance.total_nano_kg_ha)
         +row('Grado nano (%)','nano_pct','bg-emerald-100 text-emerald-900',100)
         +'</tbody></table></div></div>';
@@ -4977,16 +5043,28 @@ if(window.Swal) Swal.fire({
     }
     function comparisonTableRow(entry,selected,objective){
       const meta=comparisonEntryMeta(entry),values=comparisonEntryValues(entry),id=String(entry.id).replace(/[^a-zA-Z0-9_-]/g,'');
+      const optionalForm=(entry.areaStats&&entry.areaStats._optional_lot_form)||{};
+      const restDays=optionalForm.rest_days!=null&&optionalForm.rest_days!==''?optionalForm.rest_days:'--';
       const css=objective?'bg-amber-50 ring-1 ring-inset ring-amber-300':(selected?'bg-emerald-100 ring-1 ring-inset ring-emerald-500':'cursor-pointer hover:bg-emerald-50');
-      return '<tr '+(objective?'':'data-comparison-row="'+id+'"')+' class="'+css+'"><td class="px-2 py-1.5 text-center">'+escapeHtml(meta.id)+'</td><td class="px-2 py-1.5 text-center">'+escapeHtml(meta.date)+'</td><td class="px-2 py-1.5">'+escapeHtml(meta.farm)+'</td><td class="px-2 py-1.5 font-semibold">'+escapeHtml(meta.lot)+'</td>'+comparisonNutrients.map(item=>'<td class="px-2 py-1.5 text-center">'+comparisonMetric(values.get(item[0]))+'</td>').join('')+'</tr>';
+      return '<tr '+(objective?'':'data-comparison-row="'+id+'"')+' class="'+css+'"><td class="px-2 py-1.5 text-center">'+escapeHtml(meta.id)+'</td><td class="px-2 py-1.5 text-center">'+escapeHtml(meta.date)+'</td><td class="px-2 py-1.5">'+escapeHtml(meta.farm)+'</td><td class="px-2 py-1.5 font-semibold">'+escapeHtml(meta.lot)+'</td>'+(objective?'<td></td><td></td>':'<td class="px-2 py-1.5 text-center">'+escapeHtml(restDays)+'</td><td class="px-2 py-1.5 text-center"><button type="button" data-foliar-analysis="'+id+'" class="whitespace-nowrap rounded-md border border-emerald-300 bg-white px-2 py-1 font-semibold text-emerald-700 hover:bg-emerald-50"><i class="fas fa-chart-bar mr-1"></i>Ver análisis</button></td>')+comparisonNutrients.map(item=>'<td class="px-2 py-1.5 text-center">'+comparisonMetric(values.get(item[0]))+'</td>').join('')+'</tr>';
     }
     function comparisonTable(title,rows,objective){
-      const head='<tr><th class="px-2 py-2">ID</th><th class="px-2 py-2">Fecha</th><th class="px-2 py-2 text-left">Finca</th><th class="px-2 py-2 text-left">Potrero</th>'+comparisonNutrients.map(item=>'<th class="px-2 py-2">'+item[1]+'</th>').join('')+'</tr>';
+      const head='<tr><th class="px-2 py-2">ID</th><th class="px-2 py-2">Fecha</th><th class="px-2 py-2 text-left">Finca</th><th class="px-2 py-2 text-left">Potrero</th><th class="px-2 py-2">Días de descanso</th><th class="px-2 py-2">Acción</th>'+comparisonNutrients.map(item=>'<th class="px-2 py-2">'+item[1]+'</th>').join('')+'</tr>';
       return '<section class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm"><h3 class="border-b px-3 py-2 text-xs font-bold uppercase tracking-wider '+(objective?'text-amber-700':'text-emerald-700')+'">'+title+'</h3><div class="max-h-[190px] overflow-auto"><table class="w-full min-w-[1120px] border-collapse text-[11px]"><thead class="sticky top-0 z-10 bg-gray-100 text-gray-600">'+head+'</thead><tbody class="divide-y">'+rows+'</tbody></table></div></section>';
     }
     function comparisonObjective(entry){
       const stats=entry.areaStats||{},broma=stats.bromatologia||{};
       return {crop_name:comparisonEntryMeta(entry).lot,protein:stats.protein||stats.protein_average,target_value:broma.aforo_ua_ha||broma.aforo||stats.yield_estimate||stats.aforo_ua_ha||stats.aforo,nutrient_targets:(stats.nutrients||[]).map(item=>({nutrient_name:item.nutrient_name,nutrient_symbol:item.nutrient_symbol,nutrient_unit:item.nutrient_unit,target_value:item.target_value}))};
+    }
+    function openComparisonFoliarAnalysis(entry, objective){
+      if(!entry||!window.FoliarAnalysisDrawer){return;}
+      const meta=comparisonEntryMeta(entry),actuals=comparisonEntryValues(entry);
+      const targets=new Map(((objective&&objective.nutrient_targets)||[]).map(item=>[canonicalNutrientKey({name:item.nutrient_name,symbol:item.nutrient_symbol}),item]));
+      const names={n:'Nitrógeno',p:'Fósforo',k:'Potasio',ca:'Calcio',mg:'Magnesio',s:'Azufre',cu:'Cobre',zn:'Zinc',mn:'Manganeso',b:'Boro',mo:'Molibdeno',fe:'Hierro',si:'Silicio'};
+      window.FoliarAnalysisDrawer.open({title:'Análisis foliar detallado',lot:meta.lot,date:meta.date,nutrients:comparisonNutrients.map(([key,symbol])=>{const target=targets.get(key)||{},unit=target.nutrient_unit||(key.length>1&&!['ca','mg','si'].includes(key)?'ppm':'%');return {name:target.nutrient_name||names[key]||symbol,symbol,actual:actuals.get(key),ideal:target.target_value,unit,isMicro:String(unit).toLowerCase().includes('ppm')};})});
+    }
+    function bindComparisonFoliarAnalysis(entries, objective){
+      comparisonContent.querySelectorAll('[data-foliar-analysis]').forEach(button=>button.addEventListener('click',event=>{event.stopPropagation();const entry=entries.find(item=>String(item.id).replace(/[^a-zA-Z0-9_-]/g,'')===button.dataset.foliarAnalysis);openComparisonFoliarAnalysis(entry,objective);}));
     }
     async function openLotComparisonTables(){
       let entries=getComparableLotEntries().slice(0,20);
@@ -5006,6 +5084,7 @@ if(window.Swal) Swal.fire({
         const render=async()=>{
           comparisonContent.innerHTML='<div class="space-y-3"><div><h2 class="text-sm font-semibold">Comparación de análisis foliares</h2><p class="mt-1 text-[11px] text-gray-500">Seleccione una fila de Foliar para calcularla contra el Objetivo.</p></div>'+comparisonTable('Objetivo',comparisonTableRow(reference,false,true),true)+comparisonTable('Foliar',compared.map(entry=>comparisonTableRow(entry,entry===selected,false)).join(''),false)+'<section class="rounded-xl border border-gray-200 bg-white p-3 shadow-sm"><h3 class="mb-3 text-xs font-bold uppercase tracking-wider text-emerald-700">Balance</h3><div id="lotComparisonBalance" class="p-8 text-center text-xs text-gray-500"><i class="fas fa-spinner fa-spin mr-2"></i>Calculando balance...</div></section></div>';
           comparisonContent.querySelectorAll('[data-comparison-row]').forEach(row=>row.addEventListener('click',async()=>{selected=compared.find(entry=>String(entry.id).replace(/[^a-zA-Z0-9_-]/g,'')===row.dataset.comparisonRow)||selected;await render();}));
+          bindComparisonFoliarAnalysis(compared,objective);
           const comparisonHeading=comparisonContent.querySelector('h2');
           if(comparisonHeading){comparisonHeading.textContent='Comparacion de analisis foliares';}
           if(comparisonHeading&&comparisonHeading.parentElement){comparisonHeading.parentElement.classList.add('hidden');}
@@ -5048,6 +5127,7 @@ if(window.Swal) Swal.fire({
             selected=foliarEntries.find(entry=>String(entry.id).replace(/[^a-zA-Z0-9_-]/g,'')===row.dataset.comparisonRow)||selected;
             await render();
           }));
+          bindComparisonFoliarAnalysis(foliarEntries,objective);
           const balance=await getBalance(selected,buildRows(selected.areaStats||{},objective),objective);
           const node=document.getElementById('lotComparisonBalance');
           if(node){node.outerHTML=compactComparisonBalance(balance,selected,objective);bindCompactBalance();}
@@ -5210,5 +5290,7 @@ if(window.Swal) Swal.fire({
 
   })();
   </script>
-  <script src="/js/mineral-balance-modal.js?v=foliar-fixed-3-decimals-20260830" data-comparison-url="{{ url_for('agrovista.comparison_config') }}"></script>
+  <script src="/js/lot-optional-form.js?v=20260914-4"></script>
+  <script src="/js/foliar-analysis-drawer.js?v=20260914"></script>
+  <script src="/js/mineral-balance-modal.js?v=rest-days-20260914" data-comparison-url="{{ url_for('agrovista.comparison_config') }}"></script>
 {% endblock %}

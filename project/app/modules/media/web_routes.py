@@ -72,23 +72,44 @@ def _parse_allowed_types(raw: str | None) -> set[str]:
     return {piece for piece in pieces if piece in valid}
 
 
-def _fetch_assets_for_library(
-    q: str | None, type_filter: str | None, page: int, per_page: int
-):
-    """Obtiene la paginación de activos aplicando los filtros indicados."""
-
+def _filtered_asset_query(q: str | None, type_filter: str | None):
     query = accessible_asset_query()
     if q:
-        like = f"%{q}%"
-        query = query.filter(Asset.original_name.ilike(like))
+        query = query.filter(Asset.original_name.ilike(f"%{q}%"))
     if type_filter == AssetType.IMAGE.value:
         query = query.filter(Asset.asset_type == AssetType.IMAGE.value)
     elif type_filter == AssetType.GEOTIFF.value:
         query = query.filter(Asset.asset_type == AssetType.GEOTIFF.value)
+    return query
 
+
+def _fetch_assets_for_library(
+    q: str | None, type_filter: str | None, page: int, per_page: int,
+    folder: str | None = None,
+):
+    """Obtiene activos de una carpeta o, por defecto, solo los no organizados."""
+    folder_expr = Asset.exif["orthophoto_folder"].as_string()
+    query = _filtered_asset_query(q, type_filter)
+    if folder:
+        query = query.filter(folder_expr == folder)
+    else:
+        query = query.filter((folder_expr.is_(None)) | (folder_expr == ""))
     query = query.options(selectinload(Asset.variants))
     query = query.order_by(Asset.created_at.desc())
     return query.paginate(page=page, per_page=per_page, error_out=False)
+
+
+def _library_folders(q: str | None, type_filter: str | None) -> list[str]:
+    folder_expr = Asset.exif["orthophoto_folder"].as_string()
+    rows = (
+        _filtered_asset_query(q, type_filter)
+        .with_entities(folder_expr)
+        .filter(folder_expr.isnot(None), folder_expr != "")
+        .distinct()
+        .order_by(folder_expr.asc())
+        .all()
+    )
+    return [row[0] for row in rows if row[0]]
 
 
 @web.route("/hello", methods=["GET"])
@@ -116,6 +137,7 @@ def library():
     type_filter = (request.args.get("type", default="all", type=str) or "all").lower()
     page = request.args.get("page", default=1, type=int)
     per_page = request.args.get("per_page", default=24, type=int)
+    folder = (request.args.get("folder", type=str) or "").strip()
 
     picker_mode = str(request.args.get("picker", "0")).lower() in {"1", "true", "yes"}
     allowed_types = _parse_allowed_types(request.args.get("allowed"))
@@ -140,11 +162,14 @@ def library():
     elif allowed_types and type_filter not in allowed_types and type_filter != "all":
         type_filter = next(iter(sorted(allowed_types)))
 
+    effective_type = type_filter if type_filter != "all" else None
+    folders = _library_folders(q=q, type_filter=effective_type) if not folder else []
     pagination = _fetch_assets_for_library(
         q=q,
-        type_filter=type_filter if type_filter != "all" else None,
+        type_filter=effective_type,
         page=page,
         per_page=per_page,
+        folder=folder or None,
     )
     items = pagination.items
 
@@ -155,6 +180,8 @@ def library():
         q=q or "",
         type_filter=type_filter,
         per_page=per_page,
+        folder=folder,
+        folders=folders,
         **context,
         request=request,
         picker_mode=picker_mode,

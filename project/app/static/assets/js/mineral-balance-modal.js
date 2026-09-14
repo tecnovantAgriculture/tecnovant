@@ -246,14 +246,19 @@
   }
   function renderFoliar() {
     const nutrients = allNutrients();
-    document.getElementById("mineral-foliar-head").innerHTML = `<tr><th class="px-2 py-2">ID</th><th class="px-2 py-2">Fecha</th><th class="px-2 py-2 text-left">Finca</th><th class="px-2 py-2 text-left">Potrero</th>${nutrients.map(n => `<th class="px-2 py-2">${esc(n.symbol)}</th>`).join("")}</tr>`;
+    document.getElementById("mineral-foliar-head").innerHTML = `<tr><th class="px-2 py-2">ID</th><th class="px-2 py-2">Fecha</th><th class="px-2 py-2 text-left">Finca</th><th class="px-2 py-2 text-left">Potrero</th><th class="px-2 py-2">Días de descanso</th><th class="px-2 py-2">Acción</th>${nutrients.map(n => `<th class="px-2 py-2">${esc(n.symbol)}</th>`).join("")}</tr>`;
     const rows = state.leaf;
     document.getElementById("mineral-foliar-body").innerHTML = rows.length ? rows.map(item => {
       const common = commonFor(item), selected = String(state.selectedLeaf?.id ?? "") === String(item.id);
-      return `<tr data-leaf-id="${item.id}" class="cursor-pointer hover:bg-sky-50 ${selected ? "bg-sky-100 ring-1 ring-inset ring-sky-500" : ""}"><td class="px-2 py-1.5 text-center">${item.id}</td><td class="px-2 py-1.5 text-center">${esc(common.date || item.common_analysis_date || "")}</td><td class="px-2 py-1.5">${esc(common.farm_name || item.farm_name || "")}</td><td class="px-2 py-1.5">${esc(common.lot_name || item.lot_name || "")}</td>${nutrients.map(n => `<td class="px-2 py-1.5 text-center">${fmtFixed(item[`nutrient_${n.id}`], 3)}</td>`).join("")}</tr>`;
-    }).join("") : `<tr><td colspan="${nutrients.length + 4}" class="p-5 text-center text-gray-500">${state.loadingLeaf ? "Cargando análisis foliares…" : "No hay análisis foliares para este filtro."}</td></tr>`;
+      return `<tr data-leaf-id="${item.id}" class="cursor-pointer hover:bg-sky-50 ${selected ? "bg-sky-100 ring-1 ring-inset ring-sky-500" : ""}"><td class="px-2 py-1.5 text-center">${item.id}</td><td class="px-2 py-1.5 text-center">${esc(common.date || item.common_analysis_date || "")}</td><td class="px-2 py-1.5">${esc(common.farm_name || item.farm_name || "")}</td><td class="px-2 py-1.5">${esc(common.lot_name || item.lot_name || "")}</td><td class="px-2 py-1.5 text-center">${(item.rest_days ?? common.rest_days ?? common.rest) != null ? fmt(item.rest_days ?? common.rest_days ?? common.rest, 0) : "--"}</td><td class="px-2 py-1.5 text-center"><button type="button" data-leaf-analysis="${item.id}" class="whitespace-nowrap rounded-md border border-emerald-300 bg-white px-2 py-1 font-semibold text-emerald-700 hover:bg-emerald-50"><i class="fas fa-chart-bar mr-1"></i>Ver análisis</button></td>${nutrients.map(n => `<td class="px-2 py-1.5 text-center">${fmtFixed(item[`nutrient_${n.id}`], 3)}</td>`).join("")}</tr>`;
+    }).join("") : `<tr><td colspan="${nutrients.length + 6}" class="p-5 text-center text-gray-500">${state.loadingLeaf ? "Cargando análisis foliares…" : "No hay análisis foliares para este filtro."}</td></tr>`;
   }
 
+  function openLeafAnalysis(item) {
+    if (!item || !window.FoliarAnalysisDrawer) return;
+    const common = commonFor(item), targets = nutrientInfo(state.selectedObjective);
+    window.FoliarAnalysisDrawer.open({ title: "Análisis foliar detallado", lot: common.lot_name || item.lot_name || "Lote", date: common.date || item.common_analysis_date || "", nutrients: allNutrients().map(nutrient => { const target = targets.get(String(nutrient.id)) || {}, unit = target.unit || nutrient.unit || ""; return { name: target.name || nutrient.name || nutrient.symbol, symbol: target.symbol || nutrient.symbol, actual: item["nutrient_" + nutrient.id], ideal: target.value, unit, isMicro: String(unit).toLowerCase().includes("ppm") }; }) });
+  }
   function buildPayload() {
     const objective = state.selectedObjective, leaf = state.selectedLeaf, common = commonFor(leaf), info = nutrientInfo(objective), nutrients = allNutrients();
     const order = [], targets = {}, actuals = {};
@@ -321,7 +326,7 @@
     document.getElementById("open-mineral-balance").addEventListener("click", open);
     document.querySelectorAll("[data-mineral-close]").forEach(node => node.addEventListener("click", close));
     document.getElementById("mineral-objective-body").addEventListener("click", event => { const row = event.target.closest("[data-objective-id]"); if (!row) return; state.selectedObjective = state.objectives.find(item => Number(item.id) === Number(row.dataset.objectiveId)); state.balance = null; state.showGrade = false; state.showNano = false; renderObjectives(); updateButtons(); if (state.selectedLeaf) calculate(); else setStatus("Objetivo seleccionado; selecciona el análisis foliar."); });
-    document.getElementById("mineral-foliar-body").addEventListener("click", event => { const row = event.target.closest("[data-leaf-id]"); if (!row) return; state.selectedLeaf = state.leaf.find(item => String(item.id) === String(row.dataset.leafId)); state.balance = null; state.showGrade = false; state.showNano = false; renderFoliar(); updateButtons(); if (state.selectedObjective) calculate(); else setStatus("Análisis seleccionado; selecciona el objetivo."); });
+    document.getElementById("mineral-foliar-body").addEventListener("click", event => { const row = event.target.closest("[data-leaf-id]"); if (!row) return; const item = state.leaf.find(entry => String(entry.id) === String(row.dataset.leafId)); if (event.target.closest("[data-leaf-analysis]")) { event.stopPropagation(); openLeafAnalysis(item); return; } state.selectedLeaf = item; state.balance = null; state.showGrade = false; state.showNano = false; renderFoliar(); updateButtons(); if (state.selectedObjective) calculate(); else setStatus("Análisis seleccionado; selecciona el objetivo."); });
     document.getElementById("mineral-formulator").addEventListener("click", calculate);
     document.getElementById("mineral-projection").addEventListener("click", openProjection);
     document.getElementById("mineral-liebig").addEventListener("click", showLiebig);
