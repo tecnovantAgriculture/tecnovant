@@ -125,7 +125,7 @@
   .exec-stat span { color: #5f6b66; font-size: 10px; font-weight: 650; letter-spacing: .035em; text-transform: uppercase; }
   .exec-stat strong { display: block; margin-top: 6px; color: #071713; font-size: 20px; font-weight: 600; line-height: 1; }
 
-  /* KPI compactos, consistentes con Facturacion y Calendario Operativo */
+  /* KPI compactos de Ejecuciones */
   .exec-stat {
     position: relative;
     display: block;
@@ -487,7 +487,7 @@
 
   @media (max-width: 760px) {
     .exec-head { align-items: flex-start; flex-direction: column; }
-    /* KPI compactos, consistentes con Facturacion y Calendario Operativo */
+    /* KPI compactos de Ejecuciones */
   .exec-stat {
     position: relative;
     display: block;
@@ -516,14 +516,15 @@
     .exec-gantt-title,
     .exec-gantt-task { left: 180px; }
   }
-</style>
+  .exec-form-overlay{position:fixed;inset:0;z-index:9998;display:none;background:rgba(7,23,19,.42);backdrop-filter:blur(2px)}.exec-form-overlay.is-open{display:block}.exec-form-overlay iframe{width:100%;height:100%;border:0;background:transparent}.exec-form-close{position:fixed;z-index:10000;top:18px;right:22px;display:grid;place-items:center;width:38px;height:38px;border:1px solid #d4ded6;border-radius:50%;background:#fff;color:#173b28;box-shadow:0 8px 24px rgba(0,0,0,.16);cursor:pointer}.exec-gantt-bar{cursor:pointer;text-decoration:none}.exec-gantt-bar:hover{filter:brightness(.97);box-shadow:0 7px 16px rgba(15,77,64,.16);transform:translateY(-1px)}`n</style>
 {% endblock %}
 
 {% block content %}
 <div class="exec-board">
   <section class="exec-top-actions">
     <div class="exec-actions">
-      <a class="exec-btn" href="{{ url_for('core.operational_calendar') }}"><i class="fas fa-calendar-alt"></i> Calendario operativo</a>
+      <a class="exec-btn" href="{{ url_for('core.operational_calendar', open='pilot', embed=1) }}" data-exec-form><i class="fas fa-user-plus"></i> Registrar piloto</a>
+      <a class="exec-btn exec-btn-primary" href="{{ url_for('core.operational_calendar', open='activity', embed=1) }}" data-exec-form><i class="fas fa-plus"></i> Nueva solicitud</a>
       <a class="exec-btn exec-btn-primary" href="{{ url_for('core.operation_executions') }}"><i class="fas fa-sync-alt"></i> Actualizar</a>
     </div>
   </section>
@@ -568,13 +569,13 @@
               {% if item.status in ['in_progress', 'soon', 'reported'] %}
                 <span class="exec-today-line" style="left: {{ item.gantt_left }}%;"></span>
               {% endif %}
-              <span class="exec-gantt-bar" data-status="{{ item.status }}" data-progress-state="{{ item.hectares_progress_state }}" title="{{ item.starts_label }} - {{ item.ends_label }} - {{ item.hectares_progress_label }}" style="left: {{ item.gantt_left }}%; width: max({{ item.gantt_width }}%, 82px);">
+              <a class="exec-gantt-bar" data-exec-form data-status="{{ item.status }}" data-progress-state="{{ item.hectares_progress_state }}" href="{{ url_for('core.operational_calendar', open='activity', edit_id=item.id, embed=1) }}" title="Editar: {{ item.starts_label }} - {{ item.ends_label }} - {{ item.hectares_progress_label }}" style="left: {{ item.gantt_left }}%; width: max({{ item.gantt_width }}%, 82px);">
                 <span class="exec-gantt-progress" style="width: {{ item.hectares_progress }}%; background-color: hsl({{ (item.hectares_progress * 1.2)|round(0) }}, 72%, 42%);"></span>
                 <span class="exec-gantt-label">
                   <span class="exec-gantt-label-full">{{ item.hectares_progress_label }} - {{ item.status_label }}</span>
                   <span class="exec-gantt-label-compact">{{ item.hectares_progress|round(0) }}% · {{ 'Fin.' if item.status == 'completed' else 'Proc.' if item.status == 'in_progress' else item.status_label }}</span>
                 </span>
-              </span>
+              </a>
             </div>
           </div>
         {% else %}
@@ -583,6 +584,10 @@
       </div>
     </div>
   </article>
+</div>
+<div id="exec-form-overlay" class="exec-form-overlay" aria-hidden="true">
+  <button type="button" class="exec-form-close" aria-label="Cerrar"><i class="fas fa-times"></i></button>
+  <iframe id="exec-form-frame" title="Formulario operativo"></iframe>
 </div>
 <script>
 (() => {
@@ -724,4 +729,16 @@
   applyView();
 })();
 </script>
-{% endblock %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const overlay=document.getElementById('exec-form-overlay'),frame=document.getElementById('exec-form-frame');
+  document.querySelectorAll('[data-exec-form]').forEach(link=>link.addEventListener('click',event=>{event.preventDefault();frame.src=link.href;overlay.classList.add('is-open');overlay.setAttribute('aria-hidden','false');}));
+  function closeExecForm(){overlay.classList.remove('is-open');overlay.setAttribute('aria-hidden','true');frame.src='about:blank';}
+  document.querySelector('.exec-form-close').addEventListener('click',closeExecForm);
+  window.addEventListener('message',event=>{
+    if(event.origin!==window.location.origin)return;
+    if(event.data==='tecno-execution-close')closeExecForm();
+    if(event.data==='tecno-execution-updated'){closeExecForm();window.location.reload();}
+  });
+});
+</script>{% endblock %}

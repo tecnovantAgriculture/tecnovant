@@ -1,258 +1,104 @@
-    {% extends "base.j2" %}
+{% extends "base.j2" %}
+{% set bg_color = "bg-transparent" %}
+{% set rounded = "" %}
+{% set shadow = "" %}
+{% set padding = "" %}
+{% set main_clases = "flex-grow w-full px-0 py-0" %}
+{% set flush_content_shell = true %}
+{% block content %}
+{% set greeting_name = user_full_name or username or "Usuario" %}
+<style>
+html,body.home,#main-content,#main-content>div{background:transparent!important}#main-content>div{border:0!important;border-radius:0!important;box-shadow:none!important;padding:0!important;margin:0!important}
+.ag-dash{width:100%;min-height:calc(100vh - 32px);margin:0;padding:14px 22px;background:transparent;color:#263241;font-family:inherit;font-weight:400;box-sizing:border-box}
+.ag-top{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:10px}
+.ag-search{position:relative;width:310px}.ag-search input{width:100%;height:36px;border:1px solid #e3e8ed;border-radius:8px;padding:0 12px 0 34px;background:#fff;font-size:12px}.ag-search i{position:absolute;left:12px;top:11px;color:#9aa6b2;font-size:12px}
+.ag-actions{display:flex;gap:8px}.ag-btn{height:34px;border:1px solid #e2e7eb;border-radius:8px;background:#fff;padding:0 12px;font-size:11px;font-weight:700}.ag-btn.green{background:#19aa67;border-color:#19aa67;color:#fff}
+.ag-welcome{display:flex;align-items:end;justify-content:space-between;margin-bottom:10px}.ag-welcome h1{font-size:20px;font-weight:600;margin:0}.ag-welcome p{font-size:11px;color:#7b8794;margin:3px 0 0}
+.ag-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:12px}.ag-card{background:#fff;border:1px solid #e8ecef;border-radius:12px;box-shadow:0 2px 8px rgba(31,45,61,.035);padding:14px;min-width:0}.ag-card h2{font-size:12px;font-weight:600;margin:0;color:#202a38}.ag-card .sub{font-size:10px;color:#8b96a3;margin-top:3px}
+.ag-status{grid-column:span 4;height:170px}.ag-overview{grid-column:span 5;height:170px}.ag-kpis{grid-column:span 3;display:grid;gap:12px}.ag-kpi{display:flex;align-items:center;justify-content:space-between;padding:13px 14px}.ag-icon{display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:50%;background:#e9fbf2;color:#13a866}.ag-value{font-size:19px;font-weight:600}.ag-caption{font-size:9px;color:#8a96a3;text-transform:uppercase;letter-spacing:.08em}
+.ag-today{display:flex;align-items:center;justify-content:space-between;margin-top:14px}.ag-date{font-size:12px;font-weight:600}.ag-big{font-size:27px;font-weight:600;margin-top:3px}.ag-weather-icon{font-size:54px;color:#f4bd32}.ag-pills{display:flex;gap:6px;margin-top:12px}.ag-pill{padding:5px 8px;border-radius:7px;background:#f3f6f8;font-size:9px;color:#5c6976}
+.ag-gauge{position:relative;height:105px;margin-top:0;overflow:hidden}.ag-gauge svg{width:100%;height:125px}.ag-gauge-center{position:absolute;inset:52px 0 auto;text-align:center}.ag-gauge-center strong{font-size:20px}.ag-gauge-center span{display:block;font-size:9px;color:#7e8a96}.ag-legend{display:flex;justify-content:center;gap:12px;font-size:9px;color:#6d7883}.ag-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:4px}
+.ag-chart{grid-column:span 7;height:225px}.ag-chart-head{display:flex;align-items:center;justify-content:space-between}.ag-chart-body{height:168px;margin-top:6px}
+.ag-field{grid-column:span 5;height:225px;position:relative;overflow:hidden;background:linear-gradient(150deg,#8fc95d 0%,#d8c44b 45%,#4d9d43 100%);color:#fff}.ag-field:before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(105deg,transparent 0 18px,rgba(255,255,255,.08) 19px 21px)}.ag-field-content{position:relative;display:flex;height:100%;flex-direction:column;justify-content:space-between}.ag-field h2{color:#fff;font-size:15px}.ag-field-panel{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;background:rgba(255,255,255,.92);border-radius:10px;padding:9px;color:#27313d}.ag-field-panel strong{display:block;font-size:12px}.ag-field-panel span{font-size:8px;color:#7e8994}
+.ag-table{grid-column:span 7;height:165px;overflow:hidden}.ag-summary{grid-column:span 5;height:165px;overflow:hidden}.ag-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid #edf0f2}.ag-row:last-child{border:0}.ag-row-title{font-size:11px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ag-row-meta{font-size:9px;color:#8a96a3;margin-top:2px}.ag-row-date{font-size:9px;color:#8a96a3;white-space:nowrap}.ag-link{font-size:9px;font-weight:700;color:#0aa362;text-decoration:none}
+.ag-empty{padding:28px;text-align:center;color:#9aa5b1;font-size:11px}
+.ag-dash h1,.ag-dash h2,.ag-dash h3,.ag-dash strong,.ag-dash .ag-row-title{font-weight:600}.ag-dash .font-bold,.ag-dash .font-extrabold{font-weight:600!important}@media(min-width:1001px){body{overflow:hidden}main{overflow:hidden!important}}@media(max-width:1000px){.ag-status,.ag-overview,.ag-kpis,.ag-chart,.ag-field,.ag-table,.ag-summary{grid-column:span 12}.ag-kpis{grid-template-columns:1fr 1fr}.ag-field{height:240px}}
+@media(max-width:640px){.ag-dash{padding:12px}.ag-top,.ag-welcome{align-items:stretch;flex-direction:column}.ag-search{width:100%}.ag-actions{overflow:auto}.ag-kpis{grid-template-columns:1fr}.ag-grid{gap:9px}}
+/* Reference-inspired dashboard skin */
+.ag-card{box-sizing:border-box}.ag-overview{overflow:hidden}.ag-overview .ag-gauge{height:82px}.ag-overview .ag-gauge svg{height:100px}.ag-overview .ag-gauge-center{inset:45px 0 auto}.ag-field-wide,.ag-summary-wide{grid-column:span 12}.ag-summary-wide{height:auto;min-height:120px}
 
-    {% set bg_color = "bg-transparent" %}
-    {% set rounded = "" %}
-    {% set shadow = "" %}
-    {% set padding = "" %}
-    {% set main_clases = "flex-grow overflow-y-auto w-full px-0 py-0" %}
+.ag-dash{background:#f4f8f3!important;color:#17231d;padding:14px 18px 20px}.ag-system-bar{display:grid;grid-template-columns:repeat(4,1fr);min-height:44px;margin-bottom:12px;border-radius:10px;overflow:hidden;background:#d9edd9}.ag-system-item{display:flex;align-items:center;gap:10px;padding:8px 14px;border-right:1px solid rgba(255,255,255,.75);font-size:9px;line-height:1.15}.ag-system-item:first-child{background:#172019;color:#fff}.ag-system-item:last-child{border:0}.ag-system-item i{width:18px;text-align:center;color:#4bc94a;font-size:12px}.ag-system-item:first-child i{color:#c9f12f}.ag-system-item strong{display:block;font-size:10px}.ag-system-item span{opacity:.62}.ag-top{margin-bottom:8px}.ag-welcome{align-items:center;margin-bottom:12px}.ag-welcome h1{letter-spacing:-.02em}.ag-card{border-color:#dfe8df;box-shadow:0 8px 20px rgba(30,64,42,.05)}.ag-status,.ag-overview,.ag-kpis{height:158px}.ag-status{background:linear-gradient(140deg,#64d659,#51c84b);border-color:#59d152;color:#fff}.ag-status h2,.ag-status .sub{color:#fff}.ag-status .ag-pill{background:rgba(255,255,255,.2);color:#fff}.ag-status .ag-weather-icon{color:#e6ff42}.ag-overview{background:#dceede}.ag-kpis{gap:8px}.ag-kpi{background:#e7f0df;border-color:#dce6d8}.ag-kpi:first-child{background:#dbeedc}.ag-icon{background:#fff;color:#21a35d}.ag-big,.ag-value{letter-spacing:-.04em}.ag-chart{grid-column:span 8;height:218px}.ag-field{grid-column:span 4;height:218px;background:linear-gradient(135deg,#173b27,#43834c 58%,#9abd43)}.ag-table{grid-column:span 8}.ag-summary{grid-column:span 4}.ag-btn.green{background:#1da45e;border-color:#1da45e}.ag-gauge svg path:nth-child(2){stroke:#173b28}.ag-gauge svg path:nth-child(3){stroke:#c9f12f}.ag-link{color:#138a4d}.ag-row-title i{color:#21a45e!important}
+@media(max-width:1000px){.ag-system-bar{grid-template-columns:1fr 1fr}.ag-status,.ag-overview,.ag-kpis,.ag-chart,.ag-field,.ag-table,.ag-summary{grid-column:span 12}.ag-status,.ag-overview,.ag-kpis{height:auto;min-height:158px}}
+@media(max-width:640px){.ag-system-item{padding:7px 8px}.ag-system-item span{display:none}}
+.ag-analytics{grid-column:span 8;display:grid;grid-template-columns:1fr 1fr;gap:12px}.ag-data-card{height:205px;padding:13px 14px;box-sizing:border-box}.ag-data-chart{height:148px;margin-top:6px}.ag-data-card h2{font-size:11px}.ag-data-card .sub{font-size:8px}.ag-field{height:422px}.ag-field-content{height:100%}@media(max-width:1000px){.ag-analytics{grid-column:span 12}.ag-field{height:240px}}@media(max-width:640px){.ag-analytics{grid-template-columns:1fr}.ag-data-card{height:210px}}/* Compact analytics layout */
+.ag-analytics{grid-column:span 12!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:12px}.ag-data-card{height:178px!important;padding:12px!important}.ag-data-chart{height:122px!important;margin-top:4px}.ag-field{grid-column:span 4!important;height:165px!important}.ag-summary,.ag-summary-wide{grid-column:span 8!important;height:165px!important}.ag-field-panel{margin-top:auto}@media(max-width:1200px){.ag-analytics{grid-template-columns:repeat(2,minmax(0,1fr))!important}}@media(max-width:1000px){.ag-field,.ag-summary,.ag-summary-wide{grid-column:span 12!important}}@media(max-width:640px){.ag-analytics{grid-template-columns:1fr!important}}/* Final spacing and overflow containment */
+.ag-grid{row-gap:14px}.ag-status,.ag-overview,.ag-kpis{height:172px!important}.ag-status,.ag-overview,.ag-kpi{overflow:hidden}.ag-kpis{grid-template-rows:1fr 1fr}.ag-kpi{min-height:0;padding:10px 12px!important}.ag-kpi .ag-value{font-size:17px}.ag-kpi .sub{margin-top:1px}.ag-overview .ag-gauge{height:92px}.ag-overview .ag-gauge svg{height:104px}.ag-overview .ag-gauge-center{inset:48px 0 auto}.ag-analytics{gap:12px;align-items:stretch}.ag-data-card{height:190px!important;overflow:hidden!important}.ag-data-chart{position:relative;height:116px!important;max-height:116px!important;margin-top:5px;overflow:hidden}.ag-data-chart canvas{display:block!important;width:100%!important;height:116px!important;max-height:116px!important}.ag-field,.ag-summary,.ag-summary-wide{height:172px!important;overflow:hidden!important}.ag-summary .ag-row{padding:5px 0}@media(max-width:1000px){.ag-status,.ag-overview,.ag-kpis{height:auto!important;min-height:172px}.ag-data-card{height:195px!important}}/* Taller analytic cards for readable axes and legends */
+.ag-data-card{height:230px!important}.ag-data-chart{height:154px!important;max-height:154px!important}.ag-data-chart canvas{height:154px!important;max-height:154px!important}@media(max-width:1000px){.ag-data-card{height:230px!important}}@media(max-width:640px){.ag-data-card{height:240px!important}.ag-data-chart,.ag-data-chart canvas{height:164px!important;max-height:164px!important}}/* Final canvas height and neutral page background */
+html,body.home,#main-content,#main-content>div{background:#fff!important}.ag-dash{background:#fff!important}.ag-data-card{height:255px!important}.ag-data-chart{height:178px!important;max-height:178px!important}.ag-data-chart canvas{height:178px!important;max-height:178px!important}@media(max-width:1000px){.ag-data-card{height:255px!important}}@media(max-width:640px){.ag-data-card{height:265px!important}.ag-data-chart,.ag-data-chart canvas{height:188px!important;max-height:188px!important}}/* Lift top-card content so captions remain visible */
+.ag-status{padding:12px 14px!important}.ag-status .ag-today{margin-top:7px}.ag-status .ag-weather-icon{font-size:46px}.ag-status .ag-pills{margin-top:6px}.ag-status .ag-pill{padding:4px 7px}.ag-overview{padding:12px 14px!important}.ag-overview .ag-gauge{height:96px;margin-top:-12px}.ag-overview .ag-gauge svg{height:102px}.ag-overview .ag-gauge-center{inset:43px 0 auto}.ag-overview .ag-legend{position:relative;top:-8px}/* Spacious top metric row */
+.ag-status,.ag-overview,.ag-kpis{height:205px!important}.ag-overview{padding:14px!important}.ag-overview .ag-gauge{height:125px;margin-top:-2px}.ag-overview .ag-gauge svg{height:125px}.ag-overview .ag-gauge-center{inset:58px 0 auto}.ag-overview .ag-legend{top:-2px}.ag-status{padding:14px!important}.ag-status .ag-today{margin-top:13px}.ag-status .ag-pills{margin-top:11px}.ag-status .ag-weather-icon{font-size:52px}.ag-kpi{padding:13px 14px!important}.ag-kpi .ag-value{font-size:19px}@media(max-width:1000px){.ag-status,.ag-overview,.ag-kpis{height:auto!important;min-height:190px}}</style>
+<div class="ag-dash">
+  <div class="ag-system-bar" aria-label="Resumen de la plataforma">
+    <div class="ag-system-item"><i class="fas fa-leaf"></i><div><strong>{{ kpis.farms_active }} fincas activas</strong><span>Conectadas a la plataforma</span></div></div>
+    <div class="ag-system-item"><i class="fas fa-check-circle"></i><div><strong>{{ operations_dashboard.completed }} completadas</strong><span>Operaciones registradas</span></div></div>
+    <div class="ag-system-item"><i class="fas fa-clock"></i><div><strong>{{ operations_dashboard.pending }} pendientes</strong><span>Por gestionar</span></div></div>
+    <div class="ag-system-item"><i class="fas fa-satellite-dish"></i><div><strong>{{ operations_dashboard.flight_hours }} h de vuelo</strong><span>Tiempo acumulado</span></div></div>
+  </div>
 
-    {% block content %}
-    {% set greeting_name = user_full_name or username or "Usuario" %}
+  <div class="ag-grid">
+    <section class="ag-card ag-status">
+      <div class="flex items-center justify-between"><h2>Hectáreas trabajadas</h2><span class="ag-pill"><i class="fas fa-circle text-emerald-500 mr-1"></i>Activo</span></div>
+      <div class="ag-today"><div><div class="ag-date">{{ hectares_chart.current_month }}</div><div class="ag-big">{{ "%.1f"|format(operations_dashboard.month_hectares) }} ha</div><div class="sub">Hectáreas trabajadas</div></div><i class="fas fa-cloud-sun ag-weather-icon"></i></div>
+      <div class="ag-pills"><span class="ag-pill">{{ operations_dashboard.flight_hours }} h de vuelo</span><span class="ag-pill">{{ operations_dashboard.completed }} completadas</span><span class="ag-pill">{{ operations_dashboard.pending }} pendientes</span></div>
+    </section>
 
-    <div class="w-full min-h-screen">
-        <div class="w-full px-6 lg:px-8 py-6 space-y-6">
+    <section class="ag-card ag-overview">
+      <div class="flex items-center justify-between"><div><h2>Producción acumulada</h2><p class="sub">Avance mensual de hectáreas</p></div><span class="ag-pill">{{ hectares_chart.current_month }}</span></div>
+      <div class="ag-gauge"><svg viewBox="0 0 240 125"><path d="M25 108 A95 95 0 0 1 215 108" fill="none" stroke="#edf1f2" stroke-width="21" stroke-linecap="round"/><path d="M25 108 A95 95 0 0 1 215 108" fill="none" stroke="#16b86f" stroke-width="21" stroke-linecap="round" stroke-dasharray="210 300"/><path d="M25 108 A95 95 0 0 1 215 108" fill="none" stroke="#8bd542" stroke-width="21" stroke-linecap="round" stroke-dasharray="75 300" stroke-dashoffset="-210"/></svg><div class="ag-gauge-center"><strong>{{ "%.1f"|format(operations_dashboard.total_hectares) }}</strong><span>hectáreas voladas en total</span></div></div>
+      <div class="ag-legend"><span><i class="ag-dot bg-emerald-500"></i>{{ operations_dashboard.month_hectares }} ha este mes</span><span><i class="ag-dot bg-lime-400"></i>{{ operations_dashboard.previous_month_hectares }} ha mes anterior</span></div>
+    </section>
 
-            <header class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                <div>
-                    <h1 class="text-2xl md:text-3xl font-semibold text-gray-900 dark:text-gray-100">
-                        Hola, {{ greeting_name }}
-                    </h1>
-                    <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                        ¿Qué quieres hacer hoy? Selecciona una opción para empezar a trabajar con tus fincas y ortofotos.
-                    </p>
-                </div>
-
-                <div class="flex flex-wrap gap-3 md:justify-end">
-                    <div class="min-w-[150px] px-4 py-3 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
-                        <div class="flex items-center">
-                            <div class="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400">
-                                <i class="fas fa-chart-line text-base"></i>
-                            </div>
-                            <div class="ml-3 flex-1">
-                                <p class="text-[9px] text-gray-600 dark:text-gray-300 uppercase tracking-wide">Análisis este mes</p>
-                                <p class="text-lg font-semibold text-gray-900 dark:text-gray-100 text-right mt-1">
-                                    {{ kpis.analyses_month }}
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="min-w-[150px] px-4 py-3 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
-                        <div class="flex items-center">
-                            <div class="p-2 rounded-lg bg-sky-100 dark:bg-sky-900/30 text-sky-600 dark:text-sky-400">
-                                <i class="fas fa-seedling text-base"></i>
-                            </div>
-                            <div class="ml-3 flex-1">
-                                <p class="text-[9px] text-gray-600 dark:text-gray-300 uppercase tracking-wide">Fincas activas</p>
-                                <p class="text-lg font-semibold text-gray-900 dark:text-gray-100 text-right mt-1">
-                                    {{ kpis.farms_active }}
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="min-w-[150px] px-4 py-3 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
-                        <div class="flex items-center">
-                            <div class="p-2 rounded-lg bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400">
-                                <i class="fas fa-image text-base"></i>
-                            </div>
-                            <div class="ml-3 flex-1">
-                                <p class="text-[9px] text-gray-600 dark:text-gray-300 uppercase tracking-wide">Imágenes procesadas</p>
-                                <p class="text-lg font-semibold text-gray-900 dark:text-gray-100 text-right mt-1">
-                                    {{ kpis.images_processed }}
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </header>
-
-            <section class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <a href="{{ url_for('agrovista.hello') }}"
-                    class="group bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-5 border border-transparent hover:border-emerald-500 hover:shadow-md transition-all cursor-pointer flex flex-col justify-between min-h-[220px]">
-                    <div>
-                        <p class="text-[11px] font-semibold text-emerald-600 uppercase tracking-wide">
-                            Flujo principal
-                        </p>
-                        <h2 class="mt-1 text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                            <i class="fas fa-satellite-dish text-base text-emerald-600"></i>
-                            Nuevo análisis desde ortofoto
-                        </h2>
-                        <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                            Sube una ortofoto TIFF/GeoTIFF, define la finca y los lotes y genera el mapa de índice de vegetación.
-                        </p>
-                    </div>
-                    <div class="mt-4 flex items-center justify-between">
-                        <span class="text-sm font-medium text-emerald-600 group-hover:underline">
-                            Ir a módulo NDVI / VARI
-                        </span>
-                        <span class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
-                            →
-                        </span>
-                    </div>
-                </a>
-
-                <a href="{{ url_for('foliage.amd_farms') }}"
-                    class="group bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-5 border border-transparent hover:border-sky-500 hover:shadow-md transition-all cursor-pointer flex flex-col justify-between min-h-[220px]">
-                    <div>
-                        <p class="text-[11px] font-semibold text-sky-600 uppercase tracking-wide">
-                            Navegación rápida
-                        </p>
-                        <h2 class="mt-1 text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                            <i class="fas fa-tractor text-base text-sky-600"></i>
-                            Fincas y lotes recientes
-                        </h2>
-                        <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                            Accede rápidamente a las últimas fincas y lotes donde estuviste trabajando.
-                        </p>
-                    </div>
-                    <div class="mt-4 flex items-center justify-between">
-                        <span class="text-sm font-medium text-sky-600 group-hover:underline">
-                            Ver fincas
-                        </span>
-                        <span class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-sky-50 text-sky-600">
-                            →
-                        </span>
-                    </div>
-                </a>
-
-                <a href="{{ url_for('foliage_report.listar_reportes') }}"
-                    class="group bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-5 border border-transparent hover:border-amber-500 hover:shadow-md transition-all cursor-pointer flex flex-col justify-between min-h-[220px]">
-                    <div>
-                        <p class="text-[11px] font-semibold text-amber-600 uppercase tracking-wide">
-                            Continuar trabajo
-                        </p>
-                        <h2 class="mt-1 text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                            <i class="fas fa-play text-base text-amber-600"></i>
-                            Continuar último análisis
-                        </h2>
-                        <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                            Retoma el último análisis o reporte que estuviste generando sin perder el contexto.
-                        </p>
-                    </div>
-                    <div class="mt-4 flex items-center justify-between">
-                        <span class="text-xs text-gray-500">
-                            Último análisis:
-                            <span class="font-medium text-gray-800">
-                                {% if last_analysis_summary %}
-                                    {{ last_analysis_summary.farm_name }} · {{ last_analysis_summary.lot_name }}
-                                {% else %}
-                                    Sin análisis recientes
-                                {% endif %}
-                            </span>
-                        </span>
-                    </div>
-                </a>
-            </section>
-
-            <section class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-5">
-                    <div class="flex items-center justify-between mb-3">
-                        <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                            <i class="fas fa-tractor text-base text-emerald-600"></i>
-                            Fincas y lotes recientes
-                        </h3>
-                        <a href="{{ url_for('foliage.amd_farms') }}" class="text-xs text-emerald-600 hover:underline">
-                            Ver todas
-                        </a>
-                    </div>
-                    {% if recent_lot_crops %}
-                        <ul class="divide-y divide-gray-100">
-                            {% for item in recent_lot_crops %}
-                                <li class="py-2 flex items-center justify-between">
-                                    <div>
-                                        <p class="text-sm font-medium text-gray-900 dark:text-gray-100">
-                                            {{ item.farm_name }}
-                                        </p>
-                                        <p class="text-xs text-gray-500 dark:text-gray-400">
-                                            Lote: {{ item.lot_name }} · Cultivo: {{ item.crop_name }}
-                                        </p>
-                                    </div>
-                                    <span class="text-xs text-gray-500">
-                                        {{ item.time_label }}
-                                    </span>
-                                </li>
-                            {% endfor %}
-                        </ul>
-                    {% else %}
-                        <p class="text-sm text-gray-500">Aún no hay fincas o lotes recientes.</p>
-                    {% endif %}
-                </div>
-
-                    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-5">
-                    <div class="flex items-center justify-between mb-3">
-                        <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                            <i class="fas fa-satellite-dish text-base text-sky-600"></i>
-                            Últimos análisis de imagen
-                        </h3>
-                        <a href="{{ url_for('agrovista.hello') }}" class="text-xs text-sky-600 hover:underline">
-                            Ir a NDVI / VARI
-                        </a>
-                    </div>
-                    {% if recent_image_analyses %}
-                        <ul class="divide-y divide-gray-100">
-                            {% for item in recent_image_analyses %}
-                                <li class="py-2 flex items-center justify-between">
-                                    <div>
-                                        <p class="text-sm font-medium text-gray-900 dark:text-gray-100">
-                                            {{ item.filename }}
-                                        </p>
-                                        <p class="text-xs text-gray-500 dark:text-gray-400">
-                                            Dimensiones: {{ item.dimensions }}
-                                        </p>
-                                    </div>
-                                    <span class="text-xs text-gray-500">
-                                        {{ item.date }}
-                                    </span>
-                                </li>
-                            {% endfor %}
-                        </ul>
-                    {% else %}
-                        <p class="text-sm text-gray-500">Aún no hay análisis de imagen registrados.</p>
-                    {% endif %}
-                </div>
-            </section>
-
-            <section class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-5">
-                <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                    <div>
-                        <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                            Estado general de la operación
-                        </h3>
-                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                            Resumen rápido de cómo se está comportando tu operación agrícola según los análisis registrados.
-                        </p>
-                    </div>
-                    <div class="flex flex-wrap gap-3 md:justify-end">
-                        <div class="px-3 py-2 rounded-xl bg-emerald-50 min-w-[160px]">
-                            <p class="text-[11px] text-emerald-800 uppercase tracking-wide flex items-center gap-1">
-                                <i class="fas fa-seedling text-xs"></i>
-                                Lotes analizados
-                            </p>
-                            <p class="text-sm font-semibold text-emerald-900 text-right mt-1">
-                                {{ operation_stats.lots_analyzed }}
-                            </p>
-                        </div>
-                        <div class="px-3 py-2 rounded-xl bg-amber-50 min-w-[180px]">
-                            <p class="text-[11px] text-amber-800 uppercase tracking-wide flex items-center gap-1">
-                                <i class="fas fa-lightbulb text-xs"></i>
-                                Recomendaciones generadas
-                            </p>
-                            <p class="text-sm font-semibold text-amber-900 text-right mt-1">
-                                {{ operation_stats.recommendations_generated }}
-                            </p>
-                        </div>
-                        <div class="px-3 py-2 rounded-xl bg-sky-50 min-w-[160px]">
-                            <p class="text-[11px] text-sky-800 uppercase tracking-wide flex items-center gap-1">
-                                <i class="fas fa-file-export text-xs"></i>
-                                Reportes exportados
-                            </p>
-                            <p class="text-sm font-semibold text-sky-900 text-right mt-1">
-                                {{ operation_stats.reports_exported }}
-                            </p>
-                        </div>
-                    </div>
-                </div>  
-            </section>  
-
-        </div>
+    <div class="ag-kpis">
+      <article class="ag-card ag-kpi"><div><div class="ag-caption">Operaciones completadas</div><div class="ag-value">{{ operations_dashboard.completed }}</div><div class="sub">{{ operations_dashboard.total_hectares }} ha voladas</div></div><span class="ag-icon"><i class="fas fa-seedling"></i></span></article>
+      <article class="ag-card ag-kpi"><div><div class="ag-caption">Horas de vuelo</div><div class="ag-value">{{ operations_dashboard.flight_hours }}</div><div class="sub">Acumuladas</div></div><span class="ag-icon" style="background:#f2ecff;color:#8458dc"><i class="fas fa-chart-line"></i></span></article>
     </div>
-    {% endblock %}
+
+    <section class="ag-analytics">
+      <article class="ag-card ag-data-card"><div class="ag-chart-head"><div><h2>Hectáreas voladas por mes</h2><p class="sub">Histórico de los últimos 12 meses</p></div><span class="ag-pill">ha</span></div><div class="ag-data-chart"><canvas id="monthlyHectaresChart"></canvas></div></article>
+      <article class="ag-card ag-data-card"><div class="ag-chart-head"><div><h2>Horas de vuelo por piloto</h2><p class="sub">Datos registrados en bitácora</p></div><span class="ag-pill">horas</span></div><div class="ag-data-chart"><canvas id="pilotHoursChart"></canvas></div></article>
+      <article class="ag-card ag-data-card"><div class="ag-chart-head"><div><h2>Comparativo diario</h2><p class="sub">Mes actual frente al anterior</p></div></div><div class="ag-data-chart"><canvas id="dailyHectaresChart"></canvas></div></article>
+      <article class="ag-card ag-data-card"><div class="ag-chart-head"><div><h2>Estado de operaciones</h2><p class="sub">Completadas y pendientes</p></div></div><div class="ag-data-chart"><canvas id="operationsStatusChart"></canvas></div></article>
+    </section>
+<section class="ag-card ag-field">
+      <div class="ag-field-content"><div><span class="text-[9px] uppercase tracking-widest text-white/80">Vista general</span><h2 class="mt-1">Tu operación bajo control</h2></div><div class="ag-field-panel"><div><span>Fincas</span><strong>{{ kpis.farms_active }}</strong></div><div><span>Operaciones</span><strong>{{ operations_dashboard.completed }}</strong></div><div><span>Facturado</span><strong>$ {{ "{:,.0f}".format(operations_dashboard.invoiced_total) }}</strong></div></div></div>
+    </section>
+
+    {% if operations_dashboard.upcoming %}
+    <section class="ag-card ag-table dashboard-filterable">
+      <div class="flex items-center justify-between"><div><h2>Próximas operaciones</h2><p class="sub">Agenda operativa real</p></div><a class="ag-link" href="{{ url_for('core.operational_calendar') }}">Ver todo <i class="fas fa-arrow-right ml-1"></i></a></div>
+      {% for item in operations_dashboard.upcoming %}<div class="ag-row" data-search="{{ item.title }} {{ item.farm_name }} {{ item.pilot_name }}"><div><div class="ag-row-title">{{ item.title }}</div><div class="ag-row-meta">{{ item.farm_name }} · {{ item.pilot_name }}</div></div><span class="ag-row-date">{{ item.date }}</span></div>{% endfor %}
+    </section>
+    {% endif %}
+
+    {% if recent_image_analyses %}<section class="ag-card ag-summary dashboard-filterable{% if not operations_dashboard.upcoming %} ag-summary-wide{% endif %}">
+      <div class="flex items-center justify-between"><div><h2>Últimos análisis de imagen</h2><p class="sub">Ortofotos procesadas</p></div><a class="ag-link" href="{{ url_for('agrovista.hello') }}">Ver análisis</a></div>
+      {% for item in recent_image_analyses %}<div class="ag-row" data-search="{{ item.filename }} {{ item.dimensions }}"><div><div class="ag-row-title"><i class="fas fa-image mr-2 text-sky-500"></i>{{ item.filename }}</div><div class="ag-row-meta">{{ item.dimensions }} px</div></div><span class="ag-row-date">{{ item.date }}</span></div>{% endfor %}
+    </section>{% endif %}
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+{{ super() }}
+<script src="/js/chart.js"></script>
+<script>
+document.addEventListener("DOMContentLoaded",function(){
+ const hectares={{ hectares_chart|tojson }},operations={{ operations_dashboard|tojson }};
+ const historyLabels=Array.isArray(operations.history_labels)?operations.history_labels:[],historyValues=Array.isArray(operations.history_values)?operations.history_values:[],pilotLabels=Array.isArray(operations.pilot_labels)?operations.pilot_labels:[],pilotHours=Array.isArray(operations.pilot_hours)?operations.pilot_hours:[];
+ const common={responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{displayColors:false}},scales:{x:{grid:{display:false},ticks:{font:{size:8},maxRotation:0,maxTicksLimit:8}},y:{beginAtZero:true,grid:{color:"#edf2ed"},border:{display:false},ticks:{font:{size:8},maxTicksLimit:5}}}};
+ new Chart(document.getElementById("monthlyHectaresChart"),{type:"bar",data:{labels:historyLabels,datasets:[{label:"Hectáreas",data:historyValues,backgroundColor:"#59cf50",borderRadius:3}]},options:common});
+ new Chart(document.getElementById("pilotHoursChart"),{type:"bar",data:{labels:pilotLabels.length?pilotLabels:["Sin registros"],datasets:[{label:"Horas",data:pilotHours.length?pilotHours:[0],backgroundColor:"#173b28",borderRadius:3}]},options:{...common,indexAxis:"y",scales:{x:{beginAtZero:true,grid:{color:"#edf2ed"},ticks:{font:{size:8}}},y:{grid:{display:false},ticks:{font:{size:8}}}}}});
+ new Chart(document.getElementById("dailyHectaresChart"),{type:"line",data:{labels:hectares.labels,datasets:[{label:hectares.current_month,data:hectares.current_daily,borderColor:"#20ad62",backgroundColor:"rgba(32,173,98,.09)",fill:true,tension:.35,pointRadius:0,borderWidth:2},{label:hectares.previous_month,data:hectares.previous_daily,borderColor:"#c6d1ca",tension:.35,pointRadius:0,borderWidth:1.5}]},options:{...common,plugins:{legend:{display:true,labels:{boxWidth:7,usePointStyle:true,font:{size:8}}},tooltip:{displayColors:true}}}});
+ new Chart(document.getElementById("operationsStatusChart"),{type:"doughnut",data:{labels:["Completadas","Pendientes"],datasets:[{data:[operations.completed,operations.pending],backgroundColor:["#59cf50","#dfe8df"],borderWidth:0,hoverOffset:2}]},options:{responsive:true,maintainAspectRatio:false,cutout:"68%",plugins:{legend:{position:"bottom",labels:{boxWidth:8,usePointStyle:true,font:{size:8}}}}}});
+});
+</script>
+{% endblock %}

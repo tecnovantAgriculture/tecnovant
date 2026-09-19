@@ -45,7 +45,7 @@
 </head>
 <body>
   <nav class="actions">
-    <a class="btn" href="{{ url_for('core.completed_operation_billing', finca=filters.finca, cliente=filters.cliente, piloto=filters.piloto, mes=filters.mes, factura='pendientes') }}">Volver</a>
+    <a class="btn" href="{{ url_for('core.completed_operation_billing', finca=filters.finca, cliente=filters.cliente, piloto=filters.piloto, mes=filters.mes, factura='facturadas' if invoice_mode else 'pendientes') }}">Volver</a>
     <button class="btn btn-primary" type="button" onclick="window.print()">Imprimir / Guardar PDF</button>
   </nav>
   <main class="sheet">
@@ -58,7 +58,7 @@
         <h1>Factura consolidada</h1>
         <div><span class="muted">Referencia:</span> {{ reference }}</div>
         <div><span class="muted">Fecha:</span> {{ generated_at.strftime('%d/%m/%Y') }}</div>
-        <div><span class="muted">Estado:</span> Borrador</div>
+        <div><span class="muted">Estado:</span> {{ 'Facturada' if invoice_mode else 'Borrador' }}</div>
       </div>
     </header>
 
@@ -88,7 +88,7 @@
       <article><small>Valor consolidado</small><strong>$ {{ '{:,.0f}'.format(total_value) }}</strong></article>
     </section>
 
-    <h2>Detalle de operaciones ejecutadas y en avance</h2>
+    <h2>{{ 'Detalle de operaciones facturadas' if invoice_mode else 'Detalle de operaciones ejecutadas y en avance' }}</h2>
     <table>
       <thead><tr><th>Fecha</th><th>Finca / Potrero</th><th>Piloto</th><th>Estado</th><th class="num">Hectáreas ejecutadas</th><th class="num">Precio/ha</th><th class="num">Subtotal</th></tr></thead>
       <tbody>
@@ -118,7 +118,7 @@
       <div><span>Total de hectáreas</span><strong>{{ '%.2f'|format(total_area) }} ha</strong></div>
       <div class="grand"><span>Total</span><span>$ {{ '{:,.0f}'.format(total_value) }}</span></div>
     </section>
-    <p class="note">Documento interno generado desde las operaciones pendientes de facturación. Este borrador no reemplaza la factura electrónica ni modifica el número de factura de los registros incluidos.</p>
+    <p class="note">{% if invoice_mode %}Documento consolidado de operaciones asociadas a la factura indicada. Los valores corresponden a la información registrada en la plataforma.{% else %}Documento interno generado desde las operaciones pendientes de facturación. Este borrador no reemplaza la factura electrónica ni modifica el número de factura de los registros incluidos.{% endif %}</p>
   </main>
 </body>
 </html>

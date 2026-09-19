@@ -706,7 +706,7 @@ def dashboard():
         analyses_this_month = (
             CommonAnalysis.query.join(Lot)
             .join(Farm)
-            .filter(Farm.org_id.in_(org_ids))
+            .filter(Farm.org_id.in_(org_ids), CommonAnalysis.date >= month_start, CommonAnalysis.date < next_month)
             .count()
         )
         farms_active = Farm.query.filter(Farm.org_id.in_(org_ids)).count()
@@ -913,6 +913,112 @@ def dashboard():
         "current_total": float(round(sum(current_daily, Decimal("0")), 2)),
         "previous_total": float(round(sum(previous_daily, Decimal("0")), 2)),
     }
+    activity_scope = OperationalActivity.query
+    flight_scope = PilotFlightLog.query
+    billing_scope = OperationBillingRecord.query
+    if not is_platform_admin:
+        activity_scope = activity_scope.filter(
+            OperationalActivity.client_project.in_(org_names) if org_names else false()
+        )
+        flight_scope = flight_scope.join(
+            OperationalActivity, PilotFlightLog.activity_id == OperationalActivity.id
+        ).filter(OperationalActivity.client_project.in_(org_names) if org_names else false())
+        billing_scope = billing_scope.filter(
+            OperationBillingRecord.organization_id.in_(org_ids) if org_ids else false()
+        )
+
+    scoped_logs = flight_scope.all()
+    logged_activity_ids = {log.activity_id for log in scoped_logs if log.activity_id}
+    total_hectares = sum((Decimal(str(log.total_hectares or 0)) for log in scoped_logs), Decimal("0"))
+    total_flight_minutes = sum((int(log.flight_minutes or 0) for log in scoped_logs), 0)
+    pilot_hours = {}
+    for log in scoped_logs:
+        pilot_name = log.pilot.full_name if log.pilot else "Sin piloto"
+        pilot_hours[pilot_name] = pilot_hours.get(pilot_name, Decimal("0")) + (
+            Decimal(str(log.flight_minutes or 0)) / Decimal("60")
+        )
+    scoped_billing_records = billing_scope.filter(OperationBillingRecord.area_hectares.isnot(None)).all()
+    for record in scoped_billing_records:
+        if record.activity_id and record.activity_id in logged_activity_ids:
+            continue
+        total_hectares += Decimal(str(record.area_hectares or 0))
+
+    history_months = []
+    for offset in range(11, -1, -1):
+        absolute_month = today.year * 12 + today.month - 1 - offset
+        year, month_index = divmod(absolute_month, 12)
+        history_months.append(date(year, month_index + 1, 1))
+    history_values = {month: Decimal("0") for month in history_months}
+    for log in scoped_logs:
+        month = date(log.flight_date.year, log.flight_date.month, 1) if log.flight_date else None
+        if month in history_values:
+            history_values[month] += Decimal(str(log.total_hectares or 0))
+    for record in scoped_billing_records:
+        if record.activity_id and record.activity_id in logged_activity_ids:
+            continue
+        record_date = record.executed_date or record.scheduled_date
+        month = date(record_date.year, record_date.month, 1) if record_date else None
+        if month in history_values:
+            history_values[month] += Decimal(str(record.area_hectares or 0))
+    completed_operations = activity_scope.filter(OperationalActivity.status == "completed").count()
+    pending_operations = activity_scope.filter(
+        OperationalActivity.status.notin_(["completed", "cancelled", "canceled"])
+    ).count()
+    invoiced_total = (
+        billing_scope.with_entities(func.coalesce(func.sum(OperationBillingRecord.invoice_total), 0)).scalar()
+        or Decimal("0")
+    )
+    upcoming_operations = []
+    for activity in (
+        activity_scope.filter(
+            OperationalActivity.starts_at >= datetime.combine(today, time.min),
+            OperationalActivity.status.notin_(["completed", "cancelled", "canceled"]),
+        )
+        .order_by(OperationalActivity.starts_at.asc())
+        .limit(3)
+        .all()
+    ):
+        upcoming_operations.append(
+            {
+                "title": activity.title,
+                "farm_name": activity.farm_name or activity.place,
+                "pilot_name": activity.pilot.full_name if activity.pilot else "Sin piloto",
+                "date": activity.starts_at.strftime("%d/%m/%Y"),
+                "status": activity.status,
+            }
+        )
+
+    recent_operations = []
+    for activity in (
+        activity_scope.filter(OperationalActivity.status == "completed")
+        .order_by(OperationalActivity.completed_at.desc(), OperationalActivity.starts_at.desc())
+        .limit(3)
+        .all()
+    ):
+        recent_operations.append(
+            {
+                "title": activity.title,
+                "farm_name": activity.farm_name or activity.place,
+                "pilot_name": activity.pilot.full_name if activity.pilot else "Sin piloto",
+                "date": (activity.completed_at or activity.starts_at).strftime("%d/%m/%Y"),
+                "hectares": float(activity.area_hectares or 0),
+            }
+        )
+    operations_dashboard = {
+        "total_hectares": float(round(total_hectares, 2)),
+        "month_hectares": hectares_chart["current_total"],
+        "previous_month_hectares": hectares_chart["previous_total"],
+        "flight_hours": round(total_flight_minutes / 60, 1),
+        "completed": completed_operations,
+        "pending": pending_operations,
+        "invoiced_total": float(round(Decimal(str(invoiced_total)), 2)),
+        "upcoming": upcoming_operations,
+        "recent": recent_operations,
+        "history_labels": [f"{month_names_short[item.month - 1]} {str(item.year)[-2:]}" for item in history_months],
+        "history_values": [float(round(history_values[item], 2)) for item in history_months],
+        "pilot_labels": [item[0] for item in sorted(pilot_hours.items(), key=lambda item: item[1], reverse=True)[:8]],
+        "pilot_hours": [float(round(item[1], 1)) for item in sorted(pilot_hours.items(), key=lambda item: item[1], reverse=True)[:8]],
+    }
     context = {
         "dashboard": True,
         "title": "Dashboard TecnoAgro",
@@ -932,6 +1038,7 @@ def dashboard():
         "recent_image_analyses": recent_image_analyses,
         "last_analysis_summary": last_analysis_summary,
         "hectares_chart": hectares_chart,
+        "operations_dashboard": operations_dashboard,
         "operation_stats": {
             "lots_analyzed": lots_analyzed,
             "recommendations_generated": recommendations_generated,
@@ -952,6 +1059,8 @@ def dashboard():
 @web.route("/dashboard/operaciones/calendario")
 @login_required
 def operational_calendar():
+    if request.args.get("embed") != "1":
+        return redirect(url_for("core.operation_executions"))
     today = date.today()
     week_start = today - timedelta(days=today.weekday())
     week_end = week_start + timedelta(days=7)
@@ -1850,6 +1959,7 @@ def operation_executions():
             "gantt_week_span": gantt_week_span,
             "gantt_left": round(((gantt_start_week - 1) / gantt_week_count) * 100, 4),
             "gantt_width": round((gantt_week_span / gantt_week_count) * 100, 4),
+            "edit_payload": _activity_payload(activity),
         }
         execution["payload"] = {
             key: value
@@ -2354,6 +2464,7 @@ def completed_operation_billing():
 @web.route("/dashboard/operacion-realizada/facturacion/factura-consolidada")
 @login_required
 def completed_operation_billing_consolidated_invoice():
+    invoice_mode = (request.args.get("mode") or "").strip() == "issued"
     current_user_id = get_jwt_identity()
     current_user = User.query.get(current_user_id)
     organization_ids = [org.id for org in get_clients_for_user(current_user_id)]
@@ -2372,9 +2483,11 @@ def completed_operation_billing_consolidated_invoice():
         joinedload(OperationBillingRecord.organization),
         joinedload(OperationBillingRecord.activity).joinedload(OperationalActivity.pilot),
         joinedload(OperationBillingRecord.activity).selectinload(OperationalActivity.flight_logs),
-    ).filter(
-        or_(OperationBillingRecord.invoice_number.is_(None), OperationBillingRecord.invoice_number == "")
     )
+    if invoice_mode:
+        query = query.filter(OperationBillingRecord.invoice_number.isnot(None), OperationBillingRecord.invoice_number != "")
+    else:
+        query = query.filter(or_(OperationBillingRecord.invoice_number.is_(None), OperationBillingRecord.invoice_number == ""))
     if not is_platform_admin:
         query = query.filter(
             OperationBillingRecord.organization_id.in_(organization_ids) if organization_ids else false()
@@ -2395,17 +2508,17 @@ def completed_operation_billing_consolidated_invoice():
         )
     ]
     if not records:
-        flash("No hay operaciones pendientes para los filtros seleccionados.", "error")
-        return redirect(url_for("core.completed_operation_billing", factura="pendientes", **filters))
+        flash("No hay facturas registradas para los filtros seleccionados." if invoice_mode else "No hay operaciones pendientes para los filtros seleccionados.", "error")
+        return redirect(url_for("core.completed_operation_billing", factura="facturadas" if invoice_mode else "pendientes", **filters))
 
     billable_records = []
     for record in records:
-        executed_area = _execution_hectares(record.activity, record)
+        executed_area = Decimal(str(record.area_hectares or 0)) if invoice_mode else _execution_hectares(record.activity, record)
         if executed_area <= 0:
             continue
         unit_price = Decimal(str(record.unit_price or 0))
         record.executed_area = executed_area
-        record.executed_total = executed_area * unit_price
+        record.executed_total = Decimal(str(record.invoice_total or 0)) if invoice_mode else executed_area * unit_price
         record.execution_status_label = (
             "Ejecutada"
             if record.activity and record.activity.status == "completed"
@@ -2415,7 +2528,7 @@ def completed_operation_billing_consolidated_invoice():
     records = billable_records
     if not records:
         flash("No hay operaciones ejecutadas ni con avance para los filtros seleccionados.", "error")
-        return redirect(url_for("core.completed_operation_billing", factura="pendientes", **filters))
+        return redirect(url_for("core.completed_operation_billing", factura="facturadas" if invoice_mode else "pendientes", **filters))
 
     total_area = sum((record.executed_area for record in records), Decimal("0"))
     total_value = sum((record.executed_total for record in records), Decimal("0"))
@@ -2428,7 +2541,8 @@ def completed_operation_billing_consolidated_invoice():
         pilot["total"] += record.executed_total
 
     organization = next((record.organization for record in records if record.organization), None)
-    reference = f"BORRADOR-{datetime.now().strftime('%Y%m%d-%H%M')}"
+    invoice_numbers = sorted({record.invoice_number for record in records if record.invoice_number})
+    reference = ", ".join(invoice_numbers) if invoice_mode else f"BORRADOR-{datetime.now().strftime('%Y%m%d-%H%M')}"
     return render_template(
         "dashboard/consolidated_operation_invoice.j2",
         records=records,
@@ -2439,6 +2553,7 @@ def completed_operation_billing_consolidated_invoice():
         total_value=total_value,
         reference=reference,
         generated_at=datetime.now(),
+        invoice_mode=invoice_mode,
     )
 
 @web.route("/dashboard/operacion-realizada/facturacion/<int:record_id>/asociacion", methods=["POST"])
