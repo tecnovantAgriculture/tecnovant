@@ -22,6 +22,7 @@ from flask import (
     send_from_directory,
     url_for,
 )
+from sqlalchemy import or_
 from sqlalchemy.orm import selectinload
 
 from app.core.controller import login_required
@@ -91,7 +92,8 @@ def _fetch_assets_for_library(
     folder_expr = Asset.exif["orthophoto_folder"].as_string()
     query = _filtered_asset_query(q, type_filter)
     if folder:
-        query = query.filter(folder_expr == folder)
+        # La biblioteca navega por cliente e incluye todas sus misiones.
+        query = query.filter(or_(folder_expr == folder, folder_expr.like(f"{folder} / %")))
     else:
         query = query.filter((folder_expr.is_(None)) | (folder_expr == ""))
     query = query.options(selectinload(Asset.variants))
@@ -109,7 +111,13 @@ def _library_folders(q: str | None, type_filter: str | None) -> list[str]:
         .order_by(folder_expr.asc())
         .all()
     )
-    return [row[0] for row in rows if row[0]]
+    # Cada ruta es cliente / finca / ... / misión. La raíz muestra un cliente.
+    clients = {
+        row[0].split(" / ", 1)[0].strip()
+        for row in rows
+        if row[0] and row[0].split(" / ", 1)[0].strip()
+    }
+    return sorted(clients, key=str.casefold)
 
 
 @web.route("/hello", methods=["GET"])
