@@ -2574,6 +2574,10 @@ def completed_operation_billing_update_association(record_id):
     if not is_platform_admin and record.organization_id is not None and record.organization_id not in organization_ids:
         return jsonify({"success": False, "message": "No tienes acceso a este registro."}), 403
 
+    unit_price = _parse_optional_decimal(request.form.get("unit_price"))
+    if unit_price is None or not unit_price.is_finite() or unit_price < 0:
+        return jsonify({"success": False, "message": "Escribe un precio por hectarea valido, igual o mayor que cero."}), 400
+
     farm = Farm.query.get(request.form.get("farm_id", type=int))
     farm_name = (request.form.get("farm_name") or "").strip()
     if farm and farm.org_id != organization.id:
@@ -2610,9 +2614,6 @@ def completed_operation_billing_update_association(record_id):
         db.session.add(lot)
         db.session.flush()
 
-    unit_price = record.unit_price
-    if unit_price is None:
-        unit_price = _parse_optional_decimal(str((organization.profile_data or {}).get("billing_unit_price") or ""))
     area = record.area_hectares
     if area is None and lot and lot.area is not None:
         area = Decimal(str(lot.area))
