@@ -3066,6 +3066,53 @@
     map.addLayer(drawnItems);
     window.drawnItems = drawnItems; // Exponer globalmente para updateSaveButtonState()
 
+    window.getAgrovistaReportMapSnapshot = async function(){
+      if(!imageMeta || !imageWidth || !imageHeight || !overlay) return null;
+      try{
+        const response = await fetch(getOverlayUrl(), {credentials:'include'});
+        if(!response.ok) return null;
+        const bitmap = await createImageBitmap(await response.blob());
+        const maxWidth = 1400;
+        const canvasWidth = Math.min(maxWidth, Math.max(700, imageWidth));
+        const canvasHeight = Math.round(canvasWidth * imageHeight / imageWidth);
+        const canvas = document.createElement('canvas');
+        canvas.width = canvasWidth;
+        canvas.height = canvasHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+        ctx.drawImage(bitmap, 0, 0, canvasWidth, canvasHeight);
+        const sx = canvasWidth / imageWidth;
+        const sy = canvasHeight / imageHeight;
+        drawnItems.eachLayer(function(layer){
+          if(!layer || typeof layer.getLatLngs !== 'function') return;
+          let rings = layer.getLatLngs();
+          while(Array.isArray(rings) && rings.length && Array.isArray(rings[0]) && rings[0].length && Array.isArray(rings[0][0])) rings = rings[0];
+          if(!Array.isArray(rings) || rings.length < 3) return;
+          ctx.beginPath();
+          rings.forEach(function(point,index){
+            const x = Number(point.lng) * sx;
+            const y = (imageHeight - Number(point.lat)) * sy;
+            if(index === 0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+          });
+          ctx.closePath();
+          const color = layer.options?.color || '#0088cf';
+          ctx.fillStyle = color + '30';
+          ctx.strokeStyle = color;
+          ctx.lineWidth = Math.max(3, canvasWidth / 450);
+          ctx.setLineDash([10,7]);
+          ctx.fill();
+          ctx.stroke();
+          ctx.setLineDash([]);
+        });
+        bitmap.close?.();
+        return canvas.toDataURL('image/jpeg', 0.86);
+      }catch(error){
+        console.warn('No se pudo preparar la ortofoto para el informe', error);
+        return null;
+      }
+    };
+
     const drawCtl = new L.Control.Draw({
       draw:{ polygon:true, rectangle:true, polyline:false, circle:false, marker:false, circlemarker:false },
       edit:{ featureGroup: drawnItems }
@@ -5596,5 +5643,5 @@ if(window.Swal) Swal.fire({
   <script src="/js/lot-optional-form.js?v=20260914-4"></script>
   <script src="/js/lot-projection.js?v=20260919-8"></script>
   <script src="/js/foliar-analysis-drawer.js?v=20261015-2"></script>
-  <script src="/js/mineral-balance-modal.js?v=professional-report-20261015-3" data-comparison-url="{{ url_for('agrovista.comparison_config') }}"></script>
+  <script src="/js/mineral-balance-modal.js?v=professional-report-20261015-4" data-comparison-url="{{ url_for('agrovista.comparison_config') }}"></script>
 {% endblock %}

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import io
 import textwrap
 from datetime import datetime
@@ -82,7 +83,7 @@ def _page(number, title=None, subtitle=None):
     fig = plt.figure(figsize=(8.27, 11.69), facecolor="white")
     fig.patches.append(Rectangle((0.055, 0.958), 0.89, 0.004, transform=fig.transFigure, color=BLUE))
     if title:
-        fig.text(0.06, 0.925, title, fontsize=15, color=NAVY, weight="bold", va="top")
+        fig.text(0.06, 0.925, title, fontsize=15, color=NAVY, weight="medium", va="top")
     if subtitle:
         fig.text(0.06, 0.895, subtitle, fontsize=8, color=MUTED, va="top")
     fig.text(0.06, 0.032, "TECNOVANT  |  Tecnología para el campo", fontsize=7, color=MUTED)
@@ -102,15 +103,16 @@ def _card(fig, x, y, width, height, face="white", edge=BORDER, radius=0.012):
 
 def _add_logo(fig, logo_path):
     if not logo_path or not Path(logo_path).exists():
-        fig.text(0.06, 0.972, "TECNOVANT", fontsize=11, color=NAVY, weight="bold", va="bottom")
+        fig.text(0.06, 0.972, "TECNOVANT", fontsize=11, color=NAVY, weight="medium", va="bottom")
         return
     try:
         logo = plt.imread(str(logo_path))
-        axis = fig.add_axes([0.06, 0.966, 0.16, 0.026])
-        axis.imshow(logo)
+        axis = fig.add_axes([0.06, 0.958, 0.15, 0.065])
+        axis.imshow(logo, interpolation="lanczos")
+        axis.set_aspect("equal")
         axis.axis("off")
     except Exception:
-        fig.text(0.06, 0.972, "TECNOVANT", fontsize=11, color=NAVY, weight="bold", va="bottom")
+        fig.text(0.06, 0.972, "TECNOVANT", fontsize=11, color=NAVY, weight="medium", va="bottom")
 
 
 def _save(pdf, fig):
@@ -136,8 +138,8 @@ def generate_mineral_report(payload, logo_path=None):
         # Página 1: identificación y resumen ejecutivo.
         fig = _page(1)
         _add_logo(fig, logo_path)
-        fig.text(0.06, 0.91, "INFORME AGRONÓMICO", fontsize=9, color=BLUE_DARK, weight="bold")
-        fig.text(0.06, 0.865, "Balance mineral y análisis foliar", fontsize=22, color=NAVY, weight="bold")
+        fig.text(0.06, 0.91, "INFORME AGRONÓMICO", fontsize=9, color=BLUE_DARK, weight="medium")
+        fig.text(0.06, 0.865, "Balance mineral y análisis foliar", fontsize=19, color=NAVY, weight="medium")
         fig.text(
             0.06, 0.837,
             f"Informe {_text(meta.get('report_id'), 40) or generated.strftime('%Y%m%d-%H%M')}  ·  {generated.strftime('%d/%m/%Y %H:%M')}",
@@ -157,10 +159,10 @@ def generate_mineral_report(payload, logo_path=None):
             col, row = index % 2, index // 2
             x = 0.085 + col * 0.43
             y = 0.755 - row * 0.05
-            fig.text(x, y, label.upper(), fontsize=6.8, color=MUTED, weight="bold")
+            fig.text(x, y, label.upper(), fontsize=6.8, color=MUTED, weight="medium")
             fig.text(x, y - 0.021, _text(value, 75) or "--", fontsize=9, color=TEXT)
 
-        fig.text(0.06, 0.575, "Resumen del diagnóstico", fontsize=11, color=NAVY, weight="bold")
+        fig.text(0.06, 0.575, "Resumen del diagnóstico", fontsize=11, color=NAVY, weight="medium")
         cards = [
             ("Bajos", len(low), LOW),
             ("Adecuados", len(adequate), OK),
@@ -170,8 +172,8 @@ def generate_mineral_report(payload, logo_path=None):
         for index, (label, value, color) in enumerate(cards):
             x = 0.06 + index * 0.225
             _card(fig, x, 0.485, 0.195, 0.065, face="white")
-            fig.text(x + 0.016, 0.528, label.upper(), fontsize=6.7, color=MUTED, weight="bold")
-            fig.text(x + 0.016, 0.497, str(value), fontsize=17, color=color, weight="bold")
+            fig.text(x + 0.016, 0.528, label.upper(), fontsize=6.7, color=MUTED, weight="medium")
+            fig.text(x + 0.016, 0.497, str(value), fontsize=17, color=color, weight="medium")
 
         if limiting:
             headline = f"Nutriente potencialmente limitante: {limiting['name']} ({limiting['symbol']})"
@@ -184,10 +186,10 @@ def generate_mineral_report(payload, logo_path=None):
             headline = "No fue posible determinar un nutriente limitante"
             detail = "No existen suficientes valores comparables frente al objetivo seleccionado."
         _card(fig, 0.06, 0.335, 0.88, 0.105, face="#F3F8FC", edge="#C9DFED")
-        fig.text(0.085, 0.407, headline, fontsize=10, color=NAVY, weight="bold")
+        fig.text(0.085, 0.407, headline, fontsize=10, color=NAVY, weight="medium")
         fig.text(0.085, 0.378, _wrap(detail, 104), fontsize=8.5, color=TEXT, va="top", linespacing=1.45)
 
-        fig.text(0.06, 0.275, "Lectura técnica", fontsize=11, color=NAVY, weight="bold")
+        fig.text(0.06, 0.275, "Lectura técnica", fontsize=11, color=NAVY, weight="medium")
         interpretation = (
             "Los resultados comparan la concentración foliar observada con el objetivo nutricional "
             "seleccionado. La lectura debe integrarse con etapa fenológica, uniformidad del muestreo, "
@@ -196,7 +198,7 @@ def generate_mineral_report(payload, logo_path=None):
         fig.text(0.06, 0.242, _wrap(interpretation, 112), fontsize=8.7, color=TEXT, va="top", linespacing=1.55)
 
         _card(fig, 0.06, 0.095, 0.88, 0.075, face="#FFF9EE", edge="#ECD9AE")
-        fig.text(0.083, 0.142, "ALCANCE", fontsize=7, color=HIGH, weight="bold")
+        fig.text(0.083, 0.142, "ALCANCE", fontsize=7, color=HIGH, weight="medium")
         fig.text(
             0.083, 0.119,
             _wrap("Este documento es una herramienta de apoyo. No constituye por sí solo una fórmula de fertilización ni reemplaza la validación de campo por un profesional.", 120),
@@ -204,8 +206,35 @@ def generate_mineral_report(payload, logo_path=None):
         )
         _save(pdf, fig)
 
-        # Página 2: tabla clara, sin barras decorativas.
-        fig = _page(2, "Resultados del análisis foliar", "Comparación frente al objetivo nutricional seleccionado")
+        # Página 2: evidencia visual de la ortofoto y los lotes.
+        fig = _page(2, "Ortofoto y delimitación de lotes", "Vista utilizada como referencia espacial del análisis")
+        snapshot = _text(payload.get("map_snapshot"), 8_000_000)
+        rendered_snapshot = False
+        if snapshot and "," in snapshot:
+            try:
+                encoded = snapshot.split(",", 1)[1]
+                image_data = base64.b64decode(encoded, validate=True)
+                image = plt.imread(io.BytesIO(image_data), format="jpeg")
+                axis = fig.add_axes([0.065, 0.19, 0.87, 0.64])
+                axis.imshow(image, interpolation="lanczos")
+                axis.axis("off")
+                rendered_snapshot = True
+            except Exception:
+                rendered_snapshot = False
+        if not rendered_snapshot:
+            _card(fig, 0.065, 0.30, 0.87, 0.40, face=SURFACE)
+            fig.text(0.50, 0.51, "Vista de ortofoto no disponible", fontsize=12, color=MUTED, ha="center")
+            fig.text(0.50, 0.475, "La información tabular y agronómica permanece disponible.", fontsize=8, color=MUTED, ha="center")
+        _card(fig, 0.065, 0.095, 0.87, 0.055, face=SURFACE)
+        fig.text(
+            0.085, 0.119,
+            "Los contornos representan los polígonos visibles en la ortofoto al momento de generar el informe.",
+            fontsize=7.8, color=MUTED, va="center",
+        )
+        _save(pdf, fig)
+
+        # Página 3: tabla clara, sin barras decorativas.
+        fig = _page(3, "Resultados del análisis foliar", "Comparación frente al objetivo nutricional seleccionado")
         axis = fig.add_axes([0.06, 0.16, 0.88, 0.69])
         axis.axis("off")
         headers = ["Nutriente", "Símbolo", "Actual", "Unidad", "Objetivo", "% objetivo", "Estado"]
@@ -229,13 +258,13 @@ def generate_mineral_report(payload, logo_path=None):
             cell.set_linewidth(0.55)
             if row_index == 0:
                 cell.set_facecolor(NAVY)
-                cell.set_text_props(color="white", weight="bold")
+                cell.set_text_props(color="white", weight="medium")
             else:
                 cell.set_facecolor("#FFFFFF" if row_index % 2 else SURFACE)
                 cell.set_text_props(color=TEXT)
         for row_index, row in enumerate(nutrients, start=1):
-            table[(row_index, 6)].set_text_props(color=row["color"], weight="bold")
-            table[(row_index, 0)].set_text_props(ha="left", color=TEXT, weight="bold")
+            table[(row_index, 6)].set_text_props(color=row["color"], weight="medium")
+            table[(row_index, 0)].set_text_props(ha="left", color=TEXT, weight="medium")
 
         _card(fig, 0.06, 0.085, 0.88, 0.045, face=SURFACE)
         fig.text(
@@ -245,8 +274,8 @@ def generate_mineral_report(payload, logo_path=None):
         )
         _save(pdf, fig)
 
-        # Página 3: gráficos legibles.
-        fig = _page(3, "Perfil nutricional comparativo", "Las barras expresan el porcentaje alcanzado frente al objetivo")
+        # Página 4: gráficos legibles.
+        fig = _page(4, "Perfil nutricional comparativo", "Las barras expresan el porcentaje alcanzado frente al objetivo")
         groups = [
             ([row for row in nutrients if not row["is_micro"]], "Macronutrientes"),
             ([row for row in nutrients if row["is_micro"]], "Micronutrientes"),
@@ -267,7 +296,7 @@ def generate_mineral_report(payload, logo_path=None):
                     label = "--" if row["percent"] is None else f"{row['percent']:.0f}%"
                     axis.text(min(values[pos] + 2.5, 164), pos, label, va="center", fontsize=7.5, color=TEXT)
             axis.set_xlim(0, 170)
-            axis.set_title(title, loc="left", color=NAVY, weight="bold", fontsize=10, pad=10)
+            axis.set_title(title, loc="left", color=NAVY, weight="medium", fontsize=10, pad=10)
             axis.set_xlabel("Porcentaje respecto al objetivo", fontsize=7.5, color=MUTED, labelpad=6)
             axis.grid(axis="x", color=BORDER, linewidth=0.55, alpha=0.8, zorder=0)
             axis.spines[["top", "right", "left"]].set_visible(False)
@@ -282,8 +311,8 @@ def generate_mineral_report(payload, logo_path=None):
         )
         _save(pdf, fig)
 
-        # Página 4: concepto agronómico con flujo vertical controlado.
-        fig = _page(4, "Interpretación agronómica", "Hallazgos principales y criterios para validación en campo")
+        # Página 5: concepto agronómico con flujo vertical controlado.
+        fig = _page(5, "Interpretación agronómica", "Hallazgos principales y criterios para validación en campo")
         sections = []
         if low:
             sections.append((
@@ -320,20 +349,20 @@ def generate_mineral_report(payload, logo_path=None):
             height = 0.058 + lines * 0.018
             _card(fig, 0.06, y - height, 0.88, height, face="white")
             fig.patches.append(Rectangle((0.06, y - height), 0.006, height, transform=fig.transFigure, color=color))
-            fig.text(0.085, y - 0.026, title.upper(), fontsize=7.5, color=color, weight="bold")
+            fig.text(0.085, y - 0.026, title.upper(), fontsize=7.5, color=color, weight="medium")
             fig.text(0.085, y - 0.052, wrapped, fontsize=8.2, color=TEXT, va="top", linespacing=1.45)
             y -= height + 0.022
 
         if notes and y > 0.17:
             wrapped = _wrap(notes, 108)
-            fig.text(0.06, y - 0.005, "OBSERVACIONES", fontsize=8, color=NAVY, weight="bold")
+            fig.text(0.06, y - 0.005, "OBSERVACIONES", fontsize=8, color=NAVY, weight="medium")
             fig.text(0.06, y - 0.034, wrapped, fontsize=8.2, color=TEXT, va="top", linespacing=1.45)
 
         professional_name = _text(professional.get("name"), 100)
         license_value = _text(professional.get("license"), 80)
         if professional_name:
-            fig.text(0.06, 0.10, "RESPONSABLE", fontsize=7, color=MUTED, weight="bold")
-            fig.text(0.06, 0.077, professional_name, fontsize=8.5, color=TEXT, weight="bold")
+            fig.text(0.06, 0.10, "RESPONSABLE", fontsize=7, color=MUTED, weight="medium")
+            fig.text(0.06, 0.077, professional_name, fontsize=8.5, color=TEXT, weight="medium")
             if license_value:
                 fig.text(0.06, 0.058, f"Matrícula profesional: {license_value}", fontsize=7, color=MUTED)
         _save(pdf, fig)

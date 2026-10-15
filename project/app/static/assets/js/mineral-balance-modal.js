@@ -372,10 +372,14 @@
     button.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Generando...';
     setStatus("Generando informe profesional...");
     try {
+      const payload = reportPayload();
+      if (typeof window.getAgrovistaReportMapSnapshot === "function") {
+        payload.map_snapshot = await window.getAgrovistaReportMapSnapshot();
+      }
       const response = await fetch(ENDPOINTS.report, {
         method: "POST", credentials: "include",
         headers: {"Content-Type": "application/json", "X-CSRF-TOKEN": csrf()},
-        body: JSON.stringify(reportPayload())
+        body: JSON.stringify(payload)
       });
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
