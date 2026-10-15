@@ -595,6 +595,28 @@ def lot_asset_geometries():
         source_asset_name = None
         if record:
             geometry_obj = json.loads(record.geometry)
+            target_width = int(round(preview_width))
+            target_height = int(round(preview_height))
+            dimensions_changed = (
+                not record.preview_width
+                or not record.preview_height
+                or int(record.preview_width) != target_width
+                or int(record.preview_height) != target_height
+            )
+            if dimensions_changed and record.geographic_geometry:
+                reprojected_geometry = _wgs84_geometry_to_preview(
+                    record.geographic_geometry, asset, preview_width, preview_height
+                )
+                if _preview_geometry_fits_dimensions(
+                    reprojected_geometry, preview_width, preview_height
+                ):
+                    geometry_obj = reprojected_geometry
+                    record.geometry = json.dumps(geometry_obj)
+                    record.preview_width = target_width
+                    record.preview_height = target_height
+                    record.calculation_data = None
+                    record.calculated_at = None
+                    created_legacy_records = True
             if not _preview_geometry_fits_dimensions(geometry_obj, preview_width, preview_height):
                 legacy = _legacy_lot_geographic_geometry(lot)
                 if legacy is None:
@@ -608,8 +630,8 @@ def lot_asset_geometries():
                 geometry_obj = repaired_geometry
                 record.geometry = json.dumps(geometry_obj)
                 record.geographic_geometry = json.dumps(geographic_obj)
-                record.preview_width = int(round(preview_width))
-                record.preview_height = int(round(preview_height))
+                record.preview_width = target_width
+                record.preview_height = target_height
                 record.calculation_data = None
                 record.calculated_at = None
                 created_legacy_records = True
