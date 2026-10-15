@@ -9,6 +9,7 @@ from typing import Dict, Optional
 
 import numpy as np
 from flask import Response, abort, current_app, jsonify, request, send_file
+from werkzeug.utils import secure_filename
 from flask_jwt_extended import get_jwt, jwt_required
 from pyproj import Transformer
 from rasterio.transform import Affine, xy
@@ -19,6 +20,7 @@ from app.core.controller import check_permission, check_resource_access
 from app.extensions import db
 from app.helpers.csv_handler import CsvHandler
 from app.modules.foliage.models import CommonAnalysis, Lot, LotAssetGeometry, Nutrient
+from app.modules.media.access import accessible_asset_query
 from app.modules.media.helpers import (
     PreprocessConfig,
     _media_root,
@@ -905,6 +907,153 @@ def polygon_import():
     except (TypeError, ValueError, ZeroDivisionError):
         abort(400, description="could not transform polygon coordinates")
     return jsonify({"vertices": vertices, "count": len(vertices)}), 200
+
+
+def _export_asset_source(asset):
+    if asset.storage not in {StorageLocation.LOCAL.value, StorageLocation.GCS.value}:
+        abort(400, description="unsupported storage")
+    source = ensure_local_file(asset.storage_key) if asset.storage == StorageLocation.GCS.value else Path(_media_root()) / asset.storage_key
+    if not source.exists(): abort(404, description="orthophoto source file not found")
+    return source
+
+def _safe_export_stem(value):
+    return secure_filename(Path(value or "orthophoto").stem) or "orthophoto"
+
+@api.route("/orthophoto-export/<int:asset_id>/<export_format>", methods=["GET"])
+@jwt_required()
+def orthophoto_export(asset_id, export_format):
+    asset = accessible_asset_query().filter_by(id=asset_id).first_or_404()
+    source, stem = _export_asset_source(asset), _safe_export_stem(asset.original_name)
+    export_format = str(export_format).lower()
+    if export_format in {"tif", "tiff"}:
+        if source.suffix.lower() not in {".tif", ".tiff"} or not asset.is_geo:
+            abort(400, description="the selected image is not a georeferenced TIFF")
+        return send_file(source, mimetype="image/tiff", as_attachment=True, download_name=f"{stem}.tif", max_age=0)
+    if export_format != "jpg": abort(400, description="unsupported export format")
+    from PIL import Image
+    import rasterio
+    from rasterio.enums import Resampling
+    output = io.BytesIO()
+    try:
+        with rasterio.open(str(source)) as dataset:
+            limit = int(current_app.config.get("AGROVISTA_JPG_EXPORT_MAX_DIM", 6000))
+            scale = min(1.0, limit / float(max(dataset.width, dataset.height)))
+            width, height = max(1, int(dataset.width*scale)), max(1, int(dataset.height*scale))
+            indexes = list(range(1, min(dataset.count, 3)+1))
+            values = dataset.read(indexes=indexes, out_shape=(len(indexes), height, width), resampling=Resampling.bilinear).astype("float32")
+            if values.shape[0] == 1: values = np.repeat(values, 3, axis=0)
+            elif values.shape[0] == 2: values = np.concatenate([values, values[1:2]], axis=0)
+            rgb = np.zeros(values[:3].shape, dtype=np.uint8)
+            for index, band in enumerate(values[:3]):
+                finite = band[np.isfinite(band)]
+                if not finite.size: continue
+                low, high = np.percentile(finite, (2, 98))
+                if high <= low: low, high = float(finite.min()), float(finite.max())
+                if high > low: rgb[index] = np.clip((band-low)*255.0/(high-low), 0, 255).astype(np.uint8)
+            Image.fromarray(np.moveaxis(rgb, 0, -1), mode="RGB").save(output, format="JPEG", quality=92, optimize=True)
+    except Exception as exc:
+        current_app.logger.exception("JPG export failed for asset %s", asset.id)
+        abort(500, description=f"could not create JPG export: {exc}")
+    output.seek(0)
+    return send_file(output, mimetype="image/jpeg", as_attachment=True, download_name=f"{stem}.jpg", max_age=0)
+
+def _lot_export_rows(asset_id, farm_id):
+    lots = _scoped_farm_lots(farm_id)
+    lot_by_id = {lot.id: lot for lot in lots}
+    records = LotAssetGeometry.query.filter(LotAssetGeometry.media_asset_id == asset_id, LotAssetGeometry.lot_id.in_(list(lot_by_id) or [-1])).order_by(LotAssetGeometry.lot_id).all()
+    rows = []
+    for record in records:
+        lot = lot_by_id.get(record.lot_id)
+        try:
+            value = json.loads(record.geographic_geometry)
+            geometry = value.get("geometry", value) if isinstance(value, dict) else None
+        except (TypeError, ValueError, json.JSONDecodeError): geometry = None
+        if lot and isinstance(geometry, dict) and geometry.get("type") in {"Polygon", "MultiPolygon"}: rows.append((lot, geometry))
+    if not rows: abort(404, description="there are no georeferenced lots for this orthophoto")
+    return rows
+
+def _closed_ring(points):
+    ring = [[float(point[0]), float(point[1])] for point in points if len(point) >= 2]
+    if ring and ring[0] != ring[-1]: ring.append(ring[0])
+    return ring
+
+def _shape_parts(geometry):
+    polygons = [geometry.get("coordinates") or []] if geometry.get("type") == "Polygon" else geometry.get("coordinates") or []
+    parts = []
+    for polygon in polygons:
+        for ring_index, raw_ring in enumerate(polygon):
+            ring = _closed_ring(raw_ring)
+            if len(ring) < 4: continue
+            signed_area = sum(ring[i][0]*ring[i+1][1]-ring[i+1][0]*ring[i][1] for i in range(len(ring)-1))
+            if ((ring_index == 0) != (signed_area < 0)): ring.reverse()
+            parts.append(ring)
+    return parts
+
+def _lots_kmz(rows, farm_name, asset_id):
+    ns = "http://www.opengis.net/kml/2.2"
+    ET.register_namespace("", ns)
+    root = ET.Element(f"{{{ns}}}kml")
+    document = ET.SubElement(root, f"{{{ns}}}Document")
+    ET.SubElement(document, f"{{{ns}}}name").text = f"{farm_name} - lots"
+    for lot, geometry in rows:
+        polygons = [geometry["coordinates"]] if geometry["type"] == "Polygon" else geometry["coordinates"]
+        for polygon_index, polygon in enumerate(polygons):
+            if not polygon: continue
+            placemark = ET.SubElement(document, f"{{{ns}}}Placemark")
+            suffix = f" {polygon_index+1}" if len(polygons) > 1 else ""
+            ET.SubElement(placemark, f"{{{ns}}}name").text = f"{lot.name}{suffix}"
+            extended = ET.SubElement(placemark, f"{{{ns}}}ExtendedData")
+            for key, value in (("lot_id",lot.id),("farm",farm_name),("area_ha",lot.area),("objective",int(bool(lot.is_objective))),("asset_id",asset_id)):
+                data = ET.SubElement(extended, f"{{{ns}}}Data", name=key)
+                ET.SubElement(data, f"{{{ns}}}value").text = str(value if value is not None else "")
+            polygon_node = ET.SubElement(placemark, f"{{{ns}}}Polygon")
+            for ring_index, raw_ring in enumerate(polygon):
+                ring = _closed_ring(raw_ring)
+                if len(ring) < 4: continue
+                boundary = ET.SubElement(polygon_node, f"{{{ns}}}{'outerBoundaryIs' if ring_index == 0 else 'innerBoundaryIs'}")
+                linear = ET.SubElement(boundary, f"{{{ns}}}LinearRing")
+                ET.SubElement(linear, f"{{{ns}}}coordinates").text = " ".join(f"{lon:.9f},{lat:.9f},0" for lon,lat in ring)
+    payload = io.BytesIO()
+    with zipfile.ZipFile(payload, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("doc.kml", ET.tostring(root, encoding="utf-8", xml_declaration=True))
+    payload.seek(0)
+    return payload
+
+@api.route("/lots-export/<int:asset_id>/<export_format>", methods=["GET"])
+@jwt_required()
+def lots_export(asset_id, export_format):
+    asset = accessible_asset_query().filter_by(id=asset_id).first_or_404()
+    farm_id = request.args.get("farm_id", type=int)
+    if not farm_id: abort(400, description="farm_id is required")
+    rows = _lot_export_rows(asset.id, farm_id)
+    farm, export_format = rows[0][0].farm, str(export_format).lower()
+    stem = _safe_export_stem(f"{farm.name}_lots")
+    if export_format == "kmz":
+        return send_file(_lots_kmz(rows, farm.name, asset.id), mimetype="application/vnd.google-earth.kmz", as_attachment=True, download_name=f"{stem}.kmz", max_age=0)
+    if export_format not in {"shp","shape","shapefile"}: abort(400, description="unsupported lot export format")
+    try: import shapefile
+    except ImportError: abort(500, description="Shapefile export dependency is not installed")
+    shp, shx, dbf = io.BytesIO(), io.BytesIO(), io.BytesIO()
+    writer = shapefile.Writer(shp=shp, shx=shx, dbf=dbf, encoding="utf-8", shapeType=shapefile.POLYGON)
+    for args in (("LOT_ID","N",10,0),("LOTE","C",100,0),("FINCA","C",100,0),("AREA_HA","N",18,4),("OBJETIVO","L",1,0),("ASSET_ID","N",10,0)):
+        writer.field(args[0], args[1], size=args[2], decimal=args[3])
+    written = 0
+    for lot, geometry in rows:
+        parts = _shape_parts(geometry)
+        if not parts: continue
+        writer.poly(parts)
+        writer.record(lot.id, lot.name, farm.name, lot.area or 0, bool(lot.is_objective), asset.id)
+        written += 1
+    writer.close()
+    if not written: abort(404, description="there are no valid lot polygons to export")
+    projection = 'GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]]'
+    payload = io.BytesIO()
+    with zipfile.ZipFile(payload, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for extension, value in (("shp",shp.getvalue()),("shx",shx.getvalue()),("dbf",dbf.getvalue()),("prj",projection),("cpg","UTF-8")):
+            archive.writestr(f"{stem}.{extension}", value)
+    payload.seek(0)
+    return send_file(payload, mimetype="application/zip", as_attachment=True, download_name=f"{stem}_shape.zip", max_age=0)
+
 
 @api.route("/polygon-kmz", methods=["POST"])
 @jwt_required()

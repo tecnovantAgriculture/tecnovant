@@ -275,11 +275,22 @@
               Subir KML/KMZ
             </button>
             <input id="kml-kmz-file" type="file" accept=".kml,.kmz,application/vnd.google-earth.kml+xml,application/vnd.google-earth.kmz" class="hidden">
-            <button id="download-kmz"
-                    class="inline-flex items-center rounded-md bg-white dark:bg-gray-700 px-3 py-1.5 text-xs font-medium text-gray-400 dark:text-gray-400 shadow-md ring-1 ring-gray-200 dark:ring-gray-600 opacity-60 cursor-not-allowed"
-                    disabled>
-              Descargar KMZ
-            </button>
+            <div id="downloadExportWrapper" class="relative">
+              <button id="download-export-toggle" type="button"
+                      class="inline-flex w-full items-center justify-between gap-2 rounded-md bg-white px-3 py-1.5 text-xs font-medium text-gray-800 shadow-md ring-1 ring-gray-200 hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-100 dark:ring-gray-600 dark:hover:bg-gray-600"
+                      aria-expanded="false">
+                <span><i class="fas fa-download mr-1"></i>Descargar</span>
+                <i class="fas fa-chevron-left text-[9px]"></i>
+              </button>
+              <div id="download-export-menu" class="hidden absolute right-full top-0 z-50 mr-2 w-56 overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-xl dark:border-gray-600 dark:bg-gray-800">
+                <button id="download-orthophoto-jpg" type="button" class="block w-full px-3 py-2 text-left text-xs text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"><i class="fas fa-image mr-2 text-blue-500"></i>Ortofoto en JPG</button>
+                <button id="download-orthophoto-tiff" type="button" class="block w-full px-3 py-2 text-left text-xs text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"><i class="fas fa-map mr-2 text-indigo-500"></i>Ortofoto GeoTIFF</button>
+                <button id="download-lots-shape" type="button" class="block w-full px-3 py-2 text-left text-xs text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"><i class="fas fa-draw-polygon mr-2 text-emerald-600"></i>Lotes en SHAPE (.zip)</button>
+                <button id="download-lots-kmz" type="button" class="block w-full px-3 py-2 text-left text-xs text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"><i class="fas fa-route mr-2 text-amber-600"></i>Lotes para Agras (KMZ)</button>
+                <div class="my-1 border-t border-gray-200 dark:border-gray-600"></div>
+                <button id="download-kmz" type="button" class="block w-full cursor-not-allowed px-3 py-2 text-left text-xs text-gray-400 opacity-60" disabled><i class="fas fa-location-dot mr-2"></i>Pol&iacute;gono actual en KMZ</button>
+              </div>
+            </div>
           </div>
 
           <div id="map" class="w-full bg-gray-100 dark:bg-gray-800"></div>
@@ -916,6 +927,12 @@
       btnFsOut: document.getElementById("exit-fullscreen"),
       btnOpenPicker: document.getElementById("open-media-picker"),
       btnDownloadKmz: document.getElementById("download-kmz"),
+      downloadExportToggle: document.getElementById("download-export-toggle"),
+      downloadExportMenu: document.getElementById("download-export-menu"),
+      downloadOrthophotoJpg: document.getElementById("download-orthophoto-jpg"),
+      downloadOrthophotoTiff: document.getElementById("download-orthophoto-tiff"),
+      downloadLotsShape: document.getElementById("download-lots-shape"),
+      downloadLotsKmz: document.getElementById("download-lots-kmz"),
       btnUploadKmlKmz: document.getElementById("upload-kml-kmz"),
       kmlKmzFile: document.getElementById("kml-kmz-file"),
       previewSelector: document.getElementById("preview-selector"),
@@ -3799,7 +3816,66 @@
           el.kmlKmzFile.value='';
         }
       });
-    }    if(el.btnDownloadKmz){
+    }
+
+    function closeExportMenu(){
+      if(!el.downloadExportMenu || !el.downloadExportToggle) return;
+      el.downloadExportMenu.classList.add('hidden');
+      el.downloadExportToggle.setAttribute('aria-expanded','false');
+    }
+    async function downloadGeneratedExport(kind, format){
+      const assetId = Number(imageMeta?.media_asset_id);
+      if(!assetId){
+        if(window.Swal) await Swal.fire({icon:'info',title:'Selecciona una ortofoto',text:'Debes abrir una ortofoto antes de descargar.'});
+        return;
+      }
+      let url = kind === 'orthophoto'
+        ? '/api/agrovista/orthophoto-export/' + assetId + '/' + format
+        : '/api/agrovista/lots-export/' + assetId + '/' + format + '?farm_id=' + encodeURIComponent(window.currentFarmId || '');
+      if(kind === 'lots' && !window.currentFarmId){
+        if(window.Swal) await Swal.fire({icon:'info',title:'Selecciona una finca',text:'Debes seleccionar la finca cuyos lotes deseas exportar.'});
+        return;
+      }
+      closeExportMenu();
+      try{
+        if(window.Swal) Swal.fire({title:'Preparando descarga',text:'El archivo puede tardar unos segundos.',allowOutsideClick:false,didOpen:()=>Swal.showLoading()});
+        const response = await fetch(url,{credentials:'include'});
+        if(!response.ok){
+          const body = await response.json().catch(()=>({}));
+          throw new Error(body.description || body.message || 'No se pudo generar el archivo.');
+        }
+        const blob = await response.blob();
+        const disposition = response.headers.get('Content-Disposition') || '';
+        const encodedName = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+        const plainName = disposition.match(/filename="?([^";]+)"?/i);
+        const filename = encodedName ? decodeURIComponent(encodedName[1]) : (plainName ? plainName[1] : 'descarga.' + format);
+        const objectUrl = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href=objectUrl; link.download=filename; document.body.appendChild(link); link.click(); link.remove();
+        URL.revokeObjectURL(objectUrl);
+        if(window.Swal) Swal.close();
+      }catch(error){
+        if(window.Swal) Swal.fire({icon:'error',title:'No se pudo descargar',text:error.message || 'Intenta nuevamente.'});
+        else alert(error.message || 'No se pudo descargar.');
+      }
+    }
+    if(el.downloadExportToggle){
+      el.downloadExportToggle.addEventListener('click',event=>{
+        event.stopPropagation();
+        const opening=el.downloadExportMenu.classList.contains('hidden');
+        el.downloadExportMenu.classList.toggle('hidden',!opening);
+        el.downloadExportToggle.setAttribute('aria-expanded',opening?'true':'false');
+      });
+      document.addEventListener('click',event=>{
+        if(!event.target.closest('#downloadExportWrapper')) closeExportMenu();
+      });
+    }
+    el.downloadOrthophotoJpg?.addEventListener('click',()=>downloadGeneratedExport('orthophoto','jpg'));
+    el.downloadOrthophotoTiff?.addEventListener('click',()=>downloadGeneratedExport('orthophoto','tiff'));
+    el.downloadLotsShape?.addEventListener('click',()=>downloadGeneratedExport('lots','shp'));
+    el.downloadLotsKmz?.addEventListener('click',()=>downloadGeneratedExport('lots','kmz'));
+
+    if(el.btnDownloadKmz){
       el.btnDownloadKmz.addEventListener('click', async ()=>{
         const verts = currentVerticesRaster || currentVertices;
         if(!verts || verts.length < 3){
