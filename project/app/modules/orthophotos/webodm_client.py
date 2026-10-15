@@ -3,10 +3,11 @@ from __future__ import annotations
 import json
 import os
 import time
-from typing import BinaryIO, Iterable
+from typing import BinaryIO, Callable, Iterable
 from urllib.parse import urlparse, urlunparse
 
 import requests
+from requests_toolbelt.multipart.encoder import MultipartEncoder, MultipartEncoderMonitor
 
 
 class WebODMError(RuntimeError):
@@ -163,25 +164,40 @@ class WebODMClient:
         images: Iterable[tuple[str, BinaryIO, str]],
         processing_node_id: int | None,
         options: Iterable[dict[str, str]] | None = None,
+        progress_callback: Callable[[int, int], None] | None = None,
     ) -> dict:
-        files = [
+        # requests' files API reads every file into memory while building the
+        # multipart body. Drone missions can contain several GB of photos, so
+        # stream each file instead of OOM-killing the web worker.
+        fields: list[tuple[str, object]] = [("name", name)]
+        if processing_node_id is not None:
+            fields.append(("processing_node", str(processing_node_id)))
+        if self.resize_to:
+            fields.append(("resize_to", self.resize_to))
+        if options:
+            fields.append(("options", json.dumps(list(options))))
+        fields.extend(
             ("images", (filename, stream, content_type))
             for filename, stream, content_type in images
-        ]
-        data: dict[str, str] = {"name": name}
-        if processing_node_id is not None:
-            data["processing_node"] = str(processing_node_id)
-        if self.resize_to:
-            data["resize_to"] = self.resize_to
-        if options:
-            data["options"] = json.dumps(list(options))
+        )
+
+        encoder = MultipartEncoder(fields=fields)
+        body = (
+            MultipartEncoderMonitor(
+                encoder,
+                lambda monitor: progress_callback(monitor.bytes_read, monitor.len),
+            )
+            if progress_callback
+            else encoder
+        )
+        headers = self._headers()
+        headers["Content-Type"] = body.content_type
 
         response = self._request(
             "POST",
             f"/api/projects/{project_id}/tasks/",
-            headers=self._headers(),
-            data=data,
-            files=files,
+            headers=headers,
+            data=body,
             timeout=self.upload_timeout,
         )
         return response.json()

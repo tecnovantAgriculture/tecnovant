@@ -261,6 +261,32 @@ def _submit_mission_to_webodm(app, mission_id: int, profile: str = "max_2d") -> 
                 project = webodm.get_or_create_project()
                 nodes = webodm.processing_nodes()
                 node_id = nodes[0].get("id") if nodes else None
+                last_progress_update = 0.0
+
+                def update_upload_progress(bytes_read: int, total_bytes: int) -> None:
+                    nonlocal last_progress_update
+                    now = time.monotonic()
+                    if bytes_read < total_bytes and now - last_progress_update < 5:
+                        return
+                    last_progress_update = now
+                    try:
+                        current = OrthophotoMission.query.get(mission_id)
+                        if current and current.status == "uploading_to_webodm":
+                            current.progress = (
+                                min(bytes_read / total_bytes, 0.99)
+                                if total_bytes
+                                else None
+                            )
+                            current.updated_at = datetime.utcnow()
+                            db.session.add(current)
+                            db.session.commit()
+                    except Exception:
+                        db.session.rollback()
+                        app.logger.exception(
+                            "orthophotos: could not persist upload progress for mission %s",
+                            mission_id,
+                        )
+
                 task = webodm.create_task(
                     project_id=project["id"],
                     name=mission.name,
@@ -270,6 +296,7 @@ def _submit_mission_to_webodm(app, mission_id: int, profile: str = "max_2d") -> 
                     ],
                     processing_node_id=node_id,
                     options=webodm.orthophoto_options(profile),
+                    progress_callback=update_upload_progress,
                 )
 
                 mission.status = STATUS_NAMES.get(task.get("status"), "queued")
