@@ -1468,6 +1468,30 @@ def list_nutrients():
     return jsonify(payload)
 
 
+@api.route("/mineral-report", methods=["POST"])
+@jwt_required()
+def mineral_report():
+    """Generate a professional PDF from the selected objective and foliar analysis."""
+    data = request.get_json(force=True, silent=False) or {}
+    nutrients = data.get("nutrients")
+    if not isinstance(nutrients, list) or not nutrients:
+        abort(400, description="nutrient data is required")
+    if len(nutrients) > 40:
+        abort(400, description="too many nutrient rows")
+    from .services.mineral_report import generate_mineral_report
+    logo_path = Path(current_app.root_path) / "static" / "assets" / "img" / "logo.png"
+    pdf = generate_mineral_report(data, logo_path=logo_path)
+    meta = data.get("meta") if isinstance(data.get("meta"), dict) else {}
+    lot_name = secure_filename(str(meta.get("lot") or "lote")) or "lote"
+    return send_file(
+        pdf,
+        mimetype="application/pdf",
+        as_attachment=True,
+        download_name=f"informe_balance_mineral_{lot_name}.pdf",
+        max_age=0,
+    )
+
+
 @api.route("/mineral-balance", methods=["POST"])
 @jwt_required()
 def mineral_balance():

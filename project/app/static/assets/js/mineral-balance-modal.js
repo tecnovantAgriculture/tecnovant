@@ -6,6 +6,7 @@
     common: "/api/foliage/common_analyses/",
     leaf: "/api/foliage/leaf_analyses/",
     balance: "/api/agrovista/mineral-balance",
+    report: "/api/agrovista/mineral-report",
     comparison: document.currentScript?.dataset.comparisonUrl || "/dashboard/agrovista/comparacion",
   };
   const ORDER = ["N", "P", "K", "Ca", "Mg", "S", "Cu", "Zn", "Mn", "B", "Mo", "Fe", "Si"];
@@ -137,6 +138,10 @@
         .mineral-action-table thead{position:static!important}
         .dark #mineral-balance-sidebar{border-color:#374151;background:#111827}
         .dark #mineral-balance-main{background:#030712}
+        #mineral-report-modal>section{width:min(680px,calc(100vw - 32px));max-height:calc(100vh - 40px)}
+        #mineral-report-form input,#mineral-report-form textarea{width:100%;border:1px solid #dbe3ec;border-radius:9px;background:#fff;padding:9px 11px;font-size:12px;color:#1e293b}
+        #mineral-report-form label{display:block;font-size:10px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.04em}
+        #mineral-report-form label span{display:block;margin-bottom:5px}
         @media(max-width:700px){
           #mineral-balance-modal>section{width:calc(100vw - 16px);height:calc(100vh - 16px)!important;max-height:none;border-radius:12px!important}
           #mineral-balance-layout{display:flex;flex-direction:column;overflow:hidden}
@@ -157,9 +162,7 @@
           <header class="flex shrink-0 items-center justify-between border-b border-gray-300 bg-white px-4 py-3 dark:border-gray-700 dark:bg-gray-900">
             <div><h2 id="mineral-balance-title" class="font-semibold uppercase tracking-wide">Balance de minerales</h2><p id="mineral-status" class="text-xs text-gray-500">Selecciona un objetivo y un análisis foliar.</p></div>
             <div id="mineral-balance-actions" class="flex items-center gap-2">
-              <button id="mineral-formulator" disabled class="rounded border bg-white px-3 py-2 text-xs font-semibold uppercase disabled:opacity-50">Formulador</button>
-              <button id="mineral-projection" disabled class="rounded border bg-white px-3 py-2 text-xs font-semibold uppercase disabled:opacity-50">Proyección</button>
-              <button id="mineral-liebig" disabled class="rounded border bg-white px-3 py-2 text-xs font-semibold uppercase disabled:opacity-50">Ley Liebig</button>
+              <button id="mineral-report" disabled class="rounded border bg-white px-3 py-2 text-xs font-semibold uppercase disabled:opacity-50"><i class="fas fa-file-pdf mr-1"></i>Generar informe</button>
               <button type="button" data-mineral-close class="h-9 w-9 rounded-md text-gray-500 hover:bg-gray-100" aria-label="Cerrar"><i class="fas fa-times"></i></button>
             </div>
           </header>
@@ -177,6 +180,31 @@
           </div>
         </section>
       </div>`);
+
+    document.body.insertAdjacentHTML("beforeend", `
+      <div id="mineral-report-modal" class="hidden fixed inset-0 bg-slate-950/70 backdrop-blur-sm" style="z-index:2147483640" role="dialog" aria-modal="true">
+        <div class="absolute inset-0" data-report-close></div>
+        <section class="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+          <header class="flex items-center justify-between border-b px-5 py-4">
+            <div><h2 class="text-base font-bold text-slate-900">Generar informe agron&oacute;mico</h2><p class="mt-1 text-xs text-slate-500">Completa los datos que aparecer&aacute;n en el PDF.</p></div>
+            <button type="button" data-report-close class="rounded-lg p-2 text-slate-500 hover:bg-slate-100"><i class="fas fa-times"></i></button>
+          </header>
+          <form id="mineral-report-form" class="min-h-0 overflow-y-auto p-5">
+            <div class="grid gap-4 sm:grid-cols-2">
+              <label><span>Cliente</span><input id="report-client-name" maxlength="120" placeholder="Nombre del cliente"></label>
+              <label><span>Profesional responsable</span><input id="report-professional-name" maxlength="120" placeholder="Ingeniero agr&oacute;nomo"></label>
+              <label class="sm:col-span-2"><span>Matr&iacute;cula profesional</span><input id="report-professional-license" maxlength="80" placeholder="N&uacute;mero de matr&iacute;cula (opcional)"></label>
+              <label class="sm:col-span-2"><span>Observaciones y recomendaciones</span><textarea id="report-notes" rows="6" maxlength="3000" placeholder="Observaciones de campo, contexto del cultivo y recomendaciones que deban quedar registradas."></textarea></label>
+            </div>
+            <div class="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">El informe presenta una interpretaci&oacute;n comparativa. Las dosis y decisiones de fertilizaci&oacute;n deben validarse con inspecci&oacute;n de campo, an&aacute;lisis de suelo y criterio profesional.</div>
+            <p id="mineral-report-status" class="mt-3 min-h-[18px] text-xs text-slate-500"></p>
+            <footer class="mt-4 flex justify-end gap-2 border-t pt-4">
+              <button type="button" data-report-close class="rounded-lg border px-4 py-2 text-xs font-semibold text-slate-600">Cancelar</button>
+              <button id="mineral-report-submit" type="submit" class="rounded-lg bg-emerald-700 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-800"><i class="fas fa-file-pdf mr-2"></i>Descargar PDF</button>
+            </footer>
+          </form>
+        </section>
+      </div>`);
     return true;
   }
   function tableSection(title, prefix) {
@@ -188,9 +216,7 @@
   }
   function updateButtons() {
     const ready = !!state.selectedObjective && !!state.selectedLeaf;
-    document.getElementById("mineral-formulator").disabled = !ready;
-    document.getElementById("mineral-projection").disabled = !ready || !!state.selectedLeaf?.is_polygon_calculation;
-    document.getElementById("mineral-liebig").disabled = !state.balance;
+    document.getElementById("mineral-report").disabled = !state.balance;
   }
 
   async function load() {
@@ -306,6 +332,91 @@
     node.classList.remove("hidden");
     node.innerHTML = limiting && Math.abs(number(limiting.difference_kg) || 0) > 0 ? `<strong>Ley de Liebig:</strong> el nutriente limitante es <strong>${esc(limiting.name)}</strong>, con un déficit de <strong>${fmt(Math.abs(number(limiting.difference_kg)), 2)} kg/ha</strong>.` : "No se identifican déficits minerales en esta comparación.";
   }
+  function openReportForm() {
+    if (!state.balance || !state.selectedObjective || !state.selectedLeaf) return;
+    const common = commonFor(state.selectedLeaf);
+    document.getElementById("mineral-report-status").textContent = "";
+    document.getElementById("report-client-name").value = common.client_name || "";
+    document.getElementById("mineral-report-modal").classList.remove("hidden");
+  }
+  function closeReportForm() {
+    document.getElementById("mineral-report-modal").classList.add("hidden");
+  }
+  function reportPayload() {
+    const objective = state.selectedObjective;
+    const leaf = state.selectedLeaf;
+    const common = commonFor(leaf);
+    const targets = nutrientInfo(objective);
+    return {
+      meta: {
+        farm: common.farm_name || leaf.farm_name || "",
+        lot: common.lot_name || leaf.lot_name || "",
+        crop: objective.crop_name || "Objetivo seleccionado",
+        analysis_date: common.date || leaf.common_analysis_date || "",
+        rest_days: leaf.rest_days ?? common.rest_days ?? common.rest ?? "",
+        orthophoto: leaf.orthophoto_name || "",
+        report_id: String(leaf.id || "")
+      },
+      professional: {
+        client_name: document.getElementById("report-client-name").value.trim(),
+        name: document.getElementById("report-professional-name").value.trim(),
+        license: document.getElementById("report-professional-license").value.trim()
+      },
+      notes: document.getElementById("report-notes").value.trim(),
+      nutrients: allNutrients().map(nutrient => {
+        const target = targets.get(String(nutrient.id)) || {};
+        const unit = target.unit || nutrient.unit || "";
+        return {
+          name: target.name || nutrient.name || nutrient.symbol,
+          symbol: target.symbol || nutrient.symbol,
+          unit: unit,
+          actual: leaf["nutrient_" + nutrient.id],
+          ideal: target.value,
+          is_micro: String(unit).toLowerCase().includes("ppm")
+        };
+      }),
+      balance: state.balance
+    };
+  }
+  async function generateReport(event) {
+    event.preventDefault();
+    const button = document.getElementById("mineral-report-submit");
+    const status = document.getElementById("mineral-report-status");
+    button.disabled = true;
+    status.className = "mt-3 min-h-[18px] text-xs text-slate-500";
+    status.textContent = "Generando informe profesional...";
+    try {
+      const response = await fetch(ENDPOINTS.report, {
+        method: "POST", credentials: "include",
+        headers: {"Content-Type": "application/json", "X-CSRF-TOKEN": csrf()},
+        body: JSON.stringify(reportPayload())
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.description || body.message || body.error || "No se pudo generar el informe.");
+      }
+      const blob = await response.blob();
+      const disposition = response.headers.get("Content-Disposition") || "";
+      const encoded = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+      const plain = disposition.match(/filename="?([^";]+)"?/i);
+      const filename = encoded ? decodeURIComponent(encoded[1]) : (plain ? plain[1] : "informe_balance_mineral.pdf");
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      closeReportForm();
+    } catch (error) {
+      status.className = "mt-3 min-h-[18px] text-xs text-red-600";
+      status.textContent = error.message || "No se pudo generar el informe.";
+    } finally {
+      button.disabled = false;
+    }
+  }
+
   function openProjection() {
     const common = commonFor(state.selectedLeaf), objective = state.selectedObjective;
     const params = new URLSearchParams({ mode: "lot_vs_objective", lot_id: String(common.lot_id || ""), common_analysis_id: String(common.id || state.selectedLeaf.common_analysis_id), objective_id: String(objective.id), objective_type: "crop", objective_label: objective.crop_name || "Objetivo" });
@@ -327,9 +438,9 @@
     document.querySelectorAll("[data-mineral-close]").forEach(node => node.addEventListener("click", close));
     document.getElementById("mineral-objective-body").addEventListener("click", event => { const row = event.target.closest("[data-objective-id]"); if (!row) return; state.selectedObjective = state.objectives.find(item => Number(item.id) === Number(row.dataset.objectiveId)); state.balance = null; state.showGrade = false; state.showNano = false; renderObjectives(); updateButtons(); if (state.selectedLeaf) calculate(); else setStatus("Objetivo seleccionado; selecciona el análisis foliar."); });
     document.getElementById("mineral-foliar-body").addEventListener("click", event => { const row = event.target.closest("[data-leaf-id]"); if (!row) return; const item = state.leaf.find(entry => String(entry.id) === String(row.dataset.leafId)); if (event.target.closest("[data-leaf-analysis]")) { event.stopPropagation(); openLeafAnalysis(item); return; } state.selectedLeaf = item; state.balance = null; state.showGrade = false; state.showNano = false; renderFoliar(); updateButtons(); if (state.selectedObjective) calculate(); else setStatus("Análisis seleccionado; selecciona el objetivo."); });
-    document.getElementById("mineral-formulator").addEventListener("click", calculate);
-    document.getElementById("mineral-projection").addEventListener("click", openProjection);
-    document.getElementById("mineral-liebig").addEventListener("click", showLiebig);
+    document.getElementById("mineral-report").addEventListener("click", openReportForm);
+    document.getElementById("mineral-report-form").addEventListener("submit", generateReport);
+    document.querySelectorAll("[data-report-close]").forEach(node => node.addEventListener("click", closeReportForm));
     document.getElementById("mineral-result").addEventListener("click", event => { const button = event.target.closest("[data-mineral-reveal]"); if (!button || !state.balance) return; if (button.dataset.mineralReveal === "grade") state.showGrade = true; if (button.dataset.mineralReveal === "nano") state.showNano = true; renderBalance(); });
     document.addEventListener("keydown", event => { if (event.key === "Escape" && !document.getElementById("mineral-balance-modal").classList.contains("hidden")) close(); });
   }
