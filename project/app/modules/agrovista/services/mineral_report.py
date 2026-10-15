@@ -107,7 +107,7 @@ def _add_logo(fig, logo_path):
         return
     try:
         logo = plt.imread(str(logo_path))
-        axis = fig.add_axes([0.06, 0.958, 0.15, 0.065])
+        axis = fig.add_axes([0.06, 0.855, 0.20, 0.086])
         axis.imshow(logo, interpolation="lanczos")
         axis.set_aspect("equal")
         axis.axis("off")
@@ -138,10 +138,10 @@ def generate_mineral_report(payload, logo_path=None):
         # Página 1: identificación y resumen ejecutivo.
         fig = _page(1)
         _add_logo(fig, logo_path)
-        fig.text(0.06, 0.91, "INFORME AGRONÓMICO", fontsize=9, color=BLUE_DARK, weight="medium")
-        fig.text(0.06, 0.865, "Balance mineral y análisis foliar", fontsize=19, color=NAVY, weight="medium")
+        fig.text(0.30, 0.917, "INFORME AGRONÓMICO", fontsize=9, color=BLUE_DARK, weight="medium")
+        fig.text(0.30, 0.887, "Balance mineral y análisis foliar", fontsize=16.5, color=NAVY, weight="normal")
         fig.text(
-            0.06, 0.837,
+            0.30, 0.852,
             f"Informe {_text(meta.get('report_id'), 40) or generated.strftime('%Y%m%d-%H%M')}  ·  {generated.strftime('%d/%m/%Y %H:%M')}",
             fontsize=8, color=MUTED,
         )
@@ -343,15 +343,16 @@ def generate_mineral_report(payload, logo_path=None):
             sections.append(("Información insuficiente", MUTED, "No existen valores comparables suficientes para emitir una interpretación relativa."))
 
         y = 0.835
-        for title, color, body in sections:
-            wrapped = _wrap(body, 108)
+        for index, (title, color, body) in enumerate(sections):
+            wrapped = _wrap(body, 112)
             lines = wrapped.count("\n") + 1
-            height = 0.058 + lines * 0.018
-            _card(fig, 0.06, y - height, 0.88, height, face="white")
-            fig.patches.append(Rectangle((0.06, y - height), 0.006, height, transform=fig.transFigure, color=color))
-            fig.text(0.085, y - 0.026, title.upper(), fontsize=7.5, color=color, weight="medium")
-            fig.text(0.085, y - 0.052, wrapped, fontsize=8.2, color=TEXT, va="top", linespacing=1.45)
-            y -= height + 0.022
+            fig.patches.append(Rectangle((0.06, y - 0.006), 0.035, 0.003, transform=fig.transFigure, color=color))
+            fig.text(0.105, y, title, fontsize=9, color=NAVY, weight="medium", va="top")
+            fig.text(0.06, y - 0.035, wrapped, fontsize=8.5, color=TEXT, va="top", linespacing=1.5)
+            section_height = 0.068 + lines * 0.019
+            y -= section_height
+            if index < len(sections) - 1:
+                fig.add_artist(plt.Line2D([0.06, 0.94], [y + 0.012, y + 0.012], transform=fig.transFigure, color=BORDER, linewidth=0.6))
 
         if notes and y > 0.17:
             wrapped = _wrap(notes, 108)

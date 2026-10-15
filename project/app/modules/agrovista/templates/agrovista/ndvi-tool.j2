@@ -3087,7 +3087,7 @@
         drawnItems.eachLayer(function(layer){
           if(!layer || typeof layer.getLatLngs !== 'function') return;
           let rings = layer.getLatLngs();
-          while(Array.isArray(rings) && rings.length && Array.isArray(rings[0]) && rings[0].length && Array.isArray(rings[0][0])) rings = rings[0];
+          while(Array.isArray(rings) && rings.length && Array.isArray(rings[0])) rings = rings[0];
           if(!Array.isArray(rings) || rings.length < 3) return;
           ctx.beginPath();
           rings.forEach(function(point,index){
