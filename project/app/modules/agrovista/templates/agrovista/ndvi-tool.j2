@@ -6,7 +6,7 @@
 {% set shadow = "" %}
 {% set padding = "" %}
 {% set flush_content_shell = true %}
-{% set main_clases = "flex-grow overflow-y-auto p-0" %}
+{% set main_clases = "flex-grow overflow-hidden p-0" %}
 {% from "settings/_ui_class.j2" import base_button_classes, input_bg_color, border_color, hover_bg_color, focus_ring_color, button_bg_color, delete_button_bg_color, input_focus_bg_color, text_color %}
 {% from "macros/_forms.j2" import render_alert %}
 
@@ -20,6 +20,12 @@
       height: clamp(380px, 72vh, 780px);
       position: relative;
       z-index: 0;
+    }
+
+    @media (max-width: 1023px) {
+      #main-content {
+        overflow-y: auto !important;
+      }
     }
 
     /* Keep space for right ruler (+ shift default right controls) */
@@ -499,6 +505,52 @@
             </p>
           </div>
         </details>
+
+        <section id="cropQuickFilters" class="rounded-xl border border-gray-200 bg-white px-3 py-2.5 shadow-sm dark:border-gray-700 dark:bg-gray-800" aria-labelledby="cropQuickFiltersTitle">
+          <div class="mb-2 flex items-center justify-between">
+            <h2 id="cropQuickFiltersTitle" class="text-[11px] font-bold uppercase tracking-wider text-gray-700 dark:text-gray-200">Por cultivo</h2>
+          </div>
+          <div class="space-y-3 text-[11px]">
+            <div>
+              <button type="button" class="mb-1 flex w-full items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-left font-semibold text-gray-800 hover:bg-gray-100 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100">
+                <span><i class="fas fa-cow mr-2 text-gray-400" aria-hidden="true"></i>Ganader&iacute;a</span>
+                <i class="fas fa-chevron-right text-[9px] text-gray-400" aria-hidden="true"></i>
+              </button>
+              <div class="grid grid-cols-2 gap-1.5 pl-2">
+                <button type="button" class="rounded-md border border-gray-200 bg-white px-2 py-1.5 text-left text-gray-600 hover:border-blue-300 hover:text-blue-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300">Pasturas para leche</button>
+                <button type="button" class="rounded-md border border-gray-200 bg-white px-2 py-1.5 text-left text-gray-600 hover:border-blue-300 hover:text-blue-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300">Pasturas para carne</button>
+              </div>
+            </div>
+
+            <div>
+              <button type="button" class="mb-1 flex w-full items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-left font-semibold text-gray-800 hover:bg-gray-100 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100">
+                <span><i class="fas fa-wheat-awn mr-2 text-gray-400" aria-hidden="true"></i>Cereales</span>
+                <i class="fas fa-chevron-right text-[9px] text-gray-400" aria-hidden="true"></i>
+              </button>
+              <div class="grid grid-cols-3 gap-1.5 pl-2">
+                <button type="button" class="rounded-md border border-gray-200 bg-white px-2 py-1.5 text-gray-600 hover:border-blue-300 hover:text-blue-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300">Arroz</button>
+                <button type="button" class="rounded-md border border-gray-200 bg-white px-2 py-1.5 text-gray-600 hover:border-blue-300 hover:text-blue-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300">Ma&iacute;z</button>
+                <button type="button" class="rounded-md border border-gray-200 bg-white px-2 py-1.5 text-gray-600 hover:border-blue-300 hover:text-blue-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300">Trigo</button>
+              </div>
+            </div>
+
+            <div>
+              <button type="button" class="mb-1 flex w-full items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-left font-semibold text-gray-800 hover:bg-gray-100 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100">
+                <span><i class="fas fa-tree mr-2 text-gray-400" aria-hidden="true"></i>Cultivos permanentes</span>
+                <i class="fas fa-chevron-right text-[9px] text-gray-400" aria-hidden="true"></i>
+              </button>
+              <div class="grid grid-cols-3 gap-1.5 pl-2">
+                <button type="button" class="rounded-md border border-gray-200 bg-white px-2 py-1.5 text-gray-600 hover:border-blue-300 hover:text-blue-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300">Caf&eacute;</button>
+                <button type="button" class="rounded-md border border-gray-200 bg-white px-2 py-1.5 text-gray-600 hover:border-blue-300 hover:text-blue-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300">C&iacute;tricos</button>
+                <button type="button" class="rounded-md border border-gray-200 bg-white px-2 py-1.5 text-gray-600 hover:border-blue-300 hover:text-blue-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300">Aguacate</button>
+              </div>
+            </div>
+
+            <button type="button" class="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-left font-semibold text-gray-700 hover:border-blue-300 hover:text-blue-700 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200">
+              <i class="fas fa-seedling mr-2 text-gray-400" aria-hidden="true"></i>Otros cultivos
+            </button>
+          </div>
+        </section>
 
         <section class="hidden rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/70 dark:bg-emerald-900/20 p-4 shadow-sm space-y-3">
           <h2 class="text-sm font-semibold text-emerald-900 dark:text-emerald-300">
@@ -3296,6 +3348,48 @@
       }
     }
 
+    async function autoSelectReferenceForAsset(assetId){
+      const numericAssetId = Number(assetId);
+      if(!numericAssetId || !farmSelector || !lotSelector) return;
+      try{
+        const response = await fetch('/api/foliage/lots/', { credentials:'include' });
+        const lots = await response.json().catch(() => []);
+        if(!response.ok || !Array.isArray(lots)) return;
+
+        const linkedLots = lots.filter(lot => Number(lot.media_asset_id) === numericAssetId);
+        if(!linkedLots.length) return;
+
+        const farmCounts = linkedLots.reduce((counts, lot) => {
+          const id = Number(lot.farm_id);
+          if(id) counts.set(id, (counts.get(id) || 0) + 1);
+          return counts;
+        }, new Map());
+        const farmId = [...farmCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+        if(!farmId) return;
+        window.currentFarmId = farmId;
+
+        if(!farmSelector.querySelector(`option[value="${farmId}"]`)){
+          await loadReferenceFarms();
+        }
+        farmSelector.value = String(farmId);
+        if(el.analysisFarmSelect){
+          el.analysisFarmSelect.value = String(farmId);
+          renderLotOptions(farmId);
+        }
+        const farm = (foliarState.farms || []).find(item => Number(item.id) === farmId);
+        setText(el.contextFarm, farm?.name || linkedLots[0].farm_name, 'Seleccionar finca...');
+
+        await loadLotsForCurrentFarm();
+        const linkedInFarm = linkedLots.filter(lot => Number(lot.farm_id) === farmId);
+        if(linkedInFarm.length === 1){
+          lotSelector.value = String(linkedInFarm[0].id);
+          lotSelector.dispatchEvent(new Event('change', { bubbles:true }));
+        }
+      }catch(error){
+        console.warn('No se pudo seleccionar automaticamente la finca de la ortofoto', error);
+      }
+    }
+
     // Picker callback usa metadata directa desde Media (sin re-subir)
     MP.setOnPick(async (payload)=>{
       try{
@@ -3331,6 +3425,7 @@
         setStatus(mppX != null ? `Escala automática: ~${mppX} m/px` : "Escala en píxeles (mpp no disponible)");
         resetMapState(true);
         window.resetLotReferenceForAsset?.();
+        await autoSelectReferenceForAsset(imageMeta?.media_asset_id);
         drawnItems.eachLayer(layer => { if(layer instanceof L.Polygon || layer instanceof L.Rectangle){ updateAreaForLayer(layer); } });
       }catch(e){ setStatus("Error al procesar el archivo"); }
     });
@@ -4152,7 +4247,7 @@
         });
       }
       // Cargar lotes cuando se cambia de finca
-      function loadLotsForCurrentFarm() {
+      async function loadLotsForCurrentFarm() {
         // Usar window.currentFarmId como fuente de verdad (establecido por farm picker o analysisFarmSelect)
         const farmId = window.currentFarmId;
         selectedLotId = null;
@@ -4170,7 +4265,7 @@
           return;
         }
 
-        fetch('/api/foliage/lots/?filter_value=' + farmId, {
+        return fetch('/api/foliage/lots/?filter_value=' + farmId, {
           credentials: 'include'
         })
         .then(async r => {
@@ -5043,10 +5138,41 @@ if(window.Swal) Swal.fire({
       return Number.isFinite(number) ? formatNutrientValue(number) + (suffix || "") : "--";
     }
     const comparisonNutrients = [["n","N"],["p","P"],["k","K"],["ca","Ca"],["mg","Mg"],["s","S"],["cu","Cu"],["zn","Zn"],["mn","Mn"],["b","B"],["mo","Mo"],["fe","Fe"],["si","Si"]];
+    function mineralRowToComparisonEntry(row){
+      const nutrients = Object.entries(row.nutrients_info || {}).map(([nutrientId, info]) => ({
+        nutrient_id: Number(nutrientId),
+        nutrient_name: info.name || info.symbol || "Nutriente",
+        nutrient_symbol: info.symbol || info.name || "",
+        nutrient_unit: info.unit || "",
+        target_value: row["nutrient_" + nutrientId],
+      })).filter(item => Number.isFinite(Number(item.target_value)));
+      return {
+        id: String(row.id),
+        linkedLotId: row.lot_id,
+        name: row.lot_name || ("Lote " + row.lot_id),
+        mineralRow: row,
+        areaStats: {
+          analysis_date: row.common_analysis_date,
+          orthophoto_date: row.common_analysis_date,
+          farm_name: row.farm_name,
+          protein: row.protein,
+          yield_estimate: row.yield_estimate,
+          bromatologia: {aforo_ua_ha: row.yield_estimate},
+          _optional_lot_form: {rest_days: row.rest_days},
+          nutrients,
+        },
+      };
+    }
     function comparisonEntryMeta(entry){
-      const stats=entry.areaStats||{}, lot=(foliarState.lots||[]).find(item=>Number(item.id)===Number(entry.linkedLotId));
+      const stats=entry.areaStats||{}, row=entry.mineralRow||null;
+      const lot=(foliarState.lots||[]).find(item=>Number(item.id)===Number(entry.linkedLotId));
       const farm=(foliarState.farms||[]).find(item=>Number(item.id)===Number(lot&&lot.farm_id));
-      return {id:entry.linkedLotId||entry.id,date:stats.orthophoto_date||stats.analysis_date||stats.date||getOrthophotoDateLabel(),farm:stats.farm_name||(farm&&farm.name)||"",lot:(lot&&lot.name)||entry.name||"Lote"};
+      return {
+        id:(row&&row.id)||entry.linkedLotId||entry.id,
+        date:(row&&row.common_analysis_date)||stats.orthophoto_date||stats.analysis_date||stats.date||getOrthophotoDateLabel(),
+        farm:(row&&row.farm_name)||stats.farm_name||(farm&&farm.name)||"",
+        lot:(row&&row.lot_name)||(lot&&lot.name)||entry.name||"Lote"
+      };
     }
     function comparisonEntryValues(entry){
       const values=new Map();
@@ -5111,23 +5237,28 @@ if(window.Swal) Swal.fire({
     async function openFlexibleLotComparison(){
       let entries=getComparableLotEntries().slice(0,20);
       if(!comparisonModal||!comparisonContent){return;}
-      if(entries.length<2){if(window.Swal){await Swal.fire({icon:'info',title:'Comparacion no disponible',text:'Se necesitan por lo menos dos polígonos calculados, guardados o recién dibujados.',confirmButtonText:'Aceptar'});}return;}
+      if(!entries.length){
+        if(window.Swal){await Swal.fire({icon:'info',title:'Comparacion no disponible',text:'Se necesita por lo menos un lote calculado para usarlo como objetivo.',confirmButtonText:'Aceptar'});}
+        return;
+      }
       comparisonContent.innerHTML='<div class="p-8 text-center text-sm text-gray-500"><i class="fas fa-spinner fa-spin mr-2"></i>Preparando comparacion...</div>';
       comparisonModal.classList.remove('hidden');document.body.classList.add('overflow-hidden');
       try{
         for(const entry of entries){const stats=await ensureAreaStatsForEntry(entry);if(stats){entry.areaStats=stats;}}
         entries=entries.filter(entry=>entry.areaStats);
-        if(entries.length<2){throw new Error('No fue posible obtener dos analisis para comparar.');}
+        if(!entries.length){throw new Error('No fue posible obtener un lote objetivo para comparar.');}
+
+        const mineralRows=typeof window.getSavedPolygonMineralRows==='function'
+          ? await window.getSavedPolygonMineralRows()
+          : [];
+        const foliarEntries=(Array.isArray(mineralRows)?mineralRows:[]).map(mineralRowToComparisonEntry);
+        if(!foliarEntries.length){throw new Error('No hay analisis foliares guardados para mostrar en Foliar.');}
+
         let reference=entries.find(isObjectiveEntry)||entries[0];
-        let selected=entries.find(entry=>entry!==reference);
+        let selected=foliarEntries[0];
         const render=async()=>{
-          if(selected===reference){selected=entries.find(entry=>entry!==reference);}
           const objective=comparisonObjective(reference);
           const objectiveRows=entries.map(entry=>comparisonTableRow(entry,entry===reference,false).replace('data-comparison-row','data-objective-row')).join('');
-          const activeReference=reference;
-          reference=null;
-          const foliarEntries=entries.filter(entry=>entry!==reference);
-          reference=activeReference;
           const foliarRows=foliarEntries.map(entry=>comparisonTableRow(entry,entry===selected,false)).join('');
           comparisonContent.innerHTML='<div class="space-y-3">'+comparisonTable('Objetivo',objectiveRows,true)+comparisonTable('Foliar',foliarRows,false)+'<section class="rounded-xl border border-gray-200 bg-white p-2 shadow-sm"><h3 class="mb-2 text-xs font-bold uppercase tracking-wider text-emerald-700">Balance</h3><div id="lotComparisonBalance" class="p-6 text-center text-xs text-gray-500"><i class="fas fa-spinner fa-spin mr-2"></i>Calculando balance...</div></section></div>';
           comparisonSubtitle.textContent=entries.length+' lotes - '+comparisonEntryMeta(reference).lot+' como objetivo';
@@ -5304,6 +5435,6 @@ if(window.Swal) Swal.fire({
   </script>
   <script src="/js/lot-optional-form.js?v=20260914-4"></script>
   <script src="/js/lot-projection.js?v=20260919-8"></script>
-  <script src="/js/foliar-analysis-drawer.js?v=20260914"></script>
+  <script src="/js/foliar-analysis-drawer.js?v=20261015-1"></script>
   <script src="/js/mineral-balance-modal.js?v=rest-days-20260914" data-comparison-url="{{ url_for('agrovista.comparison_config') }}"></script>
 {% endblock %}
