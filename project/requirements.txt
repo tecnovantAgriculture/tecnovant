@@ -26,3 +26,4 @@ requests>=2.32.0
 requests-toolbelt>=1.0.0
 google-auth>=2.35.0
 google-cloud-storage>=2.18.0
+pyshp>=2.3.1

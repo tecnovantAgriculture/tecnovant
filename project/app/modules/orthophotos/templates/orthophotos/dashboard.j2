@@ -219,6 +219,12 @@
     color: #17221e;
   }
   .orth-dialog-actions { display: flex; justify-content: flex-end; gap: 10px; }
+  .orth-download-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .orth-format-btn { min-height: 76px; padding: 12px; justify-content: flex-start; text-align: left; }
+  .orth-format-btn i { width: 24px; font-size: 18px; text-align: center; }
+  .orth-format-copy { display: grid; gap: 3px; }
+  .orth-format-copy small { color: #7a867f; font-size: 10px; font-weight: 500; }
+  @media (max-width: 520px) { .orth-download-grid { grid-template-columns: 1fr; } }
 
   .orth-card-actions {
     display: flex;
@@ -497,11 +503,15 @@
             <td>
               {% if mission.status == 'completed' %}
                 {% if not mission.available_assets or 'orthophoto.tif' in mission.available_assets %}
-                  <a href="{{ url_for('orthophotos.download_mission_asset', mission_id=mission.id, asset_key='orthophoto') }}"
-                     class="orth-btn orth-btn-primary">
+                  <button type="button"
+                          class="orth-btn orth-btn-primary open-orth-download"
+                          data-mission-name="{{ mission.name|e }}"
+                          data-farm-id="{{ mission.farm_id or '' }}"
+                          data-tiff-url="{{ url_for('orthophotos.download_mission_asset', mission_id=mission.id, asset_key='orthophoto') }}"
+                          data-select-url="{{ url_for('orthophotos.select_mission_orthophoto', mission_id=mission.id) }}">
                     <i class="fas fa-download"></i>
                     Descargar ortofoto
-                  </a>
+                  </button>
                 {% else %}
                   <span class="orth-muted">Resultado no disponible</span>
                 {% endif %}
@@ -544,6 +554,33 @@
     </div>
   </section>
 </div>
+
+<dialog id="orth-download-dialog" class="orth-dialog">
+  <div class="orth-dialog-form">
+    <div>
+      <h3 class="orth-dialog-title">Descargar ortofoto</h3>
+      <p id="orth-download-context" class="orth-muted">Selecciona el formato que necesitas.</p>
+    </div>
+    <div class="orth-download-grid">
+      <button type="button" class="orth-btn orth-format-btn" data-download-format="jpg">
+        <i class="fas fa-image"></i><span class="orth-format-copy"><strong>JPG</strong><small>Imagen visual optimizada</small></span>
+      </button>
+      <button type="button" class="orth-btn orth-format-btn" data-download-format="tiff">
+        <i class="fas fa-map"></i><span class="orth-format-copy"><strong>GeoTIFF</strong><small>Ortofoto original georreferenciada</small></span>
+      </button>
+      <button type="button" class="orth-btn orth-format-btn" data-download-format="shp">
+        <i class="fas fa-draw-polygon"></i><span class="orth-format-copy"><strong>SHAPE</strong><small>Pol&iacute;gonos de los lotes en ZIP</small></span>
+      </button>
+      <button type="button" class="orth-btn orth-format-btn" data-download-format="kmz">
+        <i class="fas fa-route"></i><span class="orth-format-copy"><strong>KMZ Agras</strong><small>L&iacute;mites de lotes en WGS84</small></span>
+      </button>
+    </div>
+    <p id="orth-download-status" class="orth-muted"></p>
+    <div class="orth-dialog-actions">
+      <button id="close-orth-download" class="orth-btn" type="button">Cancelar</button>
+    </div>
+  </div>
+</dialog>
 {% endblock %}
 
 {% block extra_js %}
@@ -576,6 +613,78 @@ document.addEventListener('DOMContentLoaded', () => {
   const newLotWrap = document.getElementById('orth-new-lot-wrap');
   const newLotInput = document.getElementById('orth-new-lot');
   const newLotAreaInput = document.getElementById('orth-new-lot-area');
+  const downloadDialog = document.getElementById('orth-download-dialog');
+  const downloadContext = document.getElementById('orth-download-context');
+  const downloadStatus = document.getElementById('orth-download-status');
+  let activeDownloadButton = null;
+
+  function closeDownloadDialog() {
+    if (downloadDialog && downloadDialog.open) downloadDialog.close();
+    activeDownloadButton = null;
+    if (downloadStatus) downloadStatus.textContent = '';
+  }
+  async function saveDownloadResponse(response, fallbackName) {
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error(body.description || body.message || body.msg || body.error || 'No se pudo generar el archivo.');
+    }
+    const blob = await response.blob();
+    const disposition = response.headers.get('Content-Disposition') || '';
+    const encoded = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+    const plain = disposition.match(/filename="?([^";]+)"?/i);
+    const filename = encoded ? decodeURIComponent(encoded[1]) : (plain ? plain[1] : fallbackName);
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = objectUrl; link.download = filename; document.body.appendChild(link);
+    link.click(); link.remove(); URL.revokeObjectURL(objectUrl);
+  }
+  document.querySelectorAll('.open-orth-download').forEach(button => {
+    button.addEventListener('click', () => {
+      activeDownloadButton = button;
+      downloadContext.textContent = (button.dataset.missionName || 'Ortofoto') + ' - selecciona el formato.';
+      downloadStatus.textContent = '';
+      downloadDialog.showModal();
+    });
+  });
+  document.getElementById('close-orth-download')?.addEventListener('click', closeDownloadDialog);
+  downloadDialog?.addEventListener('click', event => {
+    if (event.target === downloadDialog) closeDownloadDialog();
+  });
+  downloadDialog?.querySelectorAll('[data-download-format]').forEach(button => {
+    button.addEventListener('click', async () => {
+      if (!activeDownloadButton) return;
+      const format = button.dataset.downloadFormat;
+      if (format === 'tiff') {
+        window.location.href = activeDownloadButton.dataset.tiffUrl;
+        closeDownloadDialog();
+        return;
+      }
+      const buttons = Array.from(downloadDialog.querySelectorAll('[data-download-format]'));
+      buttons.forEach(item => item.disabled = true);
+      downloadStatus.textContent = 'Preparando archivo. La primera descarga puede tardar...';
+      try {
+        const selected = await fetch(activeDownloadButton.dataset.selectUrl, {
+          method: 'POST', credentials: 'same-origin',
+          headers: {'X-CSRF-TOKEN': typeof getCsrfToken === 'function' ? getCsrfToken() : '', 'X-Requested-With': 'XMLHttpRequest'}
+        });
+        const selectedBody = await selected.json().catch(() => ({}));
+        if (!selected.ok || !selectedBody.asset?.id) throw new Error(selectedBody.message || 'No se pudo preparar la ortofoto.');
+        const assetId = selectedBody.asset.id;
+        const farmId = activeDownloadButton.dataset.farmId;
+        if ((format === 'shp' || format === 'kmz') && !farmId) throw new Error('La mision no tiene una finca asociada.');
+        const url = format === 'jpg'
+          ? '/api/agrovista/orthophoto-export/' + assetId + '/jpg'
+          : '/api/agrovista/lots-export/' + assetId + '/' + format + '?farm_id=' + encodeURIComponent(farmId);
+        const response = await fetch(url, {credentials:'same-origin'});
+        await saveDownloadResponse(response, 'ortofoto.' + format);
+        closeDownloadDialog();
+      } catch (error) {
+        downloadStatus.textContent = error.message || 'No se pudo descargar.';
+      } finally {
+        buttons.forEach(item => item.disabled = false);
+      }
+    });
+  });
 
   const fillSelect = (select, items, placeholder, allowNew = true) => {
     select.innerHTML = `<option value="">${placeholder}</option>`;
