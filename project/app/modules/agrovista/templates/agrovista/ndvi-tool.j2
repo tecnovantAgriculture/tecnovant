@@ -4292,7 +4292,7 @@
         if (!farmSelector) return;
         farmSelector.disabled = true;
         try {
-          const response = await fetch('/api/foliage/farms/', { credentials: 'include' });
+          const response = await fetch('/api/agrovista/reference-farms', { credentials: 'include' });
           const farms = await response.json().catch(() => []);
           if (!response.ok) throw new Error(farms?.description || farms?.error || 'No se pudieron cargar las fincas');
           farmSelector.innerHTML = '<option value="">-- Seleccionar finca --</option>';
@@ -5596,5 +5596,5 @@ if(window.Swal) Swal.fire({
   <script src="/js/lot-optional-form.js?v=20260914-4"></script>
   <script src="/js/lot-projection.js?v=20260919-8"></script>
   <script src="/js/foliar-analysis-drawer.js?v=20261015-2"></script>
-  <script src="/js/mineral-balance-modal.js?v=professional-report-20261015-2" data-comparison-url="{{ url_for('agrovista.comparison_config') }}"></script>
+  <script src="/js/mineral-balance-modal.js?v=professional-report-20261015-3" data-comparison-url="{{ url_for('agrovista.comparison_config') }}"></script>
 {% endblock %}

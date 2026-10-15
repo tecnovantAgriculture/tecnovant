@@ -10,16 +10,17 @@ from typing import Dict, Optional
 import numpy as np
 from flask import Response, abort, current_app, jsonify, request, send_file
 from werkzeug.utils import secure_filename
-from flask_jwt_extended import get_jwt, jwt_required
+from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 from pyproj import Transformer
 from rasterio.transform import Affine, xy
 from sqlalchemy import func
 from sqlalchemy.orm import joinedload, selectinload
 
 from app.core.controller import check_permission, check_resource_access
+from app.core.models import get_clients_for_user
 from app.extensions import db
 from app.helpers.csv_handler import CsvHandler
-from app.modules.foliage.models import CommonAnalysis, Lot, LotAssetGeometry, Nutrient
+from app.modules.foliage.models import CommonAnalysis, Farm, Lot, LotAssetGeometry, Nutrient
 from app.modules.media.access import accessible_asset_query
 from app.modules.media.helpers import (
     PreprocessConfig,
@@ -30,6 +31,7 @@ from app.modules.media.helpers import (
 from app.modules.media.models import Asset, StorageLocation
 from app.modules.media.storage import ensure_local_file
 from app.modules.media.tasks import _resolve_cache_dir
+from app.modules.orthophotos.models import OrthophotoMission
 
 from . import agrovista_api as api
 from .bromatologia import aforo_desde_proteina, perfil_desde_ngrdi
@@ -1401,6 +1403,56 @@ def protein():
     }
     payload["nutrients"] = nutrient_payloads
     return jsonify(payload)
+
+
+@api.route("/reference-farms", methods=["GET"])
+@jwt_required()
+def list_reference_farms():
+    """Fincas accesibles que tienen al menos una ortofoto asociada."""
+    user_id = get_jwt_identity()
+    organization_ids = {client.id for client in get_clients_for_user(user_id)}
+    if not organization_ids:
+        return jsonify([])
+
+    farm_ids = {
+        farm_id
+        for (farm_id,) in (
+            db.session.query(Lot.farm_id)
+            .join(Farm, Farm.id == Lot.farm_id)
+            .filter(
+                Farm.org_id.in_(organization_ids),
+                Lot.active.is_(True),
+                Lot.media_asset_id.isnot(None),
+            )
+            .distinct()
+            .all()
+        )
+        if farm_id
+    }
+
+    missions = (
+        OrthophotoMission.query.filter(
+            OrthophotoMission.organization_id.in_(organization_ids),
+            OrthophotoMission.farm_id.isnot(None),
+            OrthophotoMission.status == "completed",
+            OrthophotoMission.webodm_project_id.isnot(None),
+            OrthophotoMission.webodm_task_id.isnot(None),
+        )
+        .all()
+    )
+    for mission in missions:
+        available = mission.available_assets or []
+        if not available or "orthophoto.tif" in available:
+            farm_ids.add(mission.farm_id)
+
+    if not farm_ids:
+        return jsonify([])
+    farms = (
+        Farm.query.filter(Farm.id.in_(farm_ids), Farm.org_id.in_(organization_ids))
+        .order_by(Farm.name.asc())
+        .all()
+    )
+    return jsonify([{"id": farm.id, "name": farm.name} for farm in farms])
 
 
 @api.route("/analysis-crops", methods=["GET"])

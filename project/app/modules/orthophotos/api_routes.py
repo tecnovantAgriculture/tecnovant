@@ -28,9 +28,6 @@ def create_location_path():
     organization_name = str(data.get("organization_name") or "").strip()
     farm_id = data.get("farm_id")
     farm_name = str(data.get("farm_name") or "").strip()
-    lot_id = data.get("lot_id")
-    lot_name = str(data.get("lot_name") or "").strip()
-    lot_area = data.get("lot_area")
     accessible_ids = {organization.id for organization in get_clients_for_user(user_id)}
 
     try:
@@ -71,32 +68,12 @@ def create_location_path():
         if not farm or farm.org_id != organization.id:
             return jsonify({"success": False, "message": "Selecciona o escribe una finca válida."}), 400
 
-        lot = Lot.query.get(int(lot_id)) if lot_id else None
-        if lot is None and lot_name:
-            try:
-                area = float(lot_area)
-            except (TypeError, ValueError):
-                return jsonify({"success": False, "message": "Escribe el área del lote en hectáreas."}), 400
-            if area <= 0:
-                return jsonify({"success": False, "message": "El área del lote debe ser mayor que cero."}), 400
-            lot = Lot.query.filter(
-                Lot.farm_id == farm.id,
-                db.func.lower(Lot.name) == lot_name.lower(),
-                Lot.active.is_(True),
-            ).first()
-            if lot is None:
-                lot = Lot(name=lot_name, area=area, farm_id=farm.id)
-                db.session.add(lot)
-                db.session.flush()
-        if not lot or lot.farm_id != farm.id:
-            return jsonify({"success": False, "message": "Selecciona o escribe un lote válido."}), 400
-
         db.session.commit()
-        return jsonify({"success": True, "organization": {"id": organization.id, "name": organization.name}, "farm": {"id": farm.id, "name": farm.name}, "lot": {"id": lot.id, "name": lot.name, "area": lot.area}})
+        return jsonify({"success": True, "organization": {"id": organization.id, "name": organization.name}, "farm": {"id": farm.id, "name": farm.name}})
     except Exception:
         db.session.rollback()
         current_app.logger.exception("orthophotos: no se pudo crear la ruta de ubicación")
-        return jsonify({"success": False, "message": "No se pudo crear la estructura de cliente, finca y lote."}), 500
+        return jsonify({"success": False, "message": "No se pudo crear la estructura de cliente y finca."}), 500
 
 
 @api.route("/missions/photos", methods=["POST"])
@@ -113,18 +90,14 @@ def upload_photos():
         return jsonify({"success": False, "message": "Las fechas foliar y de ortofoto no son válidas."}), 400
     organization_id = request.form.get("organization_id", type=int)
     farm_id = request.form.get("farm_id", type=int)
-    lot_id = request.form.get("lot_id", type=int)
-    has_location = any((organization_id, farm_id, lot_id))
+    has_location = any((organization_id, farm_id))
     farm = Farm.query.get(farm_id) if farm_id else None
-    lot = Lot.query.get(lot_id) if lot_id else None
     if has_location and (
         not organization_id
         or not farm
         or farm.org_id != organization_id
-        or not lot
-        or lot.farm_id != farm.id
     ):
-        return jsonify({"success": False, "message": "La ruta cliente, finca y lote no es valida."}), 400
+        return jsonify({"success": False, "message": "La ruta cliente y finca no es valida."}), 400
     mission = OrthophotoMission.query.get(mission_id) if mission_id else None
     if mission is None:
         if upload_session_id:
@@ -149,7 +122,7 @@ def upload_photos():
             description="Mision creada desde el portal publico de pilotos.",
             organization_id=organization_id if has_location else None,
             farm_id=farm.id if has_location else None,
-            lot_id=lot.id if has_location else None,
+            lot_id=None,
             foliar_date=foliar_date,
             orthophoto_date=orthophoto_date,
         )
