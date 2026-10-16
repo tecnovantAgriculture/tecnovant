@@ -523,6 +523,16 @@ def dashboard():
         webodm_vm_status=webodm_vm_status,
         active_processing_count=active_processing_count,
         location_options=location_options,
+        google_drive_picker={
+            "enabled": bool(
+                os.getenv("GOOGLE_DRIVE_PICKER_CLIENT_ID", "").strip()
+                and os.getenv("GOOGLE_DRIVE_PICKER_API_KEY", "").strip()
+                and os.getenv("GOOGLE_DRIVE_PICKER_APP_ID", "").strip()
+            ),
+            "client_id": os.getenv("GOOGLE_DRIVE_PICKER_CLIENT_ID", "").strip(),
+            "api_key": os.getenv("GOOGLE_DRIVE_PICKER_API_KEY", "").strip(),
+            "app_id": os.getenv("GOOGLE_DRIVE_PICKER_APP_ID", "").strip(),
+        },
         can_create_clients=bool((User.query.get(user_id) and (User.query.get(user_id).is_admin() or User.query.get(user_id).is_reseller()))),
         pilot_upload_url=lambda mission_id: _public_url_for(
             "orthophotos.pilot_upload",

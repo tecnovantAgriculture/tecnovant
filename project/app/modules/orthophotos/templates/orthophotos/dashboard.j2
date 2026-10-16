@@ -195,6 +195,9 @@
     display: block;
     width: 100%;
   }
+  .orth-file-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+  .orth-file-actions .orth-file-input { flex: 1 1 280px; }
+  .orth-drive-status { min-height: 16px; }
 
   .orth-dialog {
     width: min(560px, calc(100vw - 32px));
@@ -421,7 +424,15 @@
         </div>
         <div class="orth-field">
           <label for="orth-files">Imagenes</label>
-          <input id="orth-files" class="orth-file-input" type="file" name="files" accept=".jpg,.jpeg,.png,.tif,.tiff,image/jpeg,image/png,image/tiff" multiple required>
+          <div class="orth-file-actions">
+            <input id="orth-files" class="orth-file-input" type="file" name="files" accept=".jpg,.jpeg,.png,.tif,.tiff,image/jpeg,image/png,image/tiff" multiple required>
+            {% if google_drive_picker.enabled %}
+            <button id="open-google-drive" class="orth-btn" type="button">
+              <i class="fab fa-google-drive"></i> Google Drive
+            </button>
+            {% endif %}
+          </div>
+          <div id="orth-drive-status" class="orth-muted orth-drive-status"></div>
         </div>
         <div class="orth-dialog-actions">
           <button id="cancel-orth-upload" class="orth-btn" type="button">Cancelar</button>
@@ -577,6 +588,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const uploadEndpoint = {{ url_for('orthophotos_api.upload_photos')|tojson }};
   const locationEndpoint = {{ url_for('orthophotos_api.create_location_path')|tojson }};
   const canCreateClients = {{ can_create_clients|tojson }};
+  const googleDrivePicker = {{ google_drive_picker|tojson }};
   const activeProcessing = {{ active_processing_count|default(0)|int }};
   if (activeProcessing > 0) {
     window.setTimeout(() => window.location.reload(), 30000);
@@ -592,6 +604,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const missionNameInput = document.getElementById('orth-mission-name');
   const orthophotoDateInput = document.getElementById('orth-orthophoto-date');
   const filesInput = document.getElementById('orth-files');
+  const driveButton = document.getElementById('open-google-drive');
+  const driveStatus = document.getElementById('orth-drive-status');
   const newClientWrap = document.getElementById('orth-new-client-wrap');
   const newClientInput = document.getElementById('orth-new-client');
   const newFarmWrap = document.getElementById('orth-new-farm-wrap');
@@ -600,6 +614,108 @@ document.addEventListener('DOMContentLoaded', () => {
   const downloadContext = document.getElementById('orth-download-context');
   const downloadStatus = document.getElementById('orth-download-status');
   let activeDownloadButton = null;
+  let selectedDriveDocuments = [];
+  let pickerApiReady = false;
+  let driveTokenClient = null;
+  let driveAccessToken = '';
+
+  function loadExternalScript(src) {
+    return new Promise((resolve, reject) => {
+      const existing = document.querySelector(`script[src="${src}"]`);
+      if (existing) {
+        if (existing.dataset.loaded === 'true') resolve();
+        else existing.addEventListener('load', resolve, {once: true});
+        return;
+      }
+      const script = document.createElement('script');
+      script.src = src;
+      script.async = true;
+      script.defer = true;
+      script.addEventListener('load', () => { script.dataset.loaded = 'true'; resolve(); }, {once: true});
+      script.addEventListener('error', () => reject(new Error('No se pudo cargar Google Drive.')), {once: true});
+      document.head.appendChild(script);
+    });
+  }
+
+  async function initializeGoogleDrivePicker() {
+    if (!googleDrivePicker.enabled) throw new Error('Google Drive no esta configurado.');
+    await Promise.all([
+      loadExternalScript('https://accounts.google.com/gsi/client'),
+      loadExternalScript('https://apis.google.com/js/api.js')
+    ]);
+    if (!pickerApiReady) {
+      await new Promise((resolve) => window.gapi.load('picker', {callback: resolve}));
+      pickerApiReady = true;
+    }
+    if (!driveTokenClient) {
+      driveTokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: googleDrivePicker.client_id,
+        scope: 'https://www.googleapis.com/auth/drive.readonly',
+        callback: () => {}
+      });
+    }
+  }
+
+  function requestDriveAccessToken(prompt = '') {
+    return new Promise((resolve, reject) => {
+      driveTokenClient.callback = (response) => {
+        if (response.error || !response.access_token) {
+          reject(new Error('No fue posible autorizar Google Drive.'));
+          return;
+        }
+        driveAccessToken = response.access_token;
+        resolve(driveAccessToken);
+      };
+      driveTokenClient.requestAccessToken({prompt});
+    });
+  }
+
+  async function downloadDriveFile(driveDocument) {
+    const url = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(driveDocument.id)}?alt=media`;
+    let response = await fetch(url, {headers: {Authorization: `Bearer ${driveAccessToken}`}});
+    if (response.status === 401) {
+      await requestDriveAccessToken('');
+      response = await fetch(url, {headers: {Authorization: `Bearer ${driveAccessToken}`}});
+    }
+    if (!response.ok) throw new Error(`No se pudo descargar ${driveDocument.name}.`);
+    const blob = await response.blob();
+    return new File([blob], driveDocument.name, {type: driveDocument.mimeType || blob.type || 'application/octet-stream'});
+  }
+
+  async function handleDriveSelection(data) {
+    if (data.action !== google.picker.Action.PICKED) return;
+    const documents = data.docs || [];
+    selectedDriveDocuments = documents;
+    filesInput.value = '';
+    filesInput.required = documents.length === 0;
+    driveStatus.textContent = `${documents.length} imagenes seleccionadas desde Google Drive.`;
+  }
+
+  async function openGoogleDrivePicker() {
+    driveButton.disabled = true;
+    driveStatus.textContent = 'Conectando con Google Drive...';
+    try {
+      await initializeGoogleDrivePicker();
+      await requestDriveAccessToken(driveAccessToken ? '' : 'consent');
+      const view = new google.picker.DocsView(google.picker.ViewId.DOCS_IMAGES)
+        .setIncludeFolders(true)
+        .setSelectFolderEnabled(false);
+      new google.picker.PickerBuilder()
+        .setAppId(googleDrivePicker.app_id)
+        .setDeveloperKey(googleDrivePicker.api_key)
+        .setOAuthToken(driveAccessToken)
+        .addView(view)
+        .enableFeature(google.picker.Feature.MULTISELECT_ENABLED)
+        .setCallback(handleDriveSelection)
+        .build()
+        .setVisible(true);
+      driveButton.disabled = false;
+      driveStatus.textContent = '';
+    } catch (error) {
+      driveButton.disabled = false;
+      driveStatus.textContent = error.message || 'No se pudo abrir Google Drive.';
+    }
+  }
 
   function closeDownloadDialog() {
     if (downloadDialog && downloadDialog.open) downloadDialog.close();
@@ -694,7 +810,19 @@ document.addEventListener('DOMContentLoaded', () => {
     const today = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
     orthophotoDateInput.value = today;
     resetNewFields();
+    selectedDriveDocuments = [];
+    filesInput.value = '';
+    filesInput.required = true;
+    if (driveStatus) driveStatus.textContent = '';
     uploadDialog.showModal();
+  });
+  driveButton?.addEventListener('click', openGoogleDrivePicker);
+  filesInput.addEventListener('change', () => {
+    if (filesInput.files && filesInput.files.length) {
+      selectedDriveDocuments = [];
+      filesInput.required = true;
+      if (driveStatus) driveStatus.textContent = '';
+    }
   });
   cancelUpload.addEventListener('click', () => uploadDialog.close());
   clientSelect.addEventListener('change', () => {
@@ -709,8 +837,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   uploadForm.addEventListener('submit', async (event) => {
     event.preventDefault();
-    const files = Array.from(filesInput.files || []);
-    if (!uploadForm.reportValidity() || !files.length) return;
+    const localFiles = Array.from(filesInput.files || []);
+    const totalFiles = selectedDriveDocuments.length || localFiles.length;
+    if (!uploadForm.reportValidity() || !totalFiles) return;
     let locationIds;
     try {
       const locationResponse = await fetch(locationEndpoint, {
@@ -743,8 +872,19 @@ document.addEventListener('DOMContentLoaded', () => {
     button.disabled = true;
 
     try {
-      for (let index = 0; index < files.length; index += 1) {
-        const file = files[index];
+      for (let index = 0; index < totalFiles; index += 1) {
+        let file;
+        try {
+          if (selectedDriveDocuments.length) {
+            driveStatus.textContent = `Descargando de Drive ${index + 1}/${totalFiles}...`;
+            file = await downloadDriveFile(selectedDriveDocuments[index]);
+          } else {
+            file = localFiles[index];
+          }
+        } catch (error) {
+          errors.push(`${selectedDriveDocuments[index]?.name || 'Imagen'}: ${error.message || 'No se pudo descargar desde Drive.'}`);
+          break;
+        }
         const formData = new FormData();
         formData.append('files', file);
         formData.append('mission_name', missionNameInput.value.trim());
@@ -752,7 +892,7 @@ document.addEventListener('DOMContentLoaded', () => {
         formData.append('upload_session_id', uploadSessionId);
         formData.append('organization_id', locationIds.organization);
         formData.append('farm_id', locationIds.farm);
-        button.textContent = `Subiendo ${index + 1}/${files.length}...`;
+        button.textContent = `Subiendo ${index + 1}/${totalFiles}...`;
         try {
           const response = await fetch(uploadEndpoint, {
             method: 'POST',
