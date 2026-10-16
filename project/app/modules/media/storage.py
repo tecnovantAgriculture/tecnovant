@@ -100,6 +100,12 @@ def upload_file_to_gcs(local_path: str | os.PathLike[str], storage_key: str, con
     blob.upload_from_filename(str(local_path), content_type=content_type)
 
 
+def gcs_file_exists(storage_key: str) -> bool:
+    """Return whether a media object still exists in the configured bucket."""
+
+    return _gcs_bucket().blob(storage_key.replace("\\", "/")).exists()
+
+
 def delete_file_from_gcs(storage_key: str) -> None:
     try:
         _gcs_bucket().blob(storage_key.replace("\\", "/")).delete()

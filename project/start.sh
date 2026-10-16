@@ -10,6 +10,8 @@ flask --app run:app db upgrade
 exec gunicorn \
   --bind 0.0.0.0:${PORT:-8080} \
   --workers 1 \
+  --worker-class gthread \
+  --threads ${GUNICORN_THREADS:-8} \
   --timeout 900 \
-  --log-level=debug \
+  --log-level=info \
   run:app

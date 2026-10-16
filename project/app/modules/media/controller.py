@@ -23,7 +23,13 @@ from .helpers import (
     validate_tiff_upload,
 )
 from .models import Asset, AssetType, AssetVariant, StorageLocation
-from .storage import delete_file_from_gcs, ensure_local_file, gcs_enabled, upload_file_to_gcs
+from .storage import (
+    delete_file_from_gcs,
+    ensure_local_file,
+    gcs_enabled,
+    gcs_file_exists,
+    upload_file_to_gcs,
+)
 
 
 class MediaController:
@@ -93,7 +99,24 @@ class MediaController:
             .first()
         )
         if existing_asset:
-            capture.discard()
+            # A database record can outlive its physical object (for example,
+            # after an older mission removed a shared/deduplicated file). When
+            # the same image is uploaded again, repair storage instead of
+            # discarding the only fresh copy and returning a broken asset.
+            if existing_asset.storage == StorageLocation.GCS.value:
+                if not gcs_file_exists(existing_asset.storage_key):
+                    upload_file_to_gcs(
+                        capture.temp_path,
+                        existing_asset.storage_key,
+                        existing_asset.mime or guess_mime(capture.temp_path),
+                    )
+                capture.discard()
+            else:
+                existing_path = Path(_media_root()) / existing_asset.storage_key
+                if existing_path.exists():
+                    capture.discard()
+                else:
+                    capture.move_to(str(existing_path))
             # The API route enqueues preprocessing after this method returns.
             # Rebuilding missing thumbnails here made repeated large GeoTIFF
             # uploads wait on Pillow/rasterio work inside the HTTP request.
