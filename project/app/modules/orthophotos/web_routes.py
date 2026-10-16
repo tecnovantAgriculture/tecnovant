@@ -38,7 +38,7 @@ from app.modules.foliage.models import Farm, Lot
 from . import orthophotos as web
 from .gcp_compute_client import GCPComputeClient, env_flag
 from .models import OrthophotoMission, OrthophotoPhoto
-from .webodm_client import WebODMClient
+from .webodm_client import WebODMClient, WebODMError
 
 
 STATUS_NAMES = {
@@ -819,6 +819,40 @@ def download_mission_asset(mission_id: int, asset_key: str):
 @login_required
 def delete_mission(mission_id: int):
     mission = _accessible_mission(mission_id)
+    remote_task_missing = False
+    if mission.status in ACTIVE_STATUSES:
+        if mission.webodm_project_id and mission.webodm_task_id:
+            try:
+                task = WebODMClient().task(
+                    mission.webodm_project_id,
+                    mission.webodm_task_id,
+                )
+                mission.status = STATUS_NAMES.get(task.get("status"), mission.status)
+                mission.progress = task.get("running_progress")
+                mission.available_assets = task.get("available_assets")
+                mission.processing_error = task.get("last_error")
+                db.session.add(mission)
+                db.session.commit()
+            except WebODMError as exc:
+                db.session.rollback()
+                if "HTTP 404" in str(exc):
+                    remote_task_missing = True
+                    mission.status = "failed"
+                    mission.processing_error = (
+                        "La tarea de procesamiento ya no existe en WebODM."
+                    )
+                    db.session.add(mission)
+                    db.session.commit()
+                else:
+                    current_app.logger.exception(
+                        "orthophotos: no se pudo verificar task WebODM antes de eliminar"
+                    )
+            except Exception:
+                db.session.rollback()
+                current_app.logger.exception(
+                    "orthophotos: no se pudo verificar task WebODM antes de eliminar"
+                )
+
     if mission.status in ACTIVE_STATUSES:
         message = "No se puede eliminar una mision mientras esta procesando."
         if request.headers.get("X-Requested-With") == "XMLHttpRequest":
@@ -830,7 +864,7 @@ def delete_mission(mission_id: int):
     webodm_project_id = mission.webodm_project_id
     webodm_task_id = mission.webodm_task_id
 
-    if webodm_project_id and webodm_task_id:
+    if webodm_project_id and webodm_task_id and not remote_task_missing:
         try:
             WebODMClient().delete_task(webodm_project_id, webodm_task_id)
         except Exception:
