@@ -28,7 +28,7 @@ class WebODMClient:
 
     def orthophoto_options(self, profile: str | None = None) -> list[dict[str, str]]:
         """Options for 2D orthophotos, with a fast default for field operations."""
-        selected_profile = profile or os.getenv("WEBODM_PROCESSING_PROFILE", "fast_2d")
+        selected_profile = profile or os.getenv("WEBODM_PROCESSING_PROFILE", "max_2d")
         profiles = {
             "fast_2d": {
                 "fast-orthophoto": "true",
